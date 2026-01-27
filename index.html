@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Seans Planlayıcı</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app">
+      <header class="topbar">
+        <div class="topbar__left">
+          <div class="brand">Seans Planlayıcı</div>
+          <div class="weeknav">
+            <div style="display:flex; gap:8px; align-items:center; margin-right:12px;">
+              <button id="viewWeekBtn" class="btn btn--ghost" type="button" data-view="week">Haftalık</button>
+              <button id="viewDayBtn" class="btn btn--ghost" type="button" data-view="day">Günlük</button>
+            </div>
+            <button id="prevBtn" class="btn btn--ghost" type="button">◀</button>
+            <div class="weeknav__label" id="weekLabel">-</div>
+            <button id="nextBtn" class="btn btn--ghost" type="button">▶</button>
+            <button id="todayBtn" class="btn btn--ghost" type="button">Bugün</button>
+          </div>
+        </div>
+        <div class="topbar__right">
+          <button id="addSessionBtn" class="btn btn--primary" type="button">Seans Ekle</button>
+          <button id="taskDistributionBtn" class="btn btn--ghost" type="button" title="4 personel merkezdeyken görev dağıtımı">
+            Görev Dağıtımı
+          </button>
+          <button id="printBtn" class="btn btn--ghost" type="button" title="Haftalık programı yazdır">
+            Yazdır
+          </button>
+          <button id="exportBtn" class="btn btn--ghost" type="button">Dışa Aktar</button>
+          <label class="btn btn--ghost fileBtn" for="importFile">
+            İçe Aktar
+            <input id="importFile" type="file" accept="application/json" />
+          </label>
+          <button id="resetBtn" class="btn btn--danger" type="button" title="Tüm verileri sıfırlar">
+            Sıfırla
+          </button>
+        </div>
+      </header>
+
+      <main class="content">
+        <aside class="sidebar">
+          <section class="panel">
+            <div class="panel__title">Ayarlar</div>
+            <div class="formRow">
+              <button id="openWorkingHoursBtn" class="btn btn--ghost" type="button" style="width:100%;">
+                Çalışma Saatleri
+              </button>
+            </div>
+            <div class="hint" id="workingHoursSummary" style="margin-top:8px; font-size:12px;">
+              Çalışma saatleri ayarlanmadı
+            </div>
+            <div class="formRow" style="margin-top:12px;">
+              <button id="openRoomsBtn" class="btn btn--ghost" type="button" style="width:100%;">
+                Odalar / Alet
+              </button>
+            </div>
+            <div class="hint" id="roomsSummary" style="margin-top:8px; font-size:12px;">
+              Odalar ayarlanmadı
+            </div>
+            <div class="formRow" style="margin-top:12px;">
+              <button id="openStaffBtn" class="btn btn--ghost" type="button" style="width:100%;">
+                Personel
+              </button>
+            </div>
+            <div class="hint" id="staffSummary" style="margin-top:8px; font-size:12px;">
+              Personel ayarlanmadı
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel__title">Üyeler</div>
+            <div id="membersList" class="list"></div>
+            <div class="inlineAdd inlineAdd--2">
+              <input id="newMemberName" class="input" placeholder="Üye adı" />
+              <button id="addMemberBtn" class="btn btn--ghost" type="button">Ekle</button>
+            </div>
+          </section>
+
+          <section class="panel">
+            <div class="panel__title">Notlar</div>
+            <div class="hint">
+              Seans eklerken:
+              <ul>
+                <li>Personel aynı anda 2 seansa atanamaz.</li>
+                <li>Oda kapasitesi (alet sayısı) aşılırsa engellenir.</li>
+                <li>Oda seçimi <b>AUTO</b> ise uygun oda otomatik seçilir.</li>
+              </ul>
+            </div>
+          </section>
+        </aside>
+
+        <section class="planner">
+          <div class="planner__header" id="plannerHeader"></div>
+          <div class="planner__gridWrap">
+            <div class="planner__grid" id="plannerGrid"></div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <!-- Modal: Grup Seans Detayları -->
+    <div class="modal hidden" id="groupSessionModal" role="dialog" aria-modal="true">
+      <div class="modal__backdrop" data-close="groupSessionModal"></div>
+      <div class="modal__card" style="max-width:600px;">
+        <div class="modal__title" id="groupSessionModalTitle">Grup Seans Detayları</div>
+        <div class="modal__body">
+          <div class="formRow">
+            <label class="label">Tarih</label>
+            <input id="groupSessionDate" class="input" type="date" readonly />
+          </div>
+          <div class="formRow">
+            <label class="label">Saat</label>
+            <input id="groupSessionTime" class="input" type="time" readonly />
+          </div>
+          <div class="formRow">
+            <label class="label">Fizyoterapist</label>
+            <input id="groupSessionStaff" class="input" readonly />
+          </div>
+          <div class="formRow">
+            <label class="label">Oda</label>
+            <input id="groupSessionRoom" class="input" readonly />
+          </div>
+          <div class="formRow formRow--full" style="margin-top:16px;">
+            <label class="label">Üyeler</label>
+            <div id="groupSessionMembers" style="display:flex; flex-direction:column; gap:8px; margin-top:8px;"></div>
+            <button id="groupSessionAddMemberBtn" class="btn btn--primary" type="button" style="margin-top:12px; width:100%;">
+              <span style="margin-right:6px;">+</span> Üye Ekle
+            </button>
+          </div>
+          <div id="groupSessionError" class="error hidden"></div>
+        </div>
+        <div class="modal__footer">
+          <div class="spacer"></div>
+          <button class="btn btn--ghost" type="button" data-close="groupSessionModal">Vazgeç</button>
+          <button id="saveGroupSessionBtn" class="btn btn--primary" type="button">Kaydet</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Seans Ekle/Düzenle -->
+    <div class="modal hidden" id="sessionModal" role="dialog" aria-modal="true">
+      <div class="modal__backdrop" data-close="1"></div>
+      <div class="modal__card">
+        <div class="modal__title" id="sessionModalTitle">Seans</div>
+        <div class="modal__body">
+          <div class="formGrid">
+            <div class="formRow">
+              <label class="label" for="sessionDate">Tarih</label>
+              <input id="sessionDate" class="input" type="date" />
+            </div>
+            <div class="formRow">
+              <label class="label" for="sessionTime">Saat</label>
+              <input id="sessionTime" class="input" type="time" />
+            </div>
+            <div class="formRow">
+              <label class="label" for="sessionDuration">Süre (dk)</label>
+              <select id="sessionDuration" class="input">
+                <option value="30">30</option>
+                <option value="60" selected>60</option>
+                <option value="90">90</option>
+                <option value="120">120</option>
+              </select>
+            </div>
+            <div class="formRow">
+              <label class="label" for="sessionMember">Üye</label>
+              <select id="sessionMember" class="input"></select>
+            </div>
+            <div class="formRow">
+              <label class="label" for="sessionStaff">Personel</label>
+              <select id="sessionStaff" class="input"></select>
+            </div>
+            <div class="formRow">
+              <label class="label" for="sessionRoom">Oda</label>
+              <select id="sessionRoom" class="input"></select>
+            </div>
+            <div class="formRow formRow--full">
+              <label class="label" for="sessionNote">Not</label>
+              <input id="sessionNote" class="input" placeholder="Opsiyonel" />
+            </div>
+          </div>
+          <div id="sessionError" class="error hidden"></div>
+        </div>
+        <div class="modal__footer">
+          <button id="deleteSessionBtn" class="btn btn--danger hidden" type="button">Sil</button>
+          <div class="spacer"></div>
+          <button class="btn btn--ghost" type="button" data-close="1">Vazgeç</button>
+          <button id="saveSessionBtn" class="btn btn--primary" type="button">Kaydet</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Çalışma Saatleri -->
+    <div class="modal hidden" id="workingHoursModal" role="dialog" aria-modal="true">
+      <div class="modal__backdrop" data-close="1"></div>
+      <div class="modal__card" style="width:min(600px, calc(100vw - 24px));">
+        <div class="modal__title">Merkezin Çalışma Saatleri</div>
+        <div class="modal__body">
+          <div class="hint" style="margin-bottom:14px;">
+            Her gün için çalışma saatlerini belirleyin. Seanslar sadece bu saatlerde eklenebilir.
+          </div>
+          <div id="workingHoursList" class="list"></div>
+          <div id="workingHoursError" class="error hidden"></div>
+        </div>
+        <div class="modal__footer">
+          <div class="spacer"></div>
+          <button class="btn btn--ghost" type="button" data-close="1">Vazgeç</button>
+          <button id="saveWorkingHoursBtn" class="btn btn--primary" type="button">Kaydet</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Odalar / Alet -->
+    <div class="modal hidden" id="roomsModal" role="dialog" aria-modal="true">
+      <div class="modal__backdrop" data-close="1"></div>
+      <div class="modal__card" style="width:min(600px, calc(100vw - 24px));">
+        <div class="modal__title">Odalar / Alet</div>
+        <div class="modal__body">
+          <div class="hint" style="margin-bottom:14px;">
+            Aynı saatte aynı odada seans sayısı, o odanın <b>alet</b> sayısını geçemez.
+          </div>
+          <div id="roomsList" class="list"></div>
+          <div class="inlineAdd" style="margin-top:12px;">
+            <input id="newRoomName" class="input" placeholder="Oda adı" />
+            <input id="newRoomDevices" class="input" type="number" min="1" step="1" value="1" placeholder="Alet sayısı" style="width:120px;" />
+            <button id="addRoomBtn" class="btn btn--ghost" type="button">Ekle</button>
+          </div>
+          <div id="roomsError" class="error hidden"></div>
+        </div>
+        <div class="modal__footer">
+          <div class="spacer"></div>
+          <button class="btn btn--ghost" type="button" data-close="1">Kapat</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Personel -->
+    <div class="modal hidden" id="staffModal" role="dialog" aria-modal="true">
+      <div class="modal__backdrop" data-close="1"></div>
+      <div class="modal__card" style="width:min(900px, calc(100vw - 24px));">
+        <div class="modal__title">Personel Yönetimi</div>
+        <div class="modal__body">
+          <div id="staffList" style="display:grid; grid-template-columns:repeat(auto-fill, minmax(280px, 1fr)); gap:12px; margin-bottom:16px;"></div>
+          <div style="border-top:1px solid var(--border); padding-top:16px;">
+            <div class="panel__title" style="margin-bottom:12px;">Yeni Personel Ekle</div>
+            <div class="formGrid">
+              <div class="formRow">
+                <label class="label" for="newStaffFirstName">Ad</label>
+                <input id="newStaffFirstName" class="input" placeholder="Ad" />
+              </div>
+              <div class="formRow">
+                <label class="label" for="newStaffLastName">Soyad</label>
+                <input id="newStaffLastName" class="input" placeholder="Soyad" />
+              </div>
+              <div class="formRow">
+                <label class="label" for="newStaffPhone">Telefon</label>
+                <input id="newStaffPhone" class="input" type="tel" placeholder="Telefon" />
+              </div>
+            </div>
+            <button id="addStaffBtn" class="btn btn--primary" type="button" style="margin-top:12px;">Personel Ekle</button>
+          </div>
+          <div id="staffError" class="error hidden"></div>
+        </div>
+        <div class="modal__footer">
+          <div class="spacer"></div>
+          <button class="btn btn--ghost" type="button" data-close="1">Kapat</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Personel Kartı Düzenle -->
+    <div class="modal hidden" id="staffCardModal" role="dialog" aria-modal="true">
+      <div class="modal__backdrop" data-close="1"></div>
+      <div class="modal__card" style="width:min(700px, calc(100vw - 24px));">
+        <div class="modal__title" id="staffCardTitle">Personel Kartı</div>
+        <div class="modal__body">
+          <div class="formGrid">
+            <div class="formRow">
+              <label class="label" for="editStaffFirstName">Ad</label>
+              <input id="editStaffFirstName" class="input" />
+            </div>
+            <div class="formRow">
+              <label class="label" for="editStaffLastName">Soyad</label>
+              <input id="editStaffLastName" class="input" />
+            </div>
+            <div class="formRow">
+              <label class="label" for="editStaffPhone">Telefon</label>
+              <input id="editStaffPhone" class="input" type="tel" />
+            </div>
+          </div>
+          <div style="margin-top:20px; border-top:1px solid var(--border); padding-top:16px;">
+            <div class="panel__title" style="margin-bottom:12px;">Çalışma Saatleri (Haftalık)</div>
+            <div id="staffCardWorkingHours" class="list"></div>
+          </div>
+          <div id="staffCardError" class="error hidden"></div>
+        </div>
+        <div class="modal__footer">
+          <button id="deleteStaffCardBtn" class="btn btn--danger" type="button">Sil</button>
+          <div class="spacer"></div>
+          <button class="btn btn--ghost" type="button" data-close="1">Vazgeç</button>
+          <button id="saveStaffCardBtn" class="btn btn--primary" type="button">Kaydet</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Görev Dağıtımı -->
+    <div class="modal hidden" id="taskDistributionModal" role="dialog" aria-modal="true">
+      <div class="modal__backdrop" data-close="1"></div>
+      <div class="modal__card" style="width:min(900px, calc(100vw - 24px));">
+        <div class="modal__title">Görev Dağıtımı - 4 Personel Merkezde</div>
+        <div class="modal__body">
+          <div class="hint" style="margin-bottom:14px;">
+            Aynı anda 4 personelin merkezde olduğu saatleri ve seans dağılımını görüntüleyin.
+          </div>
+          <div id="taskDistributionContent"></div>
+        </div>
+        <div class="modal__footer">
+          <div class="spacer"></div>
+          <button class="btn btn--ghost" type="button" data-close="1">Kapat</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
+
