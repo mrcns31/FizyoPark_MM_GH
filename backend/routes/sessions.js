@@ -74,14 +74,14 @@ router.get('/', [
   }
 });
 
-// Yeni seans oluştur
+// Yeni seans oluştur (toInt ile string sayılar kabul edilir)
 router.post('/', [
-  body('staffId').isInt().withMessage('Personel ID gerekli'),
-  body('memberId').isInt().withMessage('Üye ID gerekli'),
-  body('roomId').optional().isInt(),
-  body('startTs').isInt().withMessage('Başlangıç zamanı gerekli'),
-  body('endTs').isInt().withMessage('Bitiş zamanı gerekli'),
-  body('note').optional().isString()
+  body('staffId').toInt().isInt().withMessage('Personel ID gerekli'),
+  body('memberId').toInt().isInt().withMessage('Üye ID gerekli'),
+  body('roomId').optional({ values: 'null' }).toInt().isInt(),
+  body('startTs').toInt().isInt().withMessage('Başlangıç zamanı gerekli'),
+  body('endTs').toInt().isInt().withMessage('Bitiş zamanı gerekli'),
+  body('note').optional({ values: 'null' }).custom((v) => v == null || typeof v === 'string').withMessage('Not metin olmalı')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -91,38 +91,46 @@ router.post('/', [
 
     const { staffId, memberId, roomId, startTs, endTs, note } = req.body;
 
-    // Çakışma kontrolü (basit)
-    const conflictCheck = await db.query(
-      `SELECT id FROM sessions 
-       WHERE staff_id = $1 
-       AND ((start_ts <= $2 AND end_ts > $2) OR (start_ts < $3 AND end_ts >= $3))
-       AND id != COALESCE($4, -1)`,
-      [staffId, startTs, endTs, null]
-    );
-
-    if (conflictCheck.rows.length > 0) {
-      return res.status(409).json({ error: 'Personel bu saatte başka bir seansı var' });
-    }
-
-    // Oda kapasitesi kontrolü
+    // Oda kapasitesi: odadaki alet sayısı kadar seans. Transaction + oda kilidi ile race condition önlenir.
     if (roomId) {
-      const roomCapacity = await db.query(
-        `SELECT r.devices, COUNT(s.id) as current_sessions
-         FROM rooms r
-         LEFT JOIN sessions s ON s.room_id = r.id 
-           AND ((s.start_ts <= $1 AND s.end_ts > $1) OR (s.start_ts < $2 AND s.end_ts >= $2))
-         WHERE r.id = $3
-         GROUP BY r.devices`,
-        [startTs, endTs, roomId]
-      );
-
-      if (roomCapacity.rows.length > 0 && 
-          roomCapacity.rows[0].current_sessions >= roomCapacity.rows[0].devices) {
-        return res.status(409).json({ error: 'Oda kapasitesi dolu' });
+      let client;
+      try {
+        client = await db.pool.connect();
+        await client.query('BEGIN');
+        const roomRow = await client.query('SELECT id, devices FROM rooms WHERE id = $1 FOR UPDATE', [roomId]);
+        if (roomRow.rows.length === 0) {
+          await client.query('ROLLBACK');
+          return res.status(400).json({ error: 'Oda bulunamadı' });
+        }
+        const devices = roomRow.rows[0].devices ?? 0;
+        const countResult = await client.query(
+          `SELECT COUNT(*)::int as cnt FROM sessions s
+           WHERE s.room_id = $1
+             AND ((s.start_ts <= $2 AND s.end_ts > $2) OR (s.start_ts < $3 AND s.end_ts >= $3))`,
+          [roomId, startTs, endTs]
+        );
+        const currentSessions = (countResult.rows[0]?.cnt ?? 0);
+        if (currentSessions >= devices) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: 'Oda kapasitesi dolu' });
+        }
+        const result = await client.query(
+          `INSERT INTO sessions (staff_id, member_id, room_id, start_ts, end_ts, note)
+           VALUES ($1, $2, $3, $4, $5, $6)
+           RETURNING *`,
+          [staffId, memberId, roomId, startTs, endTs, note || null]
+        );
+        await client.query('COMMIT');
+        return res.status(201).json(result.rows[0]);
+      } catch (err) {
+        if (client) await client.query('ROLLBACK').catch(() => {});
+        throw err;
+      } finally {
+        if (client) client.release();
       }
     }
 
-    // Seans oluştur
+    // roomId yoksa transaction kullanmadan ekle
     const result = await db.query(
       `INSERT INTO sessions (staff_id, member_id, room_id, start_ts, end_ts, note)
        VALUES ($1, $2, $3, $4, $5, $6)

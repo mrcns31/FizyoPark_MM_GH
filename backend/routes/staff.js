@@ -2,6 +2,7 @@ import express from 'express';
 import { body, validationResult } from 'express-validator';
 import db from '../config/database.js';
 import { verifyToken } from './auth.js';
+import { toPhoneFormat } from '../utils/phone.js';
 
 const router = express.Router();
 router.use(verifyToken);
@@ -33,12 +34,16 @@ router.post('/', [
     }
 
     const { firstName, lastName, phone, workingHours } = req.body;
+    const phoneFormatted = phone != null && phone !== '' ? toPhoneFormat(phone) : null;
+    if (phone != null && phone !== '' && !phoneFormatted) {
+      return res.status(400).json({ error: 'Telefon (xxx)xxx-xx-xx formatında olmalı, 10 hane.' });
+    }
 
     const result = await db.query(
       `INSERT INTO staff (first_name, last_name, phone, working_hours)
        VALUES ($1, $2, $3, $4)
        RETURNING *`,
-      [firstName, lastName, phone || null, JSON.stringify(workingHours || {})]
+      [firstName, lastName, phoneFormatted, JSON.stringify(workingHours || {})]
     );
 
     res.status(201).json(result.rows[0]);
@@ -72,8 +77,12 @@ router.put('/:id', [
       values.push(updates.lastName);
     }
     if (updates.phone !== undefined) {
+      const phoneFormatted = updates.phone != null && updates.phone !== '' ? toPhoneFormat(updates.phone) : null;
+      if (updates.phone != null && updates.phone !== '' && !phoneFormatted) {
+        return res.status(400).json({ error: 'Telefon (xxx)xxx-xx-xx formatında olmalı, 10 hane.' });
+      }
       updateFields.push(`phone = $${paramIndex++}`);
-      values.push(updates.phone || null);
+      values.push(phoneFormatted);
     }
     if (updates.workingHours) {
       updateFields.push(`working_hours = $${paramIndex++}`);

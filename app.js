@@ -126,6 +126,33 @@ function pad2(n) {
   return String(n).padStart(2, "0");
 }
 
+/** Telefon: (xxx)xxx-xx-xx — tam 10 hane, fazlası kullanılmaz. */
+const PHONE_MAX_DIGITS = 10;
+function normalizePhone(raw) {
+  if (raw == null || typeof raw !== "string") return null;
+  const digits = raw.replace(/\D/g, "").slice(0, PHONE_MAX_DIGITS);
+  if (digits.length !== PHONE_MAX_DIGITS) return null;
+  return `(${digits.slice(0, 3)})${digits.slice(3, 6)}-${digits.slice(6, 8)}-${digits.slice(8, 10)}`;
+}
+function formatPhone(digits) {
+  const d = String(digits).replace(/\D/g, "").slice(0, PHONE_MAX_DIGITS);
+  if (d.length !== PHONE_MAX_DIGITS) return null;
+  return `(${d.slice(0, 3)})${d.slice(3, 6)}-${d.slice(6, 8)}-${d.slice(8, 10)}`;
+}
+function toPhoneFormat(value) {
+  if (value == null || value === "") return null;
+  return normalizePhone(String(value));
+}
+/** Input'ta sadece rakam, en fazla 10 hane; fazlası silinir (format blur'da uygulanır). */
+function restrictPhoneInput(input) {
+  const digits = input.value.replace(/\D/g, "").slice(0, PHONE_MAX_DIGITS);
+  if (input.value !== digits) input.value = digits;
+}
+function displayPhone(value) {
+  if (value == null || value === "") return "";
+  return toPhoneFormat(value) || value;
+}
+
 function timeToMinutes(t) {
   const [hh, mm] = String(t).split(":").map((x) => Number(x));
   return hh * 60 + mm;
@@ -184,17 +211,47 @@ function overlaps(aStart, aEnd, bStart, bEnd) {
   return aStart < bEnd && aEnd > bStart;
 }
 
+function normId(id) {
+  const n = Number(id);
+  return Number.isNaN(n) ? id : n;
+}
 function getRoomById(roomId) {
-  return state.rooms.find((r) => r.id === roomId) || null;
+  const id = normId(roomId);
+  return state.rooms.find((r) => r.id === id || r.id === roomId) || null;
 }
 function getStaffById(staffId) {
-  return state.staff.find((s) => s.id === staffId) || null;
+  const id = normId(staffId);
+  return state.staff.find((s) => s.id === id || s.id === staffId) || null;
 }
 
 function getStaffFullName(staff) {
   if (!staff) return "Personel";
   if (staff.name) return staff.name; // Eski format desteği
   return `${staff.firstName || ""} ${staff.lastName || ""}`.trim() || "Personel";
+}
+
+/** Personel kısa: Ad + Soyadın ilk harfi. (örn: Arzum Ç.) */
+function getStaffShortName(staff) {
+  if (!staff) return "—";
+  const full = getStaffFullName(staff).trim();
+  if (!full) return "—";
+  const parts = full.split(/\s+/);
+  if (parts.length >= 2) return `${parts[0]} ${parts[1][0].toUpperCase()}.`;
+  return parts[0] ? `${parts[0]}.` : "—";
+}
+
+/** Üye kısa: Ad + Soyadın ilk üç harfi. (örn: Meriç Mul.) */
+function getMemberShortName(member) {
+  if (!member) return "Üye";
+  const ad = member.firstName ?? member.first_name ?? "";
+  const soyad = member.lastName ?? member.last_name ?? "";
+  const name = (member.name || `${ad} ${soyad}`.trim()) || "Üye";
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) {
+    const soyad3 = parts[1].slice(0, 3);
+    return `${parts[0]} ${soyad3}${soyad3.length >= 3 ? "." : ""}`;
+  }
+  return parts[0] ? `${parts[0]}.` : "Üye";
 }
 
 function getStaffWorkingHoursForDay(staff, dayOfWeek) {
@@ -210,7 +267,8 @@ function getStaffWorkingHoursForDay(staff, dayOfWeek) {
   };
 }
 function getMemberById(memberId) {
-  return state.members.find((m) => m.id === memberId) || null;
+  const id = normId(memberId);
+  return state.members.find((m) => m.id === id || m.id === memberId) || null;
 }
 
 function getSessionsInRange(startTs, endTs) {
@@ -218,13 +276,11 @@ function getSessionsInRange(startTs, endTs) {
 }
 
 function getStaffBusyRoomId(candidate, { ignoreSessionId = null } = {}) {
-  // Personelin aynı anda birden fazla seansı olabilir ama yalnızca TEK oda içinde.
-  // return: null | roomId | "__MULTI__"
-  const relevant = state.sessions.filter((s) => s.id !== ignoreSessionId);
+  const relevant = state.sessions.filter((s) => normId(s.id) !== normId(ignoreSessionId));
   const overlap = relevant.filter(
-    (s) => s.staffId === candidate.staffId && overlaps(s.startTs, s.endTs, candidate.startTs, candidate.endTs),
+    (s) => normId(s.staffId) === normId(candidate.staffId) && overlaps(s.startTs, s.endTs, candidate.startTs, candidate.endTs),
   );
-  const roomIds = [...new Set(overlap.map((s) => s.roomId).filter(Boolean))];
+  const roomIds = [...new Set(overlap.map((s) => normId(s.roomId)).filter((id) => id != null && id !== ""))];
   if (roomIds.length === 0) return null;
   if (roomIds.length === 1) return roomIds[0];
   return "__MULTI__";
@@ -240,7 +296,7 @@ function checkConflicts(candidate, { ignoreSessionId = null } = {}) {
   const busyRoomId = getStaffBusyRoomId(candidate, { ignoreSessionId });
   if (busyRoomId === "__MULTI__") {
     conflicts.push("Seçilen personel bu saat aralığında farklı odalarda seanslı görünüyor (uygunsuz durum).");
-  } else if (busyRoomId && candidate.roomId && candidate.roomId !== busyRoomId) {
+  } else if (busyRoomId && candidate.roomId && normId(candidate.roomId) !== normId(busyRoomId)) {
     const busyRoom = getRoomById(busyRoomId);
     conflicts.push(
       `Seçilen personel bu saat aralığında ${busyRoom?.name ? `"${busyRoom.name}"` : "başka bir odada"} seanslı. Aynı anda farklı oda olmaz.`,
@@ -249,7 +305,7 @@ function checkConflicts(candidate, { ignoreSessionId = null } = {}) {
 
   for (const s of relevant) {
     if (!overlaps(s.startTs, s.endTs, candidate.startTs, candidate.endTs)) continue;
-    if (s.memberId === candidate.memberId) {
+    if (normId(s.memberId) === normId(candidate.memberId)) {
       conflicts.push("Seçilen üye bu saat aralığında zaten planlı.");
       break;
     }
@@ -258,7 +314,7 @@ function checkConflicts(candidate, { ignoreSessionId = null } = {}) {
   const room = getRoomById(candidate.roomId);
   if (room) {
     const overlapInRoom = relevant.filter(
-      (s) => s.roomId === candidate.roomId && overlaps(s.startTs, s.endTs, candidate.startTs, candidate.endTs),
+      (s) => normId(s.roomId) === normId(candidate.roomId) && overlaps(s.startTs, s.endTs, candidate.startTs, candidate.endTs),
     );
     const count = overlapInRoom.length;
     if (count >= room.devices) {
@@ -266,8 +322,7 @@ function checkConflicts(candidate, { ignoreSessionId = null } = {}) {
     }
 
     // KURAL: Aynı anda aynı odada sadece 1 personel olabilir.
-    // (Odada aynı anda birden fazla seans olabilir ama personeli aynı olmalı.)
-    const otherStaff = overlapInRoom.find((s) => s.staffId && s.staffId !== candidate.staffId);
+    const otherStaff = overlapInRoom.find((s) => s.staffId != null && normId(s.staffId) !== normId(candidate.staffId));
     if (otherStaff) {
       const other = getStaffById(otherStaff.staffId);
       conflicts.push(
@@ -280,19 +335,16 @@ function checkConflicts(candidate, { ignoreSessionId = null } = {}) {
 }
 
 function autoAssignRoom(candidate, { ignoreSessionId = null } = {}) {
-  const relevant = state.sessions.filter((s) => s.id !== ignoreSessionId);
+  const relevant = state.sessions.filter((s) => normId(s.id) !== normId(ignoreSessionId));
   const rooms = [...state.rooms];
   for (const room of rooms) {
     const overlapInRoom = relevant.filter(
-      (s) => s.roomId === room.id && overlaps(s.startTs, s.endTs, candidate.startTs, candidate.endTs),
+      (s) => normId(s.roomId) === normId(room.id) && overlaps(s.startTs, s.endTs, candidate.startTs, candidate.endTs),
     );
 
-    // Kapasite (alet) kontrolü
     if (overlapInRoom.length >= room.devices) continue;
 
-    // KURAL: aynı anda aynı odada sadece 1 personel.
-    // Eğer odada o anda seans(lar) varsa, personelleri candidate ile aynı olmalı.
-    const hasOtherStaff = overlapInRoom.some((s) => s.staffId && s.staffId !== candidate.staffId);
+    const hasOtherStaff = overlapInRoom.some((s) => s.staffId != null && normId(s.staffId) !== normId(candidate.staffId));
     if (hasOtherStaff) continue;
 
     return room.id;
@@ -303,9 +355,10 @@ function autoAssignRoom(candidate, { ignoreSessionId = null } = {}) {
 let state = loadState();
 let ui = {
   weekStart: startOfWeekMonday(new Date()),
-  currentDay: new Date(), // Günlük görünüm için seçili gün
-  viewMode: "week", // "week" veya "day"
+  currentDay: new Date(),
+  viewMode: "day",
   editingSessionId: null,
+  editingMemberId: null, // Üye Kimlik Kartı düzenleme
 };
 
 const els = {};
@@ -320,7 +373,6 @@ function cacheEls() {
     "addSessionBtn",
     "exportBtn",
     "importFile",
-    "resetBtn",
     "plannerHeader",
     "plannerGrid",
     "startTime",
@@ -333,13 +385,29 @@ function cacheEls() {
     "newStaffName",
     "newStaffShift",
     "addStaffBtn",
-    "newMemberName",
     "addMemberBtn",
+    "memberCardModal",
+    "memberCardTitle",
+    "mcMemberNo",
+    "mcFirstName",
+    "mcLastName",
+    "mcPhone",
+    "mcEmail",
+    "mcBirthDate",
+    "mcProfession",
+    "mcAddress",
+    "mcContactName",
+    "mcContactPhone",
+    "mcSystemicDiseases",
+    "mcClinicalConditions",
+    "mcPastOperations",
+    "memberCardError",
+    "saveMemberCardBtn",
+    "deleteMemberCardBtn",
     "sessionModal",
     "sessionModalTitle",
     "sessionDate",
     "sessionTime",
-    "sessionDuration",
     "sessionMember",
     "sessionStaff",
     "sessionRoom",
@@ -382,11 +450,18 @@ function cacheEls() {
     "printBtn",
     "groupSessionModal",
     "groupSessionModalTitle",
+    "groupSessionCreateFields",
+    "groupSessionDisplayFields",
+    "groupSessionNewDate",
+    "groupSessionNewTime",
+    "groupSessionNewStaff",
+    "groupSessionNewRoom",
     "groupSessionDate",
     "groupSessionTime",
     "groupSessionStaff",
     "groupSessionRoom",
     "groupSessionMembers",
+    "groupSessionNewMemberSelect",
     "groupSessionAddMemberBtn",
     "groupSessionError",
     "saveGroupSessionBtn",
@@ -487,8 +562,8 @@ function renderHeader() {
       if (isDayEnabled(dayOfWeek)) enabledCount++;
     }
 
-    // Grid column sayısını dinamik yap
-    header.style.gridTemplateColumns = `74px repeat(${enabledCount}, 1fr)`;
+    // Grid column sayısını dinamik yap; gün sütunları min 180px (aynı saatte 2 randevu yan yana sığsın)
+    header.style.gridTemplateColumns = `74px repeat(${enabledCount}, minmax(180px, 1fr))`;
 
     const blank = document.createElement("div");
     blank.className = "headCell";
@@ -631,11 +706,7 @@ function renderGrid() {
       tCell.dataset.row = String(row);
       cell.addEventListener("click", () => {
         if (wh && minuteOfDay >= wh.startMin && minuteOfDay < wh.endMin) {
-          openSessionModal({
-            mode: "new",
-            date: dStr,
-            time: minutesToTime(minuteOfDay),
-          });
+          openGroupSessionModal(null, { date: dStr, time: minutesToTime(minuteOfDay) });
         }
       });
       grid.appendChild(cell);
@@ -658,8 +729,8 @@ function renderGrid() {
     }
 
     const enabledCount = enabledDaysInWeek.length;
-    // Grid column sayısını dinamik yap (1 saat sütunu + açık gün sayısı)
-    grid.style.gridTemplateColumns = `74px repeat(${enabledCount}, 1fr)`;
+    // Grid column sayısını dinamik yap; gün sütunları min 180px (aynı saatte 2 randevu yan yana sığsın)
+    grid.style.gridTemplateColumns = `74px repeat(${enabledCount}, minmax(180px, 1fr))`;
 
     // grid: rows = slots.length, cols = 1 (time) + enabledDaysInWeek.length
     for (let row = 0; row < slots.length; row++) {
@@ -698,11 +769,7 @@ function renderGrid() {
         tCell.dataset.row = String(row);
         cell.addEventListener("click", () => {
           if (wh && minuteOfDay >= wh.startMin && minuteOfDay < wh.endMin) {
-            openSessionModal({
-              mode: "new",
-              date: dStr,
-              time: minutesToTime(minuteOfDay),
-            });
+            openGroupSessionModal(null, { date: dStr, time: minutesToTime(minuteOfDay) });
           }
         });
         grid.appendChild(cell);
@@ -865,6 +932,43 @@ function renderEvents({ startMin, slotMin, slotsCount }) {
   const staffGroups = groupSessionsByStaffAndTime(inWeek);
   const overlapLayout = buildOverlapLayoutForWeek(inWeek);
 
+  // Hücre başına kart sayısı (layout.cols hatalı olabildiği için gerçek sayıyı kullanıyoruz)
+  const sessionInMultiGroup = new Set();
+  for (const [, group] of staffGroups.entries()) {
+    if (group.sessions.length > 1) {
+      for (const sess of group.sessions) sessionInMultiGroup.add(sess.id);
+    }
+  }
+  const cellEventCount = new Map();
+  function addToCell(dayIdx, row) {
+    if (row < 0 || row >= slotsCount) return;
+    const key = `${dayIdx}_${row}`;
+    cellEventCount.set(key, (cellEventCount.get(key) || 0) + 1);
+  }
+  for (const [, group] of staffGroups.entries()) {
+    if (group.sessions.length <= 1) continue;
+    const d = new Date(group.startTs);
+    const dayIdx = group.dayIdx;
+    const dayStartTs = startOfDay(d).getTime();
+    const startMinOfDay = Math.floor((group.startTs - dayStartTs) / 60000);
+    const row = Math.floor((startMinOfDay - startMin) / slotMin);
+    addToCell(dayIdx, row);
+  }
+  for (const s of inWeek) {
+    if (sessionInMultiGroup.has(s.id)) continue;
+    const d = new Date(s.startTs);
+    let dayIdx;
+    if (ui.viewMode === "day") dayIdx = 0;
+    else {
+      dayIdx = Math.floor((startOfDay(d).getTime() - startOfDay(ui.weekStart).getTime()) / (24 * 60 * 60 * 1000));
+      if (dayIdx < 0 || dayIdx > 6) continue;
+    }
+    const dayStartTs = startOfDay(d).getTime();
+    const startMinOfDay = Math.floor((s.startTs - dayStartTs) / 60000);
+    const row = Math.floor((startMinOfDay - startMin) / slotMin);
+    addToCell(dayIdx, row);
+  }
+
   // Render edilmiş seansları takip et (grup içindeki seansları tekrar render etmemek için)
   const renderedSessionIds = new Set();
 
@@ -886,6 +990,9 @@ function renderEvents({ startMin, slotMin, slotsCount }) {
     const row = Math.floor((startMinOfDay - startMin) / slotMin);
     if (row < 0 || row >= slotsCount) continue;
 
+    const cellKey = `${dayIdx}_${row}`;
+    const colsInCell = Math.max(1, cellEventCount.get(cellKey) || 1);
+
     const rowStartMin = startMin + row * slotMin;
     const withinCellMin = startMinOfDay - rowStartMin;
     const topPx = 4 + (withinCellMin / slotMin) * CELL_HEIGHT_PX;
@@ -903,75 +1010,98 @@ function renderEvents({ startMin, slotMin, slotsCount }) {
     ev.style.minHeight = `${heightPx}px`;
     ev.style.zIndex = "10";
 
-    // Çakışan seanslar için kolon (yan yana) yerleşim
+    // Çakışan seanslar için kolon: hücredeki gerçek kart sayısını kullan (layout.cols bazen hatalı)
     const layout = overlapLayout.get(s.id) || { col: 0, cols: 1 };
-    const cols = Math.max(1, Number(layout.cols || 1));
-    const col = Math.max(0, Number(layout.col || 0));
+    const cols = colsInCell;
+    const col = Math.max(0, Math.min(Number(layout.col || 0), cols - 1));
 
     const sidePad = 6;
+    const MIN_EVENT_WIDTH = 100;
     let gap = cols > 1 ? 6 : 0;
-    const available = Math.max(0, cell.clientWidth - sidePad * 2);
+    let available = Math.max(0, cell.clientWidth - sidePad * 2);
+    // Günlük görünümde aynı saatte birden fazla kartı yan yana eşit dağıtmak için hücre genişliği yoksa/azsa grid genişliğini kullan
+    if (ui.viewMode === "day" && cols > 1 && (available < 80 || !cell.clientWidth) && els.plannerGrid && els.plannerGrid.clientWidth > 74) {
+      available = Math.max(available, els.plannerGrid.clientWidth - 74 - sidePad * 2);
+    }
     let width = cols > 0 ? (available - gap * (cols - 1)) / cols : available;
     if (width < 110 && cols > 1) {
       gap = 3;
       width = (available - gap * (cols - 1)) / cols;
     }
+    // Aynı hücrede birden fazla kart varsa (aynı gün/saat, farklı personel) hepsinin sığması için min genişlik sadece tek kartta uygula
+    if (cols === 1) width = Math.max(MIN_EVENT_WIDTH, width);
+    const isCompact = width < 140;
 
     const left = sidePad + col * (width + gap);
     ev.style.left = `${left}px`;
-    ev.style.width = `${Math.max(10, width)}px`;
+    ev.style.width = `${width}px`;
+    ev.style.maxWidth = `${width}px`;
     ev.style.right = "auto";
+    ev.dataset.col = String(col);
+    ev.dataset.cols = String(cols);
+    if (isCompact) ev.classList.add("event--compact");
 
     const staff = getStaffById(group.staffId);
     const room = getRoomById(group.roomId);
     const color = staffColor(group.staffId);
-    const memberNames = group.sessions
-      .map((sess) => {
-        const m = getMemberById(sess.memberId);
-        return m?.name || "Üye";
-      })
-      .filter((n, i, arr) => arr.indexOf(n) === i); // benzersiz
+    const memberShortNames = group.sessions.map((sess) => {
+      const m = getMemberById(sess.memberId);
+      return getMemberShortName(m);
+    });
 
     const startTime = minutesToTime(startMinOfDay);
     const endTime = minutesToTime(endMinOfDay);
+    const fullTitle = `${group.sessions.length} seans • ${room?.name || "Oda"} • ${getStaffFullName(staff)} • ${startTime}-${endTime}`;
+    const staffShort = getStaffShortName(staff);
 
     ev.style.borderColor = color.border;
     ev.style.background = `linear-gradient(180deg, ${color.bg}, rgba(255,255,255,.04))`;
 
-    ev.innerHTML = `
-      <div class="event__row">
-        <div class="event__title"><span class="event__muted">(${group.sessions.length})</span> ${escapeHtml(room?.name || "Oda")}</div>
-        <div style="display:flex; align-items:center; gap:6px;">
-          <div class="event__badge" style="border-color:${color.border}; background:${color.badge}">${escapeHtml(getStaffFullName(staff))}</div>
+    if (isCompact) {
+      ev.innerHTML = `
+        <div class="event__row event__row--single">
+          <div class="event__title" title="${escapeHtml(fullTitle)}">${escapeHtml(staffShort)}</div>
           <button class="event__deleteBtn" title="Tüm seansları iptal et" data-staff-id="${group.staffId}" data-start-ts="${group.startTs}" data-end-ts="${group.endTs}" data-room-id="${group.roomId}">🗑️</button>
         </div>
-      </div>
-      <div class="event__members">${memberNames.map(name => escapeHtml(name)).join('<br>')}</div>
-    `;
+        <div class="event__members">${memberShortNames.map((n) => escapeHtml(n)).join("<br>")}</div>
+      `;
+    } else {
+      ev.innerHTML = `
+        <div class="event__row event__row--head">
+          <div class="event__title" title="${escapeHtml(fullTitle)}">${escapeHtml(staffShort)}</div>
+          <button class="event__deleteBtn" title="Tüm seansları iptal et" data-staff-id="${group.staffId}" data-start-ts="${group.startTs}" data-end-ts="${group.endTs}" data-room-id="${group.roomId}">🗑️</button>
+        </div>
+        <div class="event__members">${memberShortNames.map((n) => escapeHtml(n)).join("<br>")}</div>
+      `;
+    }
     
-    // Silme butonu event listener
+    // Silme butonu event listener (grup silindiğinde state + API'den kaldır)
     const deleteBtn = ev.querySelector(".event__deleteBtn");
     if (deleteBtn) {
       deleteBtn.addEventListener("click", (e) => {
         e.stopPropagation();
         const staffId = deleteBtn.dataset.staffId;
-        const startTs = parseInt(deleteBtn.dataset.startTs);
-        const endTs = parseInt(deleteBtn.dataset.endTs);
+        const startTs = parseInt(deleteBtn.dataset.startTs, 10);
+        const endTs = parseInt(deleteBtn.dataset.endTs, 10);
         const roomId = deleteBtn.dataset.roomId;
-        
+
         const staff = getStaffById(staffId);
         const staffName = getStaffFullName(staff);
         const sessionCount = group.sessions.length;
-        
+
         if (confirm(`${staffName} personelinin bu saatteki ${sessionCount} seansını iptal etmek istediğinize emin misiniz?`)) {
-          // O personelin, o saatteki, o odadaki tüm seanslarını sil
-          state.sessions = state.sessions.filter(s => {
-            return !(s.staffId === staffId && 
-                     s.startTs === startTs && 
-                     s.endTs === endTs && 
-                     s.roomId === roomId);
-          });
-          
+          const toRemove = state.sessions.filter(s =>
+            normId(s.staffId) === normId(staffId) &&
+            overlaps(s.startTs, s.endTs, startTs, endTs) &&
+            normId(s.roomId) === normId(roomId)
+          );
+          const idsToRemove = new Set(toRemove.map(s => normId(s.id)));
+          state.sessions = state.sessions.filter(x => !idsToRemove.has(normId(x.id)));
+          for (const sess of toRemove) {
+            if (window.API && window.API.getToken()) {
+              window.API.deleteSession(sess.id).catch(() => {});
+            }
+          }
           saveState();
           render();
         }
@@ -992,7 +1122,7 @@ function renderEvents({ startMin, slotMin, slotsCount }) {
     }
   }
 
-  // Tüm event'ler render edildikten sonra yükseklikleri ölç ve satır yüksekliklerini ayarla
+  // Grup event'leri sonrası satır yükseklikleri (tüm event'ler bittikten sonra tekrar çağrılacak)
   setTimeout(() => {
     measureAndUpdateRowHeights(rowHeights);
   }, 0);
@@ -1019,6 +1149,9 @@ function renderEvents({ startMin, slotMin, slotsCount }) {
     const row = Math.floor((startMinOfDay - startMin) / slotMin);
     if (row < 0 || row >= slotsCount) continue;
 
+    const cellKeySingle = `${dayIdx}_${row}`;
+    const colsInCellSingle = Math.max(1, cellEventCount.get(cellKeySingle) || 1);
+
     const rowStartMin = startMin + row * slotMin;
     const withinCellMin = startMinOfDay - rowStartMin;
     const topPx = 4 + (withinCellMin / slotMin) * CELL_HEIGHT_PX;
@@ -1036,24 +1169,36 @@ function renderEvents({ startMin, slotMin, slotsCount }) {
     ev.style.minHeight = `${heightPx}px`;
     ev.style.zIndex = "10";
 
-    // Çakışan seanslar için kolon (yan yana) yerleşim
+    // Çakışan seanslar için kolon: hücredeki gerçek kart sayısını kullan (layout.cols bazen hatalı)
     const layout = overlapLayout.get(s.id) || { col: 0, cols: 1 };
-    const cols = Math.max(1, Number(layout.cols || 1));
-    const col = Math.max(0, Number(layout.col || 0));
+    const cols = colsInCellSingle;
+    const col = Math.max(0, Math.min(Number(layout.col || 0), cols - 1));
 
     const sidePad = 6;
+    const MIN_EVENT_WIDTH = 100;
     let gap = cols > 1 ? 6 : 0;
-    const available = Math.max(0, cell.clientWidth - sidePad * 2);
+    let available = Math.max(0, cell.clientWidth - sidePad * 2);
+    // Günlük görünümde aynı saatte birden fazla kartı yan yana eşit dağıtmak için hücre genişliği yoksa/azsa grid genişliğini kullan
+    if (ui.viewMode === "day" && cols > 1 && (available < 80 || !cell.clientWidth) && els.plannerGrid && els.plannerGrid.clientWidth > 74) {
+      available = Math.max(available, els.plannerGrid.clientWidth - 74 - sidePad * 2);
+    }
     let width = cols > 0 ? (available - gap * (cols - 1)) / cols : available;
     if (width < 110 && cols > 1) {
       gap = 3;
       width = (available - gap * (cols - 1)) / cols;
     }
+    // Aynı hücrede birden fazla kart varsa (aynı gün/saat, farklı personel) hepsinin sığması için min genişlik sadece tek kartta uygula
+    if (cols === 1) width = Math.max(MIN_EVENT_WIDTH, width);
+    const isCompact = width < 140;
 
     const left = sidePad + col * (width + gap);
     ev.style.left = `${left}px`;
-    ev.style.width = `${Math.max(10, width)}px`;
+    ev.style.width = `${width}px`;
+    ev.style.maxWidth = `${width}px`;
     ev.style.right = "auto";
+    ev.dataset.col = String(col);
+    ev.dataset.cols = String(cols);
+    if (isCompact) ev.classList.add("event--compact");
 
     const member = getMemberById(s.memberId);
     const staff = getStaffById(s.staffId);
@@ -1062,29 +1207,93 @@ function renderEvents({ startMin, slotMin, slotsCount }) {
 
     const startTime = minutesToTime(startMinOfDay);
     const endTime = minutesToTime(endMinOfDay);
+    const fullTitle = `${member?.name || "Üye"} • ${room?.name || "Oda"} • ${getStaffFullName(staff)} • ${startTime}-${endTime}`;
+    const staffShort = getStaffShortName(staff);
+    const memberShort = getMemberShortName(member);
 
     ev.style.borderColor = color.border;
     ev.style.background = `linear-gradient(180deg, ${color.bg}, rgba(255,255,255,.04))`;
 
-    ev.innerHTML = `
-      <div class="event__row">
-        <div class="event__title">${escapeHtml(member?.name || "Üye")} • ${escapeHtml(room?.name || "Oda")}</div>
-        <div class="event__badge" style="border-color:${color.border}; background:${color.badge}">${escapeHtml(getStaffFullName(staff))}</div>
-      </div>
-    `;
+    if (isCompact) {
+      ev.innerHTML = `
+        <div class="event__row event__row--single">
+          <div class="event__title" title="${escapeHtml(fullTitle)}">${escapeHtml(staffShort)}</div>
+          <button class="event__deleteBtn" title="Seansı iptal et" data-session-id="${s.id}" type="button">🗑️</button>
+        </div>
+        <div class="event__members">${escapeHtml(memberShort)}</div>
+      `;
+    } else {
+      ev.innerHTML = `
+        <div class="event__row event__row--head">
+          <div class="event__title" title="${escapeHtml(fullTitle)}">${escapeHtml(staffShort)}</div>
+          <button class="event__deleteBtn" title="Seansı iptal et" data-session-id="${s.id}" type="button">🗑️</button>
+        </div>
+        <div class="event__members">${escapeHtml(memberShort)}</div>
+      `;
+    }
+
+    const singleDeleteBtn = ev.querySelector(".event__deleteBtn");
+    if (singleDeleteBtn) {
+      singleDeleteBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (confirm("Bu seansı iptal etmek istediğinize emin misiniz?")) {
+          const id = singleDeleteBtn.dataset.sessionId;
+          state.sessions = state.sessions.filter(x => normId(x.id) !== normId(id));
+          if (window.API && window.API.getToken()) {
+            window.API.deleteSession(id).catch(() => {});
+          }
+          saveState();
+          render();
+        }
+      });
+    }
 
     ev.addEventListener("click", (e) => {
+      if (e.target.closest(".event__deleteBtn")) return;
       e.stopPropagation();
-      openSessionModal({ mode: "edit", sessionId: s.id });
+      const group = getGroupForSession(s);
+      openGroupSessionModal(group);
     });
 
     cell.appendChild(ev);
   }
 
-  // Tüm event'ler render edildikten sonra yükseklikleri ölç ve satır yüksekliklerini ayarla
+  // Tüm event'ler render edildikten sonra yükseklikleri ölç ve kartları hücre genişliğine göre eşit dağıt (günlük + haftalık)
   setTimeout(() => {
     measureAndUpdateRowHeights(rowHeights);
+    repositionOverlappingEvents();
   }, 0);
+}
+
+/** Aynı hücredeki kartları hücre genişliğine göre yan yana eşit dağıt (layout sonrası; günlük ve haftalık görünüm) */
+function repositionOverlappingEvents() {
+  if (!els.plannerGrid) return;
+  const cells = els.plannerGrid.querySelectorAll(".dayCell");
+  const sidePad = 6;
+  const gap = 6;
+  cells.forEach((cell) => {
+    const events = cell.querySelectorAll(".event");
+    if (events.length <= 1) return;
+    // Hücredeki tüm kartların cols değerlerinin en büyüğünü kullan; böylece "2 yan yana 1 açıkta" olmaz
+    let maxCol = 0;
+    let cols = 1;
+    events.forEach((ev) => {
+      const c = Math.max(0, parseInt(ev.dataset.col || "0", 10));
+      const cs = Math.max(1, parseInt(ev.dataset.cols || "1", 10));
+      if (c > maxCol) maxCol = c;
+      if (cs > cols) cols = cs;
+    });
+    cols = Math.max(cols, maxCol + 1);
+    const available = Math.max(0, cell.clientWidth - sidePad * 2);
+    const width = Math.max(0, (available - gap * (cols - 1)) / cols);
+    events.forEach((ev) => {
+      const col = Math.max(0, parseInt(ev.dataset.col || "0", 10));
+      const left = sidePad + col * (width + gap);
+      ev.style.left = `${left}px`;
+      ev.style.width = `${width}px`;
+      ev.style.maxWidth = `${width}px`;
+    });
+  });
 }
 
 function measureAndUpdateRowHeights(rowHeights) {
@@ -1136,15 +1345,31 @@ function escapeHtml(str) {
     .replaceAll("'", "&#039;");
 }
 
+/** Her personel için kendine özgü, birbirinden ayrışan renk paleti (HSL) */
+const STAFF_COLOR_PALETTE = [
+  { h: 265, s: 75 },  // mor
+  { h: 45, s: 85 },   // amber/sarı
+  { h: 165, s: 55 },  // yeşil-turkuaz
+  { h: 340, s: 70 },  // pembe-kırmızı
+  { h: 195, s: 75 },  // mavi
+  { h: 25, s: 90 },   // turuncu
+  { h: 290, s: 65 },  // eflatun
+  { h: 140, s: 60 },  // yeşil
+  { h: 0, s: 70 },    // kırmızı
+  { h: 220, s: 70 },  // lacivert
+  { h: 50, s: 80 },   // altın
+  { h: 180, s: 60 },  // camgöbeği
+];
+
 function staffColor(staffId) {
-  // Stabil renk (personel bazlı) - HSL
-  const s = String(staffId || "");
-  let h = 0;
-  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) % 360;
-  const hue = h;
-  const border = `hsla(${hue}, 90%, 65%, .75)`;
-  const bg = `hsla(${hue}, 90%, 60%, .22)`;
-  const badge = `hsla(${hue}, 90%, 72%, .18)`;
+  // Personel indeksine veya ID hash'ine göre paletten renk seç (her personel kendine özgü)
+  const id = normId(staffId);
+  const idx = state.staff.findIndex((s) => normId(s.id) === id);
+  const paletteIdx = idx >= 0 ? idx % STAFF_COLOR_PALETTE.length : (id.length ? [...id].reduce((a, c) => (a * 17 + c.charCodeAt(0)) % STAFF_COLOR_PALETTE.length, 0) : 0);
+  const { h: hue, s: sat } = STAFF_COLOR_PALETTE[paletteIdx];
+  const border = `hsla(${hue}, ${sat}%, 62%, .82)`;
+  const bg = `hsla(${hue}, ${sat}%, 55%, .28)`;
+  const badge = `hsla(${hue}, ${sat}%, 70%, .22)`;
   return { hue, border, bg, badge };
 }
 
@@ -1235,7 +1460,7 @@ function renderStaff() {
         <div>
           <div style="font-weight:800; font-size:15px; margin-bottom:4px;">${escapeHtml(fullName)}</div>
           <div style="font-size:12px; color:var(--muted); margin-bottom:2px;">
-            ${escapeHtml(s.phone || "Telefon yok")}
+            ${escapeHtml(displayPhone(s.phone) || "Telefon yok")}
           </div>
         </div>
         <button class="btn btn--xs btn--ghost" type="button" data-staff-id="${s.id}" data-action="edit">Düzenle</button>
@@ -1271,6 +1496,13 @@ function openStaffModal() {
   els.newStaffFirstName.value = "";
   els.newStaffLastName.value = "";
   els.newStaffPhone.value = "";
+  
+  // Telefon alanına otomatik formatlama ekle
+  if (els.newStaffPhone) {
+    els.newStaffPhone.removeEventListener("blur", formatPhoneOnBlur);
+    els.newStaffPhone.addEventListener("blur", formatPhoneOnBlur);
+  }
+  
   els.staffModal.classList.remove("hidden");
 }
 
@@ -1288,7 +1520,13 @@ function openStaffCardModal(staffId) {
   // Temel bilgiler
   els.editStaffFirstName.value = staff.firstName || "";
   els.editStaffLastName.value = staff.lastName || "";
-  els.editStaffPhone.value = staff.phone || "";
+  els.editStaffPhone.value = displayPhone(staff.phone) || "";
+  
+  // Telefon alanına otomatik formatlama ekle
+  if (els.editStaffPhone) {
+    els.editStaffPhone.removeEventListener("blur", formatPhoneOnBlur);
+    els.editStaffPhone.addEventListener("blur", formatPhoneOnBlur);
+  }
 
   // Çalışma saatleri
   const whList = els.staffCardWorkingHours;
@@ -1344,10 +1582,16 @@ function saveStaffCard(staffId) {
 
   const firstName = (els.editStaffFirstName.value || "").trim();
   const lastName = (els.editStaffLastName.value || "").trim();
-  const phone = (els.editStaffPhone.value || "").trim();
+  const phoneRaw = (els.editStaffPhone.value || "").trim();
+  const phone = phoneRaw ? toPhoneFormat(phoneRaw) : "";
 
   if (!firstName || !lastName) {
     els.staffCardError.textContent = "Ad ve soyad girin.";
+    els.staffCardError.classList.remove("hidden");
+    return;
+  }
+  if (phoneRaw && !phone) {
+    els.staffCardError.textContent = "Telefon (xxx)xxx-xx-xx formatında olmalı, 10 hane.";
     els.staffCardError.classList.remove("hidden");
     return;
   }
@@ -1394,7 +1638,7 @@ function saveStaffCard(staffId) {
   // Güncelle
   staff.firstName = firstName;
   staff.lastName = lastName;
-  staff.phone = phone;
+  staff.phone = phone || "";
   staff.workingHours = newWorkingHours;
 
   saveState();
@@ -1422,28 +1666,241 @@ function deleteStaffCard(staffId) {
   render();
 }
 
+function getMemberDisplayName(m) {
+  return (m && (m.name || ((m.firstName || "") + " " + (m.lastName || "")).trim())) || "Üye";
+}
+
 function renderMembers() {
   const wrap = els.membersList;
+  if (!wrap) return;
   wrap.innerHTML = "";
   for (const m of state.members) {
     const item = document.createElement("div");
     item.className = "listItem";
+    const name = getMemberDisplayName(m);
+    const meta = (m.memberNo || m.phone) ? [m.memberNo, displayPhone(m.phone)].filter(Boolean).join(" · ") : "Üye";
     item.innerHTML = `
       <div class="listItem__left">
-        <div class="listItem__title">${escapeHtml(m.name)}</div>
-        <div class="listItem__meta">Üye</div>
+        <div class="listItem__title">${escapeHtml(name)}</div>
+        <div class="listItem__meta">${escapeHtml(meta)}</div>
       </div>
       <div class="listItem__actions">
-        <button class="btn btn--xs btn--ghost" type="button">Sil</button>
+        <button class="btn btn--xs btn--ghost" type="button" data-action="card">Kimlik Kartı</button>
+        <button class="btn btn--xs btn--ghost" type="button" data-action="delete">Sil</button>
       </div>
     `;
-    item.querySelector("button").addEventListener("click", () => {
-      state.members = state.members.filter((x) => x.id !== m.id);
+    item.querySelector('[data-action="card"]').addEventListener("click", () => openMemberCard(m.id));
+    item.querySelector('[data-action="delete"]').addEventListener("click", () => deleteMemberFromList(m.id));
+    wrap.appendChild(item);
+  }
+}
+
+function openMemberCard(memberId) {
+  ui.editingMemberId = memberId;
+  const m = memberId ? state.members.find((x) => x.id === normId(memberId)) : null;
+  if (els.memberCardTitle) els.memberCardTitle.textContent = m ? "Üye Kimlik Kartı – Düzenle" : "Üye Kimlik Kartı – Yeni";
+  // Üye numarası: yeni üyede gizli, düzenlemede görünür
+  if (els.mcMemberNo) {
+    const memberNoRow = els.mcMemberNo.closest('.formRow');
+    if (m) {
+      // Düzenleme: göster ve readonly yap
+      els.mcMemberNo.value = m.memberNo || "";
+      els.mcMemberNo.placeholder = "";
+      if (memberNoRow) memberNoRow.style.display = "";
+    } else {
+      // Yeni üye: gizle
+      els.mcMemberNo.value = "";
+      if (memberNoRow) memberNoRow.style.display = "none";
+    }
+  }
+  if (els.mcFirstName) els.mcFirstName.value = m ? (m.firstName || "") : "";
+  if (els.mcLastName) els.mcLastName.value = m ? (m.lastName || "") : "";
+  if (els.mcPhone) els.mcPhone.value = m ? (displayPhone(m.phone) || "") : "";
+  if (els.mcEmail) els.mcEmail.value = m ? (m.email || "") : "";
+  if (els.mcBirthDate) els.mcBirthDate.value = m && m.birthDate ? (m.birthDate.slice ? m.birthDate.slice(0, 10) : m.birthDate) : "";
+  if (els.mcProfession) els.mcProfession.value = m ? (m.profession || "") : "";
+  if (els.mcAddress) els.mcAddress.value = m ? (m.address || "") : "";
+  if (els.mcContactName) els.mcContactName.value = m ? (m.contactName || "") : "";
+  if (els.mcContactPhone) els.mcContactPhone.value = m ? (displayPhone(m.contactPhone) || "") : "";
+  if (els.mcSystemicDiseases) els.mcSystemicDiseases.value = m ? (m.systemicDiseases || "") : "";
+  if (els.mcClinicalConditions) els.mcClinicalConditions.value = m ? (m.clinicalConditions || "") : "";
+  if (els.mcPastOperations) els.mcPastOperations.value = m ? (m.pastOperations || "") : "";
+  if (els.memberCardError) { els.memberCardError.classList.add("hidden"); els.memberCardError.textContent = ""; }
+  if (els.deleteMemberCardBtn) els.deleteMemberCardBtn.style.display = m ? "inline-block" : "none";
+  
+  // Telefon alanlarına otomatik formatlama ekle
+  if (els.mcPhone) {
+    els.mcPhone.removeEventListener("blur", formatPhoneOnBlur);
+    els.mcPhone.addEventListener("blur", formatPhoneOnBlur);
+  }
+  if (els.mcContactPhone) {
+    els.mcContactPhone.removeEventListener("blur", formatPhoneOnBlur);
+    els.mcContactPhone.addEventListener("blur", formatPhoneOnBlur);
+  }
+  
+  if (els.memberCardModal) els.memberCardModal.classList.remove("hidden");
+}
+
+function formatPhoneOnBlur(e) {
+  const input = e.target;
+  const raw = (input.value || "").replace(/\D/g, "").slice(0, PHONE_MAX_DIGITS);
+  if (raw.length === PHONE_MAX_DIGITS) {
+    input.value = `(${raw.slice(0, 3)})${raw.slice(3, 6)}-${raw.slice(6, 8)}-${raw.slice(8, 10)}`;
+  }
+}
+
+function closeMemberCardModal() {
+  if (els.memberCardModal) els.memberCardModal.classList.add("hidden");
+  ui.editingMemberId = null;
+}
+
+async function saveMemberCard() {
+  const firstName = (els.mcFirstName && els.mcFirstName.value || "").trim();
+  const lastName = (els.mcLastName && els.mcLastName.value || "").trim();
+  const phoneRaw = (els.mcPhone && els.mcPhone.value || "").trim();
+  const phone = toPhoneFormat(phoneRaw);
+  if (!firstName || !lastName) {
+    if (els.memberCardError) {
+      els.memberCardError.textContent = "* Ad ve soyad zorunludur.";
+      els.memberCardError.classList.remove("hidden");
+    }
+    return;
+  }
+  if (!phoneRaw) {
+    if (els.memberCardError) {
+      els.memberCardError.textContent = "* Telefon zorunludur.";
+      els.memberCardError.classList.remove("hidden");
+    }
+    return;
+  }
+  if (!phone) {
+    if (els.memberCardError) {
+      els.memberCardError.textContent = "Telefon (xxx)xxx-xx-xx formatında olmalı, 10 hane.";
+      els.memberCardError.classList.remove("hidden");
+    }
+    return;
+  }
+  const contactPhoneRaw = (els.mcContactPhone && els.mcContactPhone.value || "").trim();
+  const contactPhone = contactPhoneRaw ? toPhoneFormat(contactPhoneRaw) : null;
+  if (contactPhoneRaw && !contactPhone) {
+    if (els.memberCardError) {
+      els.memberCardError.textContent = "Yakını telefonu (xxx)xxx-xx-xx formatında olmalı, 10 hane.";
+      els.memberCardError.classList.remove("hidden");
+    }
+    return;
+  }
+  // Yeni üyede üye numarası backend tarafından otomatik atanır (FP001, FP002...); düzenlemede mevcut numara gönderilir
+  const payload = {
+    firstName,
+    lastName,
+    phone,
+    email: (els.mcEmail && els.mcEmail.value || "").trim() || null,
+    birthDate: (els.mcBirthDate && els.mcBirthDate.value) || null,
+    profession: (els.mcProfession && els.mcProfession.value || "").trim() || null,
+    address: (els.mcAddress && els.mcAddress.value || "").trim() || null,
+    contactName: (els.mcContactName && els.mcContactName.value || "").trim() || null,
+    contactPhone,
+    systemicDiseases: (els.mcSystemicDiseases && els.mcSystemicDiseases.value || "").trim() || null,
+    clinicalConditions: (els.mcClinicalConditions && els.mcClinicalConditions.value || "").trim() || null,
+    pastOperations: (els.mcPastOperations && els.mcPastOperations.value || "").trim() || null,
+    notes: null,
+  };
+  // Düzenlemede üye numarası gönderilir; yeni üyede gönderilmez (backend otomatik atar)
+  if (ui.editingMemberId && els.mcMemberNo) {
+    const memberNo = (els.mcMemberNo.value || "").trim();
+    if (memberNo) payload.memberNo = memberNo;
+  }
+  if (els.memberCardError) { els.memberCardError.classList.add("hidden"); els.memberCardError.textContent = ""; }
+  if (window.API && window.API.getToken()) {
+    try {
+      if (ui.editingMemberId) {
+        const updated = await window.API.updateMember(ui.editingMemberId, { ...payload, id: ui.editingMemberId });
+        const idx = state.members.findIndex((x) => x.id === normId(ui.editingMemberId));
+        if (idx >= 0) state.members[idx] = updated;
+      } else {
+        const created = await window.API.createMember(payload);
+        state.members.push(created);
+      }
+    } catch (e) {
+      if (els.memberCardError) {
+        let errorMsg = "Kaydedilemedi.";
+        if (e.data) {
+          if (e.data.errors && Array.isArray(e.data.errors)) {
+            // Validation errors array
+            errorMsg = e.data.errors.map(err => err.msg || err.param).join(', ');
+          } else if (e.data.error) {
+            errorMsg = e.data.error;
+            if (e.data.detail) {
+              errorMsg += ` (${e.data.detail})`;
+            }
+            if (e.data.code) {
+              errorMsg += ` [Kod: ${e.data.code}]`;
+            }
+          } else if (e.data.details) {
+            errorMsg = `${e.data.error || 'Hata'}: ${e.data.details}`;
+          }
+        } else if (e.message) {
+          errorMsg = e.message;
+        } else if (e.status === 0) {
+          errorMsg = "Backend'e bağlanılamıyor. Sunucu çalışıyor mu?";
+        }
+        els.memberCardError.textContent = errorMsg;
+        els.memberCardError.classList.remove("hidden");
+      }
+      console.error("Üye kaydetme hatası:", e);
+      console.error("Hata detayları:", {
+        status: e.status,
+        data: e.data,
+        message: e.message,
+        code: e.data?.code,
+        detail: e.data?.detail,
+        stack: e.stack
+      });
+      return;
+    }
+  } else {
+    if (ui.editingMemberId) {
+      const idx = state.members.findIndex((x) => x.id === normId(ui.editingMemberId));
+      if (idx >= 0) state.members[idx] = { ...state.members[idx], ...payload, name: payload.firstName + " " + payload.lastName };
+    } else {
+      state.members.push({ id: uid("mem"), ...payload, name: payload.firstName + " " + payload.lastName });
+    }
+  }
+  saveState();
+  closeMemberCardModal();
+  render();
+}
+
+function deleteMemberFromList(memberId) {
+  if (!confirm("Bu üyeyi silmek istiyor musunuz?")) return;
+  if (window.API && window.API.getToken()) {
+    window.API.deleteMember(memberId).catch((e) => { console.error(e); alert((e.data && e.data.error) || "Silinemedi."); return; }).then(() => {
+      state.members = state.members.filter((x) => x.id !== normId(memberId));
       saveState();
       render();
     });
-    wrap.appendChild(item);
+  } else {
+    state.members = state.members.filter((x) => x.id !== memberId);
+    saveState();
+    render();
   }
+}
+
+async function deleteMemberCardFromModal() {
+  if (!ui.editingMemberId) return;
+  if (!confirm("Bu üyeyi silmek istiyor musunuz?")) return;
+  if (window.API && window.API.getToken()) {
+    try {
+      await window.API.deleteMember(ui.editingMemberId);
+    } catch (e) {
+      alert((e.data && e.data.error) || "Silinemedi.");
+      return;
+    }
+  }
+  state.members = state.members.filter((x) => x.id !== normId(ui.editingMemberId));
+  saveState();
+  closeMemberCardModal();
+  render();
 }
 
 function refreshSessionFormOptions({ dateStr = null, timeStr = null } = {}) {
@@ -1451,8 +1908,8 @@ function refreshSessionFormOptions({ dateStr = null, timeStr = null } = {}) {
   els.sessionMember.innerHTML = "";
   for (const m of state.members) {
     const o = document.createElement("option");
-    o.value = m.id;
-    o.textContent = m.name;
+    o.value = String(Number(m.id));
+    o.textContent = getMemberDisplayName(m);
     els.sessionMember.appendChild(o);
   }
 
@@ -1478,7 +1935,7 @@ function refreshSessionFormOptions({ dateStr = null, timeStr = null } = {}) {
 
   for (const s of filteredStaff) {
     const o = document.createElement("option");
-    o.value = s.id;
+    o.value = String(Number(s.id));
     o.textContent = getStaffFullName(s);
     els.sessionStaff.appendChild(o);
   }
@@ -1491,7 +1948,7 @@ function refreshSessionFormOptions({ dateStr = null, timeStr = null } = {}) {
   els.sessionRoom.appendChild(auto);
   for (const r of state.rooms) {
     const o = document.createElement("option");
-    o.value = r.id;
+    o.value = String(Number(r.id));
     o.textContent = `${r.name} (alet: ${r.devices})`;
     els.sessionRoom.appendChild(o);
   }
@@ -1512,7 +1969,6 @@ function openSessionModal({ mode, date, time, sessionId }) {
 
     els.sessionDate.value = defaultDate;
     els.sessionTime.value = defaultTime;
-    els.sessionDuration.value = "60";
     els.sessionNote.value = "";
 
     // Varsayılan seçimler
@@ -1552,11 +2008,9 @@ function openSessionModal({ mode, date, time, sessionId }) {
     const d = new Date(s.startTs);
     const dateStr = dateToInputValue(d);
     const timeStr = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-    const durMin = Math.round((s.endTs - s.startTs) / 60000);
 
     els.sessionDate.value = dateStr;
     els.sessionTime.value = timeStr;
-    els.sessionDuration.value = String(durMin);
     els.sessionMember.value = s.memberId;
     els.sessionRoom.value = s.roomId || "AUTO";
     els.sessionNote.value = s.note || "";
@@ -1595,40 +2049,125 @@ function closeSessionModal() {
 }
 
 let currentGroupSessions = [];
+let isNewGroupSession = false;
 
-function openGroupSessionModal(group) {
+function getGroupForSession(session) {
+  const same = state.sessions.filter(
+    (s) =>
+      s.staffId === session.staffId &&
+      s.roomId === session.roomId &&
+      overlaps(s.startTs, s.endTs, session.startTs, session.endTs)
+  );
+  return {
+    sessions: same,
+    staffId: session.staffId,
+    roomId: session.roomId,
+    startTs: Math.min(...same.map((s) => s.startTs)),
+    endTs: Math.max(...same.map((s) => s.endTs)),
+  };
+}
+
+function openGroupSessionModal(group, options = {}) {
+  els.groupSessionError.classList.add("hidden");
+
+  if (!group) {
+    // Yeni grup seansı ekleme
+    isNewGroupSession = true;
+    currentGroupSessions = [];
+    els.groupSessionCreateFields.classList.remove("hidden");
+    els.groupSessionDisplayFields.classList.add("hidden");
+    els.groupSessionModalTitle.textContent = "Grup Seans Ekle";
+
+    if (options.date && options.time) {
+      els.groupSessionNewDate.value = options.date;
+      els.groupSessionNewTime.value = options.time;
+    } else {
+      const now = new Date();
+      els.groupSessionNewDate.value = dateToInputValue(now);
+      els.groupSessionNewTime.value = state.settings.startTime || "08:00";
+    }
+
+    els.groupSessionNewStaff.innerHTML = "";
+    for (const s of state.staff) {
+      const o = document.createElement("option");
+      o.value = String(Number(s.id));
+      o.textContent = getStaffFullName(s);
+      els.groupSessionNewStaff.appendChild(o);
+    }
+    if (state.staff.length > 0) els.groupSessionNewStaff.value = String(Number(state.staff[0].id));
+
+    els.groupSessionNewRoom.innerHTML = "";
+    const autoO = document.createElement("option");
+    autoO.value = "AUTO";
+    autoO.textContent = "AUTO (Uygun oda seç)";
+    els.groupSessionNewRoom.appendChild(autoO);
+    for (const r of state.rooms) {
+      const o = document.createElement("option");
+      o.value = String(Number(r.id));
+      o.textContent = `${r.name} (${r.devices} alet)`;
+      els.groupSessionNewRoom.appendChild(o);
+    }
+    els.groupSessionNewRoom.value = "AUTO";
+
+    renderGroupSessionMembers();
+    els.groupSessionModal.classList.remove("hidden");
+    return;
+  }
+
+  // Mevcut grup düzenleme
+  isNewGroupSession = false;
   currentGroupSessions = [...group.sessions];
-  
   if (currentGroupSessions.length === 0) return;
-  
+
+  els.groupSessionCreateFields.classList.add("hidden");
+  els.groupSessionDisplayFields.classList.remove("hidden");
+
   const firstSession = currentGroupSessions[0];
   const d = new Date(firstSession.startTs);
   const dateStr = dateToInputValue(d);
   const timeStr = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
   const staff = getStaffById(firstSession.staffId);
   const room = getRoomById(firstSession.roomId);
-  
+
   els.groupSessionModalTitle.textContent = `Grup Seans (${currentGroupSessions.length} seans)`;
   els.groupSessionDate.value = dateStr;
   els.groupSessionTime.value = timeStr;
   els.groupSessionStaff.value = getStaffFullName(staff);
   els.groupSessionRoom.value = room?.name || "Oda";
-  els.groupSessionError.classList.add("hidden");
-  
+
   renderGroupSessionMembers();
-  
   els.groupSessionModal.classList.remove("hidden");
 }
 
 function closeGroupSessionModal() {
   els.groupSessionModal.classList.add("hidden");
   currentGroupSessions = [];
+  isNewGroupSession = false;
+}
+
+function refreshGroupSessionNewMemberSelect() {
+  const select = els.groupSessionNewMemberSelect;
+  if (!select) return;
+  const usedMemberIds = new Set(currentGroupSessions.map(s => normId(s.memberId)));
+  select.innerHTML = "";
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "Üye seçin...";
+  select.appendChild(placeholder);
+  for (const m of state.members) {
+    if (usedMemberIds.has(normId(m.id))) continue;
+    const o = document.createElement("option");
+    o.value = String(Number(m.id));
+    o.textContent = getMemberDisplayName(m);
+    select.appendChild(o);
+  }
 }
 
 function renderGroupSessionMembers() {
   const container = els.groupSessionMembers;
   container.innerHTML = "";
-  
+  refreshGroupSessionNewMemberSelect();
+
   for (let i = 0; i < currentGroupSessions.length; i++) {
     const session = currentGroupSessions[i];
     const member = getMemberById(session.memberId);
@@ -1646,12 +2185,11 @@ function renderGroupSessionMembers() {
     select.className = "input";
     select.style.flex = "1";
     
-    // Tüm üyeleri ekle
     for (const m of state.members) {
       const option = document.createElement("option");
-      option.value = m.id;
-      option.textContent = m.name;
-      if (m.id === session.memberId) {
+      option.value = String(Number(m.id));
+      option.textContent = getMemberDisplayName(m);
+      if (String(Number(m.id)) === String(Number(session.memberId))) {
         option.selected = true;
       }
       select.appendChild(option);
@@ -1676,64 +2214,95 @@ function renderGroupSessionMembers() {
   }
 }
 
-function saveGroupSession() {
+async function saveGroupSession() {
   if (currentGroupSessions.length === 0) {
-    els.groupSessionError.textContent = "En az bir üye olmalı.";
+    els.groupSessionError.textContent = "En az bir üye ekleyin (+ Üye Ekle).";
     els.groupSessionError.classList.remove("hidden");
     return;
   }
-  
-  els.groupSessionError.classList.add("hidden");
-  
-  // Mevcut grup seanslarının ID'lerini al
-  const existingSessionIds = new Set();
-  for (const session of currentGroupSessions) {
-    const existingSession = state.sessions.find(s => s.id === session.id);
-    if (existingSession) {
-      existingSessionIds.add(session.id);
-      // Üye değişikliğini kaydet
-      existingSession.memberId = session.memberId;
-    }
-  }
-  
-  // Silinen seansları kaldır (currentGroupSessions'ta olmayan ama aynı grup seanslarından olanları)
+
   const firstSession = currentGroupSessions[0];
-  if (firstSession) {
-    const groupSessionIds = new Set(currentGroupSessions.map(s => s.id));
-    
-    // Aynı personel, oda ve saatteki tüm seansları bul
-    const sameGroupSessions = state.sessions.filter(s => 
-      s.staffId === firstSession.staffId &&
-      s.roomId === firstSession.roomId &&
-      s.startTs === firstSession.startTs &&
-      s.endTs === firstSession.endTs
-    );
-    
-    // Grup seanslarından olup da currentGroupSessions'ta olmayanları sil
-    for (const s of sameGroupSessions) {
-      if (!groupSessionIds.has(s.id)) {
-        const index = state.sessions.findIndex(x => x.id === s.id);
-        if (index >= 0) {
-          state.sessions.splice(index, 1);
+  const room = firstSession ? getRoomById(firstSession.roomId) : null;
+  if (room && currentGroupSessions.length > room.devices) {
+    els.groupSessionError.textContent = `"${room.name}" bu saatte en fazla ${room.devices} seans alabilir (alet sayısı). Şu an ${currentGroupSessions.length} seans var.`;
+    els.groupSessionError.classList.remove("hidden");
+    return;
+  }
+
+  els.groupSessionError.classList.add("hidden");
+
+  if (isNewGroupSession) {
+    // Yeni grup: tüm seansları state'e ekle ve API'ye gönder
+    for (const session of currentGroupSessions) {
+      state.sessions.push(session);
+      if (window.API && window.API.getToken()) {
+        try {
+          const created = await window.API.createSession(session);
+          const idx = state.sessions.findIndex(s => s.id === session.id);
+          if (idx >= 0) state.sessions[idx] = created;
+        } catch (e) {
+          els.groupSessionError.textContent = (e.data && e.data.error) || e.message || "Seans kaydedilemedi.";
+          els.groupSessionError.classList.remove("hidden");
+          return;
         }
       }
     }
-    
-    // Yeni eklenen seansları state'e ekle
-    for (const session of currentGroupSessions) {
-      if (!existingSessionIds.has(session.id)) {
-        // Yeni seans, state'e ekle
-        state.sessions.push(session);
+    state.sessions.sort((a, b) => a.startTs - b.startTs);
+    saveState();
+    render();
+    closeGroupSessionModal();
+    return;
+  }
+
+  // Mevcut grup düzenleme (silinen seansları state ve API'den kaldır)
+  const existingSessionIds = new Set();
+  for (const session of currentGroupSessions) {
+    const sid = normId(session.id);
+    const existingSession = state.sessions.find(s => normId(s.id) === sid);
+    if (existingSession) {
+      existingSessionIds.add(sid);
+      existingSession.memberId = session.memberId;
+    }
+  }
+
+  const groupSessionIds = new Set(currentGroupSessions.map(s => normId(s.id)));
+  const sameGroupSessions = state.sessions.filter(s =>
+    normId(s.staffId) === normId(firstSession.staffId) &&
+    normId(s.roomId) === normId(firstSession.roomId) &&
+    s.startTs === firstSession.startTs &&
+    s.endTs === firstSession.endTs
+  );
+
+  for (const s of sameGroupSessions) {
+    if (!groupSessionIds.has(normId(s.id))) {
+      const index = state.sessions.findIndex(x => normId(x.id) === normId(s.id));
+      if (index >= 0) state.sessions.splice(index, 1);
+      if (window.API && window.API.getToken()) {
+        try { await window.API.deleteSession(s.id); } catch (_) {}
       }
     }
   }
-  
+
+  for (const session of currentGroupSessions) {
+    if (!existingSessionIds.has(normId(session.id))) {
+      state.sessions.push(session);
+      if (window.API && window.API.getToken()) {
+        try {
+          const created = await window.API.createSession(session);
+          const idx = state.sessions.findIndex(s => normId(s.id) === normId(session.id));
+          if (idx >= 0) state.sessions[idx] = created;
+        } catch (_) {}
+      }
+    }
+  }
+
+  state.sessions.sort((a, b) => a.startTs - b.startTs);
   saveState();
   render();
   closeGroupSessionModal();
 }
 
-function saveSessionFromModal() {
+async function saveSessionFromModal() {
   showError("");
 
   if (!state.members.length) {
@@ -1747,7 +2316,7 @@ function saveSessionFromModal() {
 
   const dateStr = els.sessionDate.value;
   const timeStr = els.sessionTime.value;
-  const durationMin = Number(els.sessionDuration.value || 60);
+  const durationMin = 60; // Standart seans süresi sabit 60 dk
   const memberId = els.sessionMember.value;
   const staffId = els.sessionStaff.value;
   const roomChoice = els.sessionRoom.value;
@@ -1849,23 +2418,53 @@ function saveSessionFromModal() {
     return;
   }
 
-  if (ui.editingSessionId) {
-    state.sessions = state.sessions.map((s) => (s.id === ui.editingSessionId ? candidate : s));
+  if (window.API && window.API.getToken()) {
+    try {
+      if (ui.editingSessionId) {
+        await window.API.updateSession(ui.editingSessionId, {
+          staffId: candidate.staffId,
+          memberId: candidate.memberId,
+          roomId: candidate.roomId,
+          startTs: candidate.startTs,
+          endTs: candidate.endTs,
+          note: candidate.note || null,
+        });
+        state.sessions = state.sessions.map((s) => (s.id === ui.editingSessionId ? { ...candidate, id: normId(ui.editingSessionId) } : s));
+      } else {
+        const created = await window.API.createSession(candidate);
+        state.sessions.push(created);
+      }
+    } catch (e) {
+      const msg = (e.data && (e.data.error || (e.data.errors && Array.isArray(e.data.errors) ? e.data.errors.map(x => x.msg || x.message).join(', ') : null))) || e.message || "Seans kaydedilemedi.";
+      showError(msg);
+      return;
+    }
   } else {
-    state.sessions.push(candidate);
+    if (ui.editingSessionId) {
+      state.sessions = state.sessions.map((s) => (s.id === ui.editingSessionId ? candidate : s));
+    } else {
+      state.sessions.push(candidate);
+    }
   }
 
-  // startTs'e göre sırala (görsel düzen)
   state.sessions.sort((a, b) => a.startTs - b.startTs);
   saveState();
   closeSessionModal();
   render();
 }
 
-function deleteSessionFromModal() {
+async function deleteSessionFromModal() {
   if (!ui.editingSessionId) return;
   const ok = confirm("Seansı silmek istiyor musunuz?");
   if (!ok) return;
+  if (window.API && window.API.getToken()) {
+    try {
+      await window.API.deleteSession(ui.editingSessionId);
+    } catch (e) {
+      console.error("Seans silinemedi:", e);
+      return;
+    }
+  }
   state.sessions = state.sessions.filter((s) => s.id !== ui.editingSessionId);
   saveState();
   closeSessionModal();
@@ -2179,7 +2778,7 @@ function bindEvents() {
     }
   });
 
-  els.addSessionBtn.addEventListener("click", () => openSessionModal({ mode: "new" }));
+  els.addSessionBtn.addEventListener("click", () => openGroupSessionModal(null));
   els.taskDistributionBtn.addEventListener("click", openTaskDistributionModal);
   els.printBtn.addEventListener("click", printWeeklySchedule);
   els.exportBtn.addEventListener("click", exportJson);
@@ -2194,13 +2793,11 @@ function bindEvents() {
       e.target.value = "";
     }
   });
-  els.resetBtn.addEventListener("click", resetAll);
-
   els.openWorkingHoursBtn.addEventListener("click", openWorkingHoursModal);
   els.openRoomsBtn.addEventListener("click", openRoomsModal);
   els.openStaffBtn.addEventListener("click", openStaffModal);
 
-  els.addRoomBtn.addEventListener("click", () => {
+  els.addRoomBtn.addEventListener("click", async () => {
     const name = (els.newRoomName.value || "").trim();
     const devices = clamp(Number(els.newRoomDevices.value || 1), 1, 999);
     if (!name) {
@@ -2208,61 +2805,79 @@ function bindEvents() {
       els.roomsError.classList.remove("hidden");
       return;
     }
-    // Aynı isimde oda var mı kontrol et
     if (state.rooms.some((r) => r.name.toLowerCase() === name.toLowerCase())) {
       els.roomsError.textContent = "Bu isimde bir oda zaten var.";
       els.roomsError.classList.remove("hidden");
       return;
     }
-    state.rooms.push({ id: uid("room"), name, devices });
+    if (window.API && window.API.getToken()) {
+      try {
+        const r = await window.API.createRoom({ name, devices });
+        state.rooms.push(r);
+      } catch (e) {
+        els.roomsError.textContent = (e.data && e.data.error) || e.message || "Oda eklenemedi.";
+        els.roomsError.classList.remove("hidden");
+        return;
+      }
+    } else {
+      state.rooms.push({ id: uid("room"), name, devices });
+    }
     els.newRoomName.value = "";
     els.newRoomDevices.value = "1";
     els.roomsError.classList.add("hidden");
     saveState();
     updateRoomsSummary();
-    renderRooms(); // Modal içindeki listeyi yenile
-    render(); // Ana görünümü yenile
+    renderRooms();
+    render();
   });
 
-  els.addStaffBtn.addEventListener("click", () => {
+  els.addStaffBtn.addEventListener("click", async () => {
     const firstName = (els.newStaffFirstName.value || "").trim();
     const lastName = (els.newStaffLastName.value || "").trim();
-    const phone = (els.newStaffPhone.value || "").trim();
+    const phoneRaw = (els.newStaffPhone.value || "").trim();
+    const phone = phoneRaw ? toPhoneFormat(phoneRaw) : "";
 
     if (!firstName || !lastName) {
       els.staffError.textContent = "Ad ve soyad girin.";
       els.staffError.classList.remove("hidden");
       return;
     }
+    if (phoneRaw && !phone) {
+      els.staffError.textContent = "Telefon (xxx)xxx-xx-xx formatında olmalı, 10 hane.";
+      els.staffError.classList.remove("hidden");
+      return;
+    }
 
     const fullName = `${firstName} ${lastName}`.trim();
-    // Aynı isimde personel var mı kontrol et
-    if (state.staff.some((s) => {
-      const sFullName = getStaffFullName(s);
-      return sFullName.toLowerCase() === fullName.toLowerCase();
-    })) {
+    if (state.staff.some((s) => getStaffFullName(s).toLowerCase() === fullName.toLowerCase())) {
       els.staffError.textContent = "Bu isimde bir personel zaten var.";
       els.staffError.classList.remove("hidden");
       return;
     }
 
-    // Varsayılan çalışma saatleri (genel varsayılan)
     const defaultWorkingHours = {};
     for (let day = 0; day < 7; day++) {
-      defaultWorkingHours[day] = {
-        start: "08:00",
-        end: "20:00",
-        enabled: day !== 0, // Pazar kapalı
-      };
+      defaultWorkingHours[day] = { start: "08:00", end: "20:00", enabled: day !== 0 };
     }
 
-    state.staff.push({
-      id: uid("staff"),
-      firstName,
-      lastName,
-      phone,
-      workingHours: defaultWorkingHours,
-    });
+    if (window.API && window.API.getToken()) {
+      try {
+        const s = await window.API.createStaff({ firstName, lastName, phone, workingHours: defaultWorkingHours });
+        state.staff.push(s);
+      } catch (e) {
+        els.staffError.textContent = (e.data && e.data.error) || e.message || "Personel eklenemedi.";
+        els.staffError.classList.remove("hidden");
+        return;
+      }
+    } else {
+      state.staff.push({
+        id: uid("staff"),
+        firstName,
+        lastName,
+        phone,
+        workingHours: defaultWorkingHours,
+      });
+    }
 
     els.newStaffFirstName.value = "";
     els.newStaffLastName.value = "";
@@ -2270,18 +2885,20 @@ function bindEvents() {
     els.staffError.classList.add("hidden");
     saveState();
     updateStaffSummary();
-    renderStaff(); // Modal içindeki listeyi yenile
-    render(); // Ana görünümü yenile
-  });
-
-  els.addMemberBtn.addEventListener("click", () => {
-    const name = (els.newMemberName.value || "").trim();
-    if (!name) return;
-    state.members.push({ id: uid("mem"), name });
-    els.newMemberName.value = "";
-    saveState();
+    renderStaff();
     render();
   });
+
+  els.addMemberBtn.addEventListener("click", () => openMemberCard(null));
+
+  // Üye Kimlik Kartı modal
+  if (els.memberCardModal) {
+    els.memberCardModal.addEventListener("click", (e) => {
+      if (e.target && e.target.dataset && e.target.dataset.close === "memberCardModal") closeMemberCardModal();
+    });
+  }
+  if (els.saveMemberCardBtn) els.saveMemberCardBtn.addEventListener("click", saveMemberCard);
+  if (els.deleteMemberCardBtn) els.deleteMemberCardBtn.addEventListener("click", deleteMemberCardFromModal);
 
   // modal close
   els.sessionModal.addEventListener("click", (e) => {
@@ -2341,37 +2958,107 @@ function bindEvents() {
     }
   });
   els.groupSessionAddMemberBtn.addEventListener("click", () => {
-    if (currentGroupSessions.length === 0) return;
-    
-    const firstSession = currentGroupSessions[0];
-    const usedMemberIds = new Set(currentGroupSessions.map(s => s.memberId));
-    const availableMember = state.members.find(m => !usedMemberIds.has(m.id));
-    
-    if (!availableMember) {
-      els.groupSessionError.textContent = "Tüm üyeler zaten eklenmiş.";
+    const selectedId = els.groupSessionNewMemberSelect?.value?.trim();
+    if (!selectedId) {
+      els.groupSessionError.textContent = "Listeden eklenecek üyeyi seçin.";
       els.groupSessionError.classList.remove("hidden");
       return;
     }
-    
-    const durMin = Math.round((firstSession.endTs - firstSession.startTs) / 60000);
+    const availableMember = state.members.find(m => normId(m.id) === normId(selectedId));
+    if (!availableMember) {
+      els.groupSessionError.textContent = "Seçilen üye bulunamadı.";
+      els.groupSessionError.classList.remove("hidden");
+      return;
+    }
+
+    let startTs, endTs, staffId, roomId;
+
+    if (isNewGroupSession && currentGroupSessions.length === 0) {
+      const dateStr = els.groupSessionNewDate?.value;
+      const timeStr = els.groupSessionNewTime?.value;
+      staffId = els.groupSessionNewStaff?.value;
+      const roomChoice = els.groupSessionNewRoom?.value;
+      if (!dateStr || !timeStr || !staffId) {
+        els.groupSessionError.textContent = "Tarih, saat ve personel seçin.";
+        els.groupSessionError.classList.remove("hidden");
+        return;
+      }
+      const start = makeLocalDate(dateStr, timeStr);
+      const durationMin = 60;
+      endTs = start.getTime() + durationMin * 60000;
+      startTs = start.getTime();
+      const dayOfWeek = start.getDay();
+      if (!isDayEnabled(dayOfWeek)) {
+        els.groupSessionError.textContent = `${DAY_NAMES[dayOfWeek]} günü kapalı.`;
+        els.groupSessionError.classList.remove("hidden");
+        return;
+      }
+      const wh = getWorkingHoursForDay(dayOfWeek);
+      if (!wh) {
+        els.groupSessionError.textContent = "Bu gün için çalışma saati tanımlanmamış.";
+        els.groupSessionError.classList.remove("hidden");
+        return;
+      }
+      const startMinDay = start.getHours() * 60 + start.getMinutes();
+      if (startMinDay < wh.startMin || startMinDay + durationMin > wh.endMin) {
+        els.groupSessionError.textContent = `Seans çalışma saatleri dışında (${wh.start}–${wh.end}).`;
+        els.groupSessionError.classList.remove("hidden");
+        return;
+      }
+      const selectedStaff = getStaffById(staffId);
+      if (selectedStaff) {
+        const staffWh = getStaffWorkingHoursForDay(selectedStaff, dayOfWeek);
+        if (!staffWh || startMinDay < staffWh.startMin || startMinDay + durationMin > staffWh.endMin) {
+          els.groupSessionError.textContent = "Seçilen personel bu saatte çalışmıyor.";
+          els.groupSessionError.classList.remove("hidden");
+          return;
+        }
+      }
+      if (roomChoice === "AUTO") {
+        const candidateBase = { startTs, endTs, staffId, memberId: availableMember.id, roomId: "", note: "" };
+        const picked = autoAssignRoom(candidateBase, { ignoreSessionId: null });
+        if (!picked) {
+          els.groupSessionError.textContent = "Bu saatte hiçbir odada boş alet yok (kapasite dolu).";
+          els.groupSessionError.classList.remove("hidden");
+          return;
+        }
+        roomId = picked;
+      } else {
+        roomId = roomChoice;
+      }
+    } else {
+      const firstSession = currentGroupSessions[0];
+      if (!firstSession) return;
+      startTs = firstSession.startTs;
+      endTs = firstSession.endTs;
+      staffId = firstSession.staffId;
+      roomId = firstSession.roomId;
+      const room = getRoomById(roomId);
+      const maxInSlot = room ? room.devices : 1;
+      if (currentGroupSessions.length + 1 > maxInSlot) {
+        els.groupSessionError.textContent = `Bu oda bu saatte en fazla ${maxInSlot} seans alabilir (alet: ${maxInSlot}).`;
+        els.groupSessionError.classList.remove("hidden");
+        return;
+      }
+    }
+
     const newSession = {
       id: uid("sess"),
-      startTs: firstSession.startTs,
-      endTs: firstSession.endTs,
+      startTs,
+      endTs,
       memberId: availableMember.id,
-      staffId: firstSession.staffId,
-      roomId: firstSession.roomId,
-      note: firstSession.note || "",
+      staffId,
+      roomId,
+      note: "",
     };
-    
-    // Çakışma kontrolü
+
     const conflicts = checkConflicts(newSession, { ignoreSessionId: null });
     if (conflicts.length > 0) {
-      els.groupSessionError.textContent = "Yeni üye eklenemiyor: çakışma var.";
+      els.groupSessionError.textContent = conflicts.join(" ");
       els.groupSessionError.classList.remove("hidden");
       return;
     }
-    
+
     currentGroupSessions.push(newSession);
     renderGroupSessionMembers();
     els.groupSessionError.classList.add("hidden");
@@ -2444,7 +3131,7 @@ function closeWorkingHoursModal() {
   els.workingHoursModal.classList.add("hidden");
 }
 
-function saveWorkingHours() {
+async function saveWorkingHours() {
   els.workingHoursError.classList.add("hidden");
 
   const checkboxes = els.workingHoursList.querySelectorAll("input[type='checkbox']");
@@ -2488,6 +3175,13 @@ function saveWorkingHours() {
   }
 
   state.workingHours = newHours;
+  if (window.API && window.API.getToken()) {
+    try {
+      await window.API.updateWorkingHours(newHours);
+    } catch (e) {
+      console.error("Çalışma saatleri kaydedilemedi:", e);
+    }
+  }
   saveState();
   closeWorkingHoursModal();
   updateWorkingHoursSummary();
@@ -2513,17 +3207,80 @@ function render() {
   renderGrid();
 }
 
+function bindLoginForm() {
+  const form = document.getElementById("loginForm");
+  const errEl = document.getElementById("loginError");
+  const btn = document.getElementById("loginBtn");
+  if (!form || !window.API) return;
+  form.addEventListener("submit", async function (ev) {
+    ev.preventDefault();
+    const u = (document.getElementById("loginUsername") || {}).value.trim();
+    const p = (document.getElementById("loginPassword") || {}).value;
+    if (!u || !p) return;
+    if (errEl) {
+      errEl.classList.add("hidden");
+      errEl.textContent = "";
+    }
+    if (btn) btn.disabled = true;
+    try {
+      await window.API.login(u, p);
+      const ov = document.getElementById("loginOverlay");
+      if (ov) ov.classList.add("hidden");
+      location.reload();
+    } catch (e) {
+      if (errEl) {
+        errEl.textContent = (e.data && e.data.error) || e.message || "Giriş başarısız";
+        errEl.classList.remove("hidden");
+      }
+      if (btn) btn.disabled = false;
+    }
+  });
+}
+
 function init() {
   cacheEls();
+  // Telefon alanları: sadece rakam, en fazla 10 hane
+  [els.mcPhone, els.mcContactPhone, els.newStaffPhone, els.editStaffPhone].forEach((el) => {
+    if (el) el.addEventListener("input", function () { restrictPhoneInput(this); });
+  });
   bindEvents();
-  // Varsayılan görünüm: haftalık
+  // Varsayılan görünüm: günlük
   if (ui.viewMode === "week") {
     els.viewWeekBtn.classList.add("btn--primary");
   } else {
     els.viewDayBtn.classList.add("btn--primary");
   }
   render();
+  // Pencere/alan boyutu değişince kartları yeniden konumla (günlük + haftalık)
+  if (els.plannerGrid && typeof ResizeObserver !== "undefined") {
+    const ro = new ResizeObserver(() => {
+      repositionOverlappingEvents();
+    });
+    ro.observe(els.plannerGrid);
+  }
 }
 
-document.addEventListener("DOMContentLoaded", init);
+document.addEventListener("DOMContentLoaded", async function () {
+  if (!window.API || !window.API.getToken()) {
+    const ov = document.getElementById("loginOverlay");
+    if (ov) ov.classList.remove("hidden");
+    bindLoginForm();
+    return;
+  }
+  try {
+    const loaded = await window.API.loadFullState();
+    state = { ...deepClone(DEFAULT_STATE), ...loaded };
+  } catch (e) {
+    console.error("API load hatası:", e);
+    if (e.status === 401) {
+      if (window.API) window.API.removeToken();
+      const ov = document.getElementById("loginOverlay");
+      if (ov) ov.classList.remove("hidden");
+      bindLoginForm();
+      return;
+    }
+    state = loadState();
+  }
+  init();
+});
 

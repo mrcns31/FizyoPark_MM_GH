@@ -7,7 +7,28 @@
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
-    <div class="app">
+    <!-- Giriş ekranı (token yoksa gösterilir) -->
+    <div id="loginOverlay" class="login-overlay hidden" aria-hidden="true">
+      <div class="login-card">
+        <h1 class="login-title">Seans Planlayıcı</h1>
+        <p class="login-hint">Backend'e bağlanmak için giriş yapın.</p>
+        <form id="loginForm" class="login-form">
+          <div class="formRow">
+            <label class="label" for="loginUsername">Kullanıcı adı</label>
+            <input id="loginUsername" class="input" type="text" autocomplete="username" required />
+          </div>
+          <div class="formRow">
+            <label class="label" for="loginPassword">Şifre</label>
+            <input id="loginPassword" class="input" type="password" autocomplete="current-password" required />
+          </div>
+          <p id="loginError" class="error hidden"></p>
+          <button id="loginBtn" class="btn btn--primary" type="submit">Giriş</button>
+        </form>
+        <p class="login-footer">İlk kurulumda: <code>admin</code> / <code>admin123</code> (seed sonrası)</p>
+      </div>
+    </div>
+
+    <div class="app" id="mainApp">
       <header class="topbar">
         <div class="topbar__left">
           <div class="brand">Seans Planlayıcı</div>
@@ -35,9 +56,6 @@
             İçe Aktar
             <input id="importFile" type="file" accept="application/json" />
           </label>
-          <button id="resetBtn" class="btn btn--danger" type="button" title="Tüm verileri sıfırlar">
-            Sıfırla
-          </button>
         </div>
       </header>
 
@@ -74,10 +92,7 @@
           <section class="panel">
             <div class="panel__title">Üyeler</div>
             <div id="membersList" class="list"></div>
-            <div class="inlineAdd inlineAdd--2">
-              <input id="newMemberName" class="input" placeholder="Üye adı" />
-              <button id="addMemberBtn" class="btn btn--ghost" type="button">Ekle</button>
-            </div>
+            <button id="addMemberBtn" class="btn btn--ghost" type="button" style="width:100%; margin-top:8px;">+ Üye Ekle</button>
           </section>
 
           <section class="panel">
@@ -102,34 +117,61 @@
       </main>
     </div>
 
-    <!-- Modal: Grup Seans Detayları -->
+    <!-- Modal: Grup Seans (Ekle / Düzenle) -->
     <div class="modal hidden" id="groupSessionModal" role="dialog" aria-modal="true">
       <div class="modal__backdrop" data-close="groupSessionModal"></div>
       <div class="modal__card" style="max-width:600px;">
-        <div class="modal__title" id="groupSessionModalTitle">Grup Seans Detayları</div>
+        <div class="modal__title" id="groupSessionModalTitle">Grup Seans Ekle</div>
         <div class="modal__body">
-          <div class="formRow">
-            <label class="label">Tarih</label>
-            <input id="groupSessionDate" class="input" type="date" readonly />
+          <!-- Yeni grup eklerken: Tarih, Saat, Personel, Oda seçilir -->
+          <div id="groupSessionCreateFields" class="hidden">
+            <div class="formRow">
+              <label class="label">Tarih</label>
+              <input id="groupSessionNewDate" class="input" type="date" />
+            </div>
+            <div class="formRow">
+              <label class="label">Saat</label>
+              <input id="groupSessionNewTime" class="input" type="time" />
+            </div>
+            <div class="formRow">
+              <label class="label">Personel</label>
+              <select id="groupSessionNewStaff" class="input"></select>
+            </div>
+            <div class="formRow">
+              <label class="label">Oda</label>
+              <select id="groupSessionNewRoom" class="input"></select>
+            </div>
           </div>
-          <div class="formRow">
-            <label class="label">Saat</label>
-            <input id="groupSessionTime" class="input" type="time" readonly />
-          </div>
-          <div class="formRow">
-            <label class="label">Fizyoterapist</label>
-            <input id="groupSessionStaff" class="input" readonly />
-          </div>
-          <div class="formRow">
-            <label class="label">Oda</label>
-            <input id="groupSessionRoom" class="input" readonly />
+          <!-- Mevcut grup düzenlerken: Sadece gösterim -->
+          <div id="groupSessionDisplayFields">
+            <div class="formRow">
+              <label class="label">Tarih</label>
+              <input id="groupSessionDate" class="input" type="date" readonly />
+            </div>
+            <div class="formRow">
+              <label class="label">Saat</label>
+              <input id="groupSessionTime" class="input" type="time" readonly />
+            </div>
+            <div class="formRow">
+              <label class="label">Personel</label>
+              <input id="groupSessionStaff" class="input" readonly />
+            </div>
+            <div class="formRow">
+              <label class="label">Oda</label>
+              <input id="groupSessionRoom" class="input" readonly />
+            </div>
           </div>
           <div class="formRow formRow--full" style="margin-top:16px;">
             <label class="label">Üyeler</label>
             <div id="groupSessionMembers" style="display:flex; flex-direction:column; gap:8px; margin-top:8px;"></div>
-            <button id="groupSessionAddMemberBtn" class="btn btn--primary" type="button" style="margin-top:12px; width:100%;">
-              <span style="margin-right:6px;">+</span> Üye Ekle
-            </button>
+            <div style="margin-top:12px; display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+              <select id="groupSessionNewMemberSelect" class="input" style="flex:1; min-width:180px;" aria-label="Eklenecek üye">
+                <option value="">Üye seçin...</option>
+              </select>
+              <button id="groupSessionAddMemberBtn" class="btn btn--primary" type="button">
+                <span style="margin-right:6px;">+</span> Üye Ekle
+              </button>
+            </div>
           </div>
           <div id="groupSessionError" class="error hidden"></div>
         </div>
@@ -137,6 +179,77 @@
           <div class="spacer"></div>
           <button class="btn btn--ghost" type="button" data-close="groupSessionModal">Vazgeç</button>
           <button id="saveGroupSessionBtn" class="btn btn--primary" type="button">Kaydet</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Üye Kimlik Kartı -->
+    <div class="modal hidden" id="memberCardModal" role="dialog" aria-modal="true">
+      <div class="modal__backdrop" data-close="memberCardModal"></div>
+      <div class="modal__card" style="max-width:520px;">
+        <div class="modal__title" id="memberCardTitle">Üye Kimlik Kartı</div>
+        <div class="modal__body" style="max-height:70vh; overflow-y:auto;">
+          <div class="formGrid">
+            <div class="formRow">
+              <label class="label" for="mcMemberNo">Üye Numarası</label>
+              <input id="mcMemberNo" class="input" readonly placeholder="Yeni kayıtta otomatik atanır (FP001, FP002...)" title="Sistem tarafından otomatik atanır" />
+            </div>
+            <div class="formRow">
+              <label class="label" for="mcFirstName">* Ad</label>
+              <input id="mcFirstName" class="input" />
+            </div>
+            <div class="formRow">
+              <label class="label" for="mcLastName">* Soyad</label>
+              <input id="mcLastName" class="input" />
+            </div>
+            <div class="formRow">
+              <label class="label" for="mcPhone">* Telefon</label>
+              <input id="mcPhone" class="input" type="tel" placeholder="(xxx)xxx-xx-xx" maxlength="14" inputmode="numeric" autocomplete="tel" />
+            </div>
+            <div class="formRow formRow--full">
+              <label class="label" for="mcEmail">E-Posta</label>
+              <input id="mcEmail" class="input" type="email" />
+            </div>
+            <div class="formRow">
+              <label class="label" for="mcBirthDate">Doğum Tarihi</label>
+              <input id="mcBirthDate" class="input" type="date" />
+            </div>
+            <div class="formRow">
+              <label class="label" for="mcProfession">Mesleği</label>
+              <input id="mcProfession" class="input" />
+            </div>
+            <div class="formRow formRow--full">
+              <label class="label" for="mcAddress">Adresi</label>
+              <input id="mcAddress" class="input" />
+            </div>
+            <div class="formRow formRow--full">
+              <label class="label" for="mcContactName">Yakını Adı Soyadı</label>
+              <input id="mcContactName" class="input" />
+            </div>
+            <div class="formRow formRow--full">
+              <label class="label" for="mcContactPhone">Yakını Telefon</label>
+              <input id="mcContactPhone" class="input" type="tel" placeholder="(xxx)xxx-xx-xx" maxlength="14" inputmode="numeric" autocomplete="tel" />
+            </div>
+            <div class="formRow formRow--full">
+              <label class="label" for="mcSystemicDiseases">Sistematik Hastalıklar (Kalp, Tansiyon, Şeker vb.)</label>
+              <textarea id="mcSystemicDiseases" class="input" rows="2"></textarea>
+            </div>
+            <div class="formRow formRow--full">
+              <label class="label" for="mcClinicalConditions">Klinik Rahatsızlıklar (Fıtık, Kireçlenme vb.)</label>
+              <textarea id="mcClinicalConditions" class="input" rows="2"></textarea>
+            </div>
+            <div class="formRow formRow--full">
+              <label class="label" for="mcPastOperations">Varsa Geçirdiği Operasyonlar</label>
+              <textarea id="mcPastOperations" class="input" rows="2"></textarea>
+            </div>
+          </div>
+          <div id="memberCardError" class="error hidden" style="margin-top:12px;"></div>
+        </div>
+        <div class="modal__footer">
+          <button id="deleteMemberCardBtn" class="btn btn--danger" type="button" style="display:none;">Sil</button>
+          <div class="spacer"></div>
+          <button class="btn btn--ghost" type="button" data-close="memberCardModal">Vazgeç</button>
+          <button id="saveMemberCardBtn" class="btn btn--primary" type="button">Kaydet</button>
         </div>
       </div>
     </div>
@@ -155,15 +268,6 @@
             <div class="formRow">
               <label class="label" for="sessionTime">Saat</label>
               <input id="sessionTime" class="input" type="time" />
-            </div>
-            <div class="formRow">
-              <label class="label" for="sessionDuration">Süre (dk)</label>
-              <select id="sessionDuration" class="input">
-                <option value="30">30</option>
-                <option value="60" selected>60</option>
-                <option value="90">90</option>
-                <option value="120">120</option>
-              </select>
             </div>
             <div class="formRow">
               <label class="label" for="sessionMember">Üye</label>
@@ -257,7 +361,7 @@
               </div>
               <div class="formRow">
                 <label class="label" for="newStaffPhone">Telefon</label>
-                <input id="newStaffPhone" class="input" type="tel" placeholder="Telefon" />
+                <input id="newStaffPhone" class="input" type="tel" placeholder="(xxx)xxx-xx-xx" maxlength="14" inputmode="numeric" autocomplete="tel" />
               </div>
             </div>
             <button id="addStaffBtn" class="btn btn--primary" type="button" style="margin-top:12px;">Personel Ekle</button>
@@ -288,7 +392,7 @@
             </div>
             <div class="formRow">
               <label class="label" for="editStaffPhone">Telefon</label>
-              <input id="editStaffPhone" class="input" type="tel" />
+              <input id="editStaffPhone" class="input" type="tel" placeholder="(xxx)xxx-xx-xx" maxlength="14" inputmode="numeric" autocomplete="tel" />
             </div>
           </div>
           <div style="margin-top:20px; border-top:1px solid var(--border); padding-top:16px;">
@@ -324,6 +428,7 @@
       </div>
     </div>
 
+    <script src="./api.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>

@@ -136,6 +136,22 @@ body{
   outline:none;
 }
 .input:focus{ border-color: rgba(124,92,255,.65); box-shadow: 0 0 0 3px rgba(124,92,255,.16); }
+/* Açılır listede personel/üye isimleri okunabilsin: koyu zemin, açık metin */
+select.input{
+  cursor: pointer;
+  appearance: auto;
+}
+select.input option,
+select option{
+  background: #121a33 !important;
+  color: #e8ecff !important;
+  padding: 8px 10px;
+}
+select.input option:checked,
+select option:checked{
+  background: rgba(124,92,255,.25) !important;
+  color: #e8ecff !important;
+}
 .label{ color:var(--muted); font-size:12px; margin-bottom:6px; display:block; }
 .formRow{ margin-bottom:10px; }
 .formRow:last-child{ margin-bottom:0; }
@@ -221,15 +237,27 @@ body{
   cursor:pointer;
   box-shadow: 0 10px 20px rgba(0,0,0,.18);
   min-height:32px;
+  min-width:100px;
+  display:flex;
+  flex-direction:column;
 }
 .event:hover{ background: rgba(124,92,255,.28); }
 .event--group{ background: rgba(124,92,255,.25); border-color: rgba(124,92,255,.55); }
 .event--group:hover{ background: rgba(124,92,255,.32); }
+.event--compact{ padding:6px 8px; }
+.event--compact .event__row--single{ min-height:24px; }
 .event__row{
   display:flex;
-  align-items:flex-start;
+  align-items:center;
   justify-content:space-between;
   gap:8px;
+  flex-wrap:nowrap;
+  min-width:0;
+}
+.event__row--single{ flex:1; }
+.event__title{
+  flex:1;
+  min-width:0;
 }
 .event__badge{
   flex:0 0 auto;
@@ -262,23 +290,25 @@ body{
   transform:scale(1.05);
 }
 .event__muted{ color: rgba(232,236,255,.72); font-weight:650; }
+.event__row--head{ align-items:center; }
 .event__members{
   margin-top:6px;
   padding-top:6px;
   border-top:1px solid rgba(255,255,255,.08);
-  font-size:12.5px;
-  line-height:1.6;
+  font-size:12px;
+  line-height:1.5;
   color:rgba(232,236,255,.95);
   font-weight:500;
   white-space:normal;
   overflow:hidden;
-  max-height: 96px; /* ~5 satır - daha fazla görünür */
+  max-height: 96px; /* ~5 satır - üyeler alt alta */
   word-wrap:break-word;
 }
 .event:hover .event__members{
   max-height: 300px; /* hover ile daha çok üye gör */
 }
 .event__title{ font-weight:800; font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.event--compact .event__title{ font-size:11.5px; }
 .event__meta{ font-size:11.5px; color:rgba(232,236,255,.8); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .event__tag{
   display:inline-block;
@@ -295,24 +325,27 @@ body{
   border-color: rgba(255,77,109,.5);
 }
 
-.modal{ position:fixed; inset:0; display:flex; align-items:center; justify-content:center; }
+.modal{ position:fixed; inset:0; display:flex; align-items:center; justify-content:center; z-index:1000; padding:16px; box-sizing:border-box; }
 .modal.hidden{ display:none; }
-.modal__backdrop{ position:absolute; inset:0; background: rgba(0,0,0,.55); }
+.modal__backdrop{ position:absolute; inset:0; background: rgba(0,0,0,.78); }
 .modal__card{
   position:relative;
-  width:min(760px, calc(100vw - 24px));
+  width:min(760px, calc(100vw - 32px));
+  max-height:calc(100vh - 32px);
   background: linear-gradient(180deg, rgba(18,26,51,.98), rgba(15,23,48,.98));
   border:1px solid var(--border);
   border-radius:var(--radius);
   box-shadow: var(--shadow);
   overflow:hidden;
+  display:flex;
+  flex-direction:column;
 }
+.modal__body{ padding:14px; overflow-y:auto; flex:1; min-height:0; }
 .modal__title{
   padding:14px 14px 10px 14px;
   font-weight:850;
   border-bottom:1px solid var(--border);
 }
-.modal__body{ padding:14px; }
 .modal__footer{
   padding:12px 14px;
   border-top:1px solid var(--border);
@@ -331,6 +364,30 @@ body{
   font-size:13px;
 }
 .hidden{ display:none; }
+
+/* Giriş ekranı */
+.login-overlay{
+  position:fixed; inset:0; z-index:9999;
+  background: rgba(11,16,32,.92);
+  display:flex; align-items:center; justify-content:center;
+  padding:20px;
+}
+.login-overlay.hidden{ display:none; }
+.login-card{
+  background:var(--panel);
+  border:1px solid var(--border);
+  border-radius:var(--radius);
+  padding:28px 32px;
+  min-width:320px;
+  max-width:400px;
+  box-shadow:var(--shadow);
+}
+.login-title{ margin:0 0 6px; font-size:1.35rem; }
+.login-hint{ color:var(--muted); font-size:13px; margin:0 0 18px; }
+.login-form .formRow{ margin-bottom:12px; }
+.login-form .btn{ width:100%; margin-top:8px; }
+.login-footer{ margin:16px 0 0; font-size:12px; color:var(--muted); }
+.login-footer code{ background:rgba(255,255,255,.08); padding:2px 6px; border-radius:6px; }
 
 @media (max-width: 980px){
   .content{ grid-template-columns: 1fr; }
