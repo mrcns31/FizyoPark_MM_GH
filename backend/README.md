@@ -15,12 +15,27 @@ nano .env
 ```
 
 ### 3. Veritabanı Kurulumu
-```bash
-# PostgreSQL'de veritabanı oluştur
-createdb session_tracker
+`.env` dosyasındaki `DB_USER`, `DB_PASSWORD`, `DB_NAME` değerleriniz zaten kullanılır.
 
-# Şemayı yükle
-psql -U your_user -d session_tracker -f database/schema.sql
+```bash
+# Şemayı yükle (psql ile)
+psql -h localhost -p 5432 -U $DB_USER -d $DB_NAME -f database/schema.sql
+
+# Veya migration'ları proje ayarlarıyla çalıştır (kullanıcı/şifre .env'den okunur)
+cd backend
+npm run migrate
+```
+
+**Migration çalıştırma (kullanıcı adı/veritabanı elle yazılmaz, .env kullanılır):**
+```bash
+cd backend
+npm run migrate
+```
+Bu komut `backend/.env` içindeki `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD` ile bağlanıp `migration_one_active_package_per_member.sql` dosyasını çalıştırır.
+
+Başka bir migration dosyası çalıştırmak için:
+```bash
+npm run migrate:run -- migration_packages.sql
 ```
 
 ### 4. İlk Kullanıcı Oluştur

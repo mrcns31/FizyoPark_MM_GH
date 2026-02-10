@@ -22,7 +22,7 @@ cd D:\26-01-2026-Cursor-Takip\FP_MM\backend
 npm run seed
 ```
 
-Çıktıda **"Admin kullanıcı oluşturuldu: username=admin, password=admin123"** görünmeli.
+Çıktıda **"Admin kullanıcı oluşturuldu: username=admin, password=admin123"** görünmeli.image.png
 
 ---
 
@@ -75,6 +75,19 @@ Girişten sonra uygulama açılır ve veriler **backend (PostgreSQL)** üzerinde
 | Backend   | http://localhost:3000                       |
 | Frontend  | http://localhost:5173                       |
 | Giriş     | admin / admin123 (seed ile oluşturuldu)     |
+
+---
+
+## İşlem logları (audit)
+
+Tüm önemli işlemler (üye ekleme/silme, seans oluşturma, giriş vb.) **activity_logs** tablosuna yazılır; böylece ileride "kim, ne zaman, ne yaptı" takip edilebilir.
+
+- **Tablo:** Migration ile oluşturulur. Bir kez çalıştırın:
+  ```powershell
+  cd backend
+  node scripts/run-migration.js migration_activity_logs.sql
+  ```
+- **Log listesi API:** Sadece admin/manager rolü `GET /api/activity-logs` ile logları listeleyebilir (sayfalama: `?page=1&limit=50`, filtre: `?action=member.create`, `?entityType=session`, `?from=`, `?to=`).
 
 ---
 

@@ -3,6 +3,7 @@ import { body, validationResult } from 'express-validator';
 import db from '../config/database.js';
 import { verifyToken } from './auth.js';
 import { toPhoneFormat } from '../utils/phone.js';
+import { log as activityLog } from '../utils/activityLogger.js';
 
 const router = express.Router();
 router.use(verifyToken);
@@ -45,8 +46,10 @@ router.post('/', [
        RETURNING *`,
       [firstName, lastName, phoneFormatted, JSON.stringify(workingHours || {})]
     );
+    const created = result.rows[0];
+    await activityLog(req, { action: 'staff.create', entityType: 'staff', entityId: created.id, details: { name: `${created.first_name} ${created.last_name}` } }).catch(() => {});
 
-    res.status(201).json(result.rows[0]);
+    res.status(201).json(created);
   } catch (error) {
     console.error('Staff create error:', error);
     res.status(500).json({ error: 'Personel eklenirken hata oluştu' });
@@ -100,8 +103,9 @@ router.put('/:id', [
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Personel bulunamadı' });
     }
-
-    res.json(result.rows[0]);
+    const updated = result.rows[0];
+    await activityLog(req, { action: 'staff.update', entityType: 'staff', entityId: id, details: { name: `${updated.first_name} ${updated.last_name}` } }).catch(() => {});
+    res.json(updated);
   } catch (error) {
     console.error('Staff update error:', error);
     res.status(500).json({ error: 'Personel güncellenirken hata oluştu' });
@@ -117,7 +121,8 @@ router.delete('/:id', async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Personel bulunamadı' });
     }
-
+    const deleted = result.rows[0];
+    await activityLog(req, { action: 'staff.delete', entityType: 'staff', entityId: id, details: { name: `${deleted.first_name} ${deleted.last_name}` } }).catch(() => {});
     res.json({ message: 'Personel silindi' });
   } catch (error) {
     console.error('Staff delete error:', error);

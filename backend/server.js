@@ -14,6 +14,9 @@ import staffRoutes from './routes/staff.js';
 import membersRoutes from './routes/members.js';
 import roomsRoutes from './routes/rooms.js';
 import settingsRoutes from './routes/settings.js';
+import packagesRoutes from './routes/packages.js';
+import memberPackagesRoutes from './routes/member-packages.js';
+import activityLogsRoutes from './routes/activity-logs.js';
 
 dotenv.config();
 
@@ -33,11 +36,19 @@ app.use(morgan('combined')); // Loglama
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Rate Limiting
+// Rate Limiting: localhost ve development'ta devre dışı (randevu silme vb. engellenmesin)
+const isLocalhost = (req) => {
+  const ip = (req.ip || req.connection?.remoteAddress || '').toString();
+  return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1' || ip.includes('127.0.0.1');
+};
 const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000, // 15 dakika
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100, // Maksimum istek
-  message: 'Çok fazla istek gönderildi, lütfen daha sonra tekrar deneyin.'
+  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 2000,
+  message: 'Çok fazla istek gönderildi, lütfen daha sonra tekrar deneyin.',
+  skip: (req) =>
+    process.env.RATE_LIMIT_DISABLED === '1' ||
+    process.env.NODE_ENV === 'development' ||
+    isLocalhost(req)
 });
 app.use('/api/', limiter);
 
@@ -53,6 +64,9 @@ app.use('/api/staff', staffRoutes);
 app.use('/api/members', membersRoutes);
 app.use('/api/rooms', roomsRoutes);
 app.use('/api/settings', settingsRoutes);
+app.use('/api/packages', packagesRoutes);
+app.use('/api/member-packages', memberPackagesRoutes);
+app.use('/api/activity-logs', activityLogsRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

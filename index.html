@@ -37,6 +37,7 @@
               <button id="viewWeekBtn" class="btn btn--ghost" type="button" data-view="week">Haftalık</button>
               <button id="viewDayBtn" class="btn btn--ghost" type="button" data-view="day">Günlük</button>
             </div>
+            <input id="plannerFilterInput" class="input" type="text" placeholder="Üye veya personel ismi ile filtrele..." title="Üye veya personel adı yazın. Haftalık: hangi günlerde, Günlük: hangi saatte gösterilir." style="width:200px; min-width:160px;" />
             <button id="prevBtn" class="btn btn--ghost" type="button">◀</button>
             <div class="weeknav__label" id="weekLabel">-</div>
             <button id="nextBtn" class="btn btn--ghost" type="button">▶</button>
@@ -45,13 +46,20 @@
         </div>
         <div class="topbar__right">
           <button id="addSessionBtn" class="btn btn--primary" type="button">Seans Ekle</button>
-          <button id="taskDistributionBtn" class="btn btn--ghost" type="button" title="4 personel merkezdeyken görev dağıtımı">
+          <button id="taskDistributionBtn" class="btn btn--ghost" type="button" title="Tüm odalar dolu iken (oda sayısı kadar personel) görev dağıtımı">
             Görev Dağıtımı
           </button>
           <button id="printBtn" class="btn btn--ghost" type="button" title="Haftalık programı yazdır">
             Yazdır
           </button>
-          <button id="exportBtn" class="btn btn--ghost" type="button">Dışa Aktar</button>
+          <div class="export-dropdown-wrap" style="position:relative; display:inline-block;">
+            <button id="exportBtn" class="btn btn--ghost" type="button" aria-haspopup="true" aria-expanded="false">Dışa Aktar ▾</button>
+            <div id="exportDropdown" class="export-dropdown hidden" role="menu">
+              <button type="button" role="menuitem" id="exportSessionsExcelBtn">Seanslar → Excel (.xlsx)</button>
+              <button type="button" role="menuitem" id="exportSessionsPdfBtn">Seanslar → PDF</button>
+              <button type="button" role="menuitem" id="exportJsonBtn">Tüm veri (JSON)</button>
+            </div>
+          </div>
           <label class="btn btn--ghost fileBtn" for="importFile">
             İçe Aktar
             <input id="importFile" type="file" accept="application/json" />
@@ -59,8 +67,10 @@
         </div>
       </header>
 
-      <main class="content">
-        <aside class="sidebar">
+      <button class="sidebar__open-tab hidden" id="sidebarOpenBtn" type="button" title="Sidebar'ı aç" aria-label="Sidebar'ı aç">☰</button>
+      <main class="content" id="mainContent">
+        <aside class="sidebar" id="sidebar">
+          <div class="sidebar__inner">
           <section class="panel">
             <div class="panel__title">Ayarlar</div>
             <div class="formRow">
@@ -68,24 +78,25 @@
                 Çalışma Saatleri
               </button>
             </div>
-            <div class="hint" id="workingHoursSummary" style="margin-top:8px; font-size:12px;">
-              Çalışma saatleri ayarlanmadı
-            </div>
             <div class="formRow" style="margin-top:12px;">
               <button id="openRoomsBtn" class="btn btn--ghost" type="button" style="width:100%;">
                 Odalar / Alet
               </button>
             </div>
-            <div class="hint" id="roomsSummary" style="margin-top:8px; font-size:12px;">
-              Odalar ayarlanmadı
+            <div class="formRow" style="margin-top:12px;">
+              <button id="openPackagesBtn" class="btn btn--ghost" type="button" style="width:100%;">
+                Paket Tanımlama
+              </button>
             </div>
             <div class="formRow" style="margin-top:12px;">
               <button id="openStaffBtn" class="btn btn--ghost" type="button" style="width:100%;">
                 Personel
               </button>
             </div>
-            <div class="hint" id="staffSummary" style="margin-top:8px; font-size:12px;">
-              Personel ayarlanmadı
+            <div class="formRow" style="margin-top:12px;">
+              <button id="openActivityLogsBtn" class="btn btn--ghost" type="button" style="width:100%;" title="Kim, ne, ne zaman – işlem geçmişi">
+                İşlem Logları
+              </button>
             </div>
           </section>
 
@@ -93,6 +104,8 @@
             <div class="panel__title">Üyeler</div>
             <div id="membersList" class="list"></div>
             <button id="addMemberBtn" class="btn btn--ghost" type="button" style="width:100%; margin-top:8px;">+ Üye Ekle</button>
+            <button id="openListMembersBtn" class="btn btn--ghost" type="button" style="width:100%; margin-top:8px;" title="Aktif paketi olan üyeler">Üyeleri Listele</button>
+            <button id="openExpiredMembershipsBtn" class="btn btn--ghost" type="button" style="width:100%; margin-top:8px;" title="Bitiş tarihi geçmiş paketler ve seansları">Üyeliği Bitmiş Üyeler</button>
           </section>
 
           <section class="panel">
@@ -106,6 +119,11 @@
               </ul>
             </div>
           </section>
+          </div>
+          <div class="sidebar__actions">
+            <button class="sidebar__resize-btn" id="sidebarResizeBtn" type="button" title="Daralt / Genişlet">«</button>
+            <button class="sidebar__toggle-btn" id="sidebarToggleBtn" type="button" title="Sidebar'ı kapat">◀</button>
+          </div>
         </aside>
 
         <section class="planner">
@@ -142,23 +160,23 @@
               <select id="groupSessionNewRoom" class="input"></select>
             </div>
           </div>
-          <!-- Mevcut grup düzenlerken: Sadece gösterim -->
+          <!-- Mevcut grup düzenlerken: Tarih/Saat/Personel/Oda düzenlenebilir -->
           <div id="groupSessionDisplayFields">
             <div class="formRow">
               <label class="label">Tarih</label>
-              <input id="groupSessionDate" class="input" type="date" readonly />
+              <input id="groupSessionDate" class="input" type="date" />
             </div>
             <div class="formRow">
               <label class="label">Saat</label>
-              <input id="groupSessionTime" class="input" type="time" readonly />
+              <input id="groupSessionTime" class="input" type="time" />
             </div>
             <div class="formRow">
               <label class="label">Personel</label>
-              <input id="groupSessionStaff" class="input" readonly />
+              <select id="groupSessionStaff" class="input"></select>
             </div>
             <div class="formRow">
               <label class="label">Oda</label>
-              <input id="groupSessionRoom" class="input" readonly />
+              <select id="groupSessionRoom" class="input"></select>
             </div>
           </div>
           <div class="formRow formRow--full" style="margin-top:16px;">
@@ -206,10 +224,6 @@
               <label class="label" for="mcPhone">* Telefon</label>
               <input id="mcPhone" class="input" type="tel" placeholder="(xxx)xxx-xx-xx" maxlength="14" inputmode="numeric" autocomplete="tel" />
             </div>
-            <div class="formRow formRow--full">
-              <label class="label" for="mcEmail">E-Posta</label>
-              <input id="mcEmail" class="input" type="email" />
-            </div>
             <div class="formRow">
               <label class="label" for="mcBirthDate">Doğum Tarihi</label>
               <input id="mcBirthDate" class="input" type="date" />
@@ -219,14 +233,19 @@
               <input id="mcProfession" class="input" />
             </div>
             <div class="formRow formRow--full">
+              <label class="label" for="mcEmail">E-Posta</label>
+              <input id="mcEmail" class="input" type="email" />
+            </div>
+            
+            <div class="formRow formRow--full">
               <label class="label" for="mcAddress">Adresi</label>
               <input id="mcAddress" class="input" />
             </div>
-            <div class="formRow formRow--full">
+            <div class="formRow">
               <label class="label" for="mcContactName">Yakını Adı Soyadı</label>
               <input id="mcContactName" class="input" />
             </div>
-            <div class="formRow formRow--full">
+            <div class="formRow">
               <label class="label" for="mcContactPhone">Yakını Telefon</label>
               <input id="mcContactPhone" class="input" type="tel" placeholder="(xxx)xxx-xx-xx" maxlength="14" inputmode="numeric" autocomplete="tel" />
             </div>
@@ -246,10 +265,145 @@
           <div id="memberCardError" class="error hidden" style="margin-top:12px;"></div>
         </div>
         <div class="modal__footer">
+          <button id="memberPackageInfoBtn" class="btn btn--ghost" type="button" title="Aldığı paket bilgisi ve geçmişi">Aldığı Paket Bilgisi</button>
           <button id="deleteMemberCardBtn" class="btn btn--danger" type="button" style="display:none;">Sil</button>
           <div class="spacer"></div>
           <button class="btn btn--ghost" type="button" data-close="memberCardModal">Vazgeç</button>
           <button id="saveMemberCardBtn" class="btn btn--primary" type="button">Kaydet</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Üye Sil (admin şifresi + geçmiş silinsin mi?) -->
+    <div class="modal hidden" id="deleteMemberModal" role="dialog" aria-modal="true">
+      <div class="modal__backdrop" data-close="deleteMemberModal"></div>
+      <div class="modal__card" style="max-width:420px;">
+        <div class="modal__title">Üyeyi Sil</div>
+        <div class="modal__body">
+          <div id="deleteMemberStep1">
+            <label class="label" for="deleteMemberPassword">Admin şifresi</label>
+            <input id="deleteMemberPassword" type="password" class="input" placeholder="Şifre" autocomplete="current-password" />
+          </div>
+          <div id="deleteMemberStep2" class="hidden">
+            <p class="hint">Üyenin geçmiş bilgileri (seanslar, paketler) tamamen silinsin mi?</p>
+            <div style="display:flex; gap:12px; margin-top:12px;">
+              <label class="label" style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                <input type="radio" name="deleteMemberHistory" id="deleteMemberHistoryNo" value="no" checked />
+                Hayır – Sadece listeden kaldır (veritabanında silindi işaretlensin)
+              </label>
+            </div>
+            <div style="display:flex; gap:12px; margin-top:8px;">
+              <label class="label" style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                <input type="radio" name="deleteMemberHistory" id="deleteMemberHistoryYes" value="yes" />
+                Evet – Tüm geçmiş bilgileri kalıcı silinsin
+              </label>
+            </div>
+          </div>
+          <div id="deleteMemberError" class="error hidden" style="margin-top:12px;"></div>
+        </div>
+        <div class="modal__footer">
+          <button id="deleteMemberCancelBtn" class="btn btn--ghost" type="button" data-close="deleteMemberModal">Vazgeç</button>
+          <button id="deleteMemberNextBtn" class="btn btn--primary" type="button">İleri</button>
+          <button id="deleteMemberConfirmBtn" class="btn btn--danger hidden" type="button">Sil</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Aldığı Paket Bilgisi -->
+    <div class="modal hidden" id="memberPackageModal" role="dialog" aria-modal="true">
+      <div class="modal__backdrop" data-close="memberPackageModal"></div>
+      <div class="modal__card" style="width:min(640px, calc(100vw - 24px)); max-height:90vh; display:flex; flex-direction:column;">
+        <div class="modal__title">Aldığı Paket Bilgisi</div>
+        <div class="modal__body" style="overflow-y:auto; flex:1;">
+          <div class="formGrid">
+            <div class="formRow formRow--full">
+              <label class="label" for="mpPackage">Paket</label>
+              <select id="mpPackage" class="input"><option value="">Seçiniz</option></select>
+              <span id="mpPackageFirstSessionHint" class="hint hidden" style="margin-top:4px;">İlk seans geçtiği için paket (seans sayısı) değiştirilemez.</span>
+            </div>
+            <div class="formRow">
+              <label class="label" for="mpMemberNo">Üye No</label>
+              <input id="mpMemberNo" class="input" readonly />
+            </div>
+            <div class="formRow">
+              <label class="label" for="mpStartDate">Üyelik Başlangıç Tarihi</label>
+              <input id="mpStartDate" class="input" type="date" placeholder="Tarih Seçiniz!" />
+            </div>
+            <div class="formRow">
+              <label class="label" for="mpEndDate">Üyelik Bitiş Tarihi</label>
+              <input id="mpEndDate" class="input" type="date" placeholder="Tarih Seçiniz!" />
+            </div>
+            <div class="formRow formRow--full">
+              <label class="label">
+                <input type="checkbox" id="mpSkipDayDistribution" /> Paket Gün Dağılımı Yapmak İstemiyorum
+              </label>
+            </div>
+          </div>
+          <div id="mpDaySlotsWrap" style="margin-top:16px; border-top:1px solid var(--border); padding-top:12px;">
+            <div class="panel__title" style="margin-bottom:10px;">Haftalık gün / saat / personel</div>
+            <div class="hint" style="margin-bottom:10px; font-size:0.9em;">
+              Üye belirli bir gün artık gelemeyecekse, o günün yanındaki işareti kaldırıp <strong>Kaydet</strong>'e basın. Kaldırılan güne ait seanslar silinir, diğer günler aynı şekilde devam eder.
+            </div>
+            <div id="mpDaySlots" class="list"></div>
+          </div>
+          <div id="mpFormError" class="error hidden" style="margin-top:12px;"></div>
+          <div id="mpAvailabilityError" class="error hidden" style="margin-top:8px;"></div>
+        </div>
+        <div class="modal__footer">
+          <button id="mpEndMembershipBtn" class="btn btn--danger" type="button" style="display:none;">Üyeliği Sonlandır</button>
+          <div class="spacer"></div>
+          <button class="btn btn--ghost" type="button" data-close="memberPackageModal">Vazgeç</button>
+          <button id="mpSaveBtn" class="btn btn--primary" type="button">Kaydet</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Paket tutarsızlığı onayı (seanslar bitti ama paket bitişi ileri tarihte) -->
+    <div class="modal hidden" id="packageInconsistencyModal" role="dialog" aria-modal="true">
+      <div class="modal__backdrop" data-close="packageInconsistencyModal"></div>
+      <div class="modal__card" style="max-width: 480px;">
+        <div class="modal__title">Paket tarihi ile seanslar uyumsuz</div>
+        <div class="modal__body">
+          <p id="packageInconsistencyMessage" class="hint" style="margin-bottom: 16px;"></p>
+          <p class="hint" style="font-size: 0.9em;">Nasıl devam etmek istiyorsunuz?</p>
+        </div>
+        <div class="modal__footer">
+          <button type="button" id="packageInconsistencySaveAsIsBtn" class="btn btn--primary">Bu şekilde kaydet</button>
+          <button type="button" id="packageInconsistencySaveAndEndBtn" class="btn btn--secondary">Seansları kaydedip üyeliği bitmişe at</button>
+          <button type="button" id="packageInconsistencyCancelBtn" class="btn btn--ghost" data-close="packageInconsistencyModal">İptal</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Paket Seansları (okunaklı liste + Excel/PDF dışa aktarım) -->
+    <div class="modal hidden" id="packageSessionsModal" role="dialog" aria-modal="true">
+      <div class="modal__backdrop" data-close="packageSessionsModal"></div>
+      <div class="modal__card" style="width:min(720px, calc(100vw - 24px)); max-height:90vh; display:flex; flex-direction:column;">
+        <div class="modal__title" id="packageSessionsTitle">Paket Seansları</div>
+        <div class="modal__body" style="overflow:auto; flex:1;">
+          <p id="packageSessionsSubtitle" class="hint" style="margin-bottom:12px;"></p>
+          <div id="packageSessionsTableWrap" style="overflow:auto;">
+            <table class="table" id="packageSessionsTable" style="width:100%; border-collapse:collapse;">
+              <thead>
+                <tr>
+                  <th style="text-align:left; padding:8px 10px; border-bottom:2px solid var(--border);">#</th>
+                  <th style="text-align:left; padding:8px 10px; border-bottom:2px solid var(--border);">Tarih</th>
+                  <th style="text-align:left; padding:8px 10px; border-bottom:2px solid var(--border);">Saat</th>
+                  <th style="text-align:left; padding:8px 10px; border-bottom:2px solid var(--border);">Personel</th>
+                  <th style="text-align:left; padding:8px 10px; border-bottom:2px solid var(--border);">Oda</th>
+                  <th style="text-align:left; padding:8px 10px; border-bottom:2px solid var(--border);">Not</th>
+                </tr>
+              </thead>
+              <tbody id="packageSessionsTableBody"></tbody>
+            </table>
+          </div>
+          <p id="packageSessionsEmpty" class="hint hidden" style="margin-top:12px;">Seans kaydı yok.</p>
+        </div>
+        <div class="modal__footer">
+          <button type="button" id="packageSessionsExportExcelBtn" class="btn btn--ghost">Excel (.xlsx)</button>
+          <button type="button" id="packageSessionsExportPdfBtn" class="btn btn--ghost">PDF</button>
+          <div class="spacer"></div>
+          <button type="button" class="btn btn--ghost" data-close="packageSessionsModal">Kapat</button>
         </div>
       </div>
     </div>
@@ -273,6 +427,7 @@
               <label class="label" for="sessionMember">Üye</label>
               <select id="sessionMember" class="input"></select>
             </div>
+            <div id="sessionPackageHint" class="hint" style="margin-top:4px; margin-bottom:8px; font-size:12px;"></div>
             <div class="formRow">
               <label class="label" for="sessionStaff">Personel</label>
               <select id="sessionStaff" class="input"></select>
@@ -313,6 +468,135 @@
           <div class="spacer"></div>
           <button class="btn btn--ghost" type="button" data-close="1">Vazgeç</button>
           <button id="saveWorkingHoursBtn" class="btn btn--primary" type="button">Kaydet</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Paket Tanımlama -->
+    <div class="modal hidden" id="packagesModal" role="dialog" aria-modal="true">
+      <div class="modal__backdrop" data-close="packagesModal"></div>
+      <div class="modal__card" style="width:min(900px, calc(100vw - 24px)); max-width:95vw;">
+        <div class="modal__title">Paket Tanımlama</div>
+        <div class="modal__body" style="display:flex; gap:24px; flex-wrap:wrap;">
+          <div style="flex:1; min-width:280px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+              <span class="panel__title">Paket Tanımlama</span>
+              <button id="packagesExportExcelBtn" class="btn btn--ghost btn--xs" type="button">Excel'e Aktar</button>
+            </div>
+            <div id="packagesListWrap" style="overflow:auto; max-height:360px;">
+              <table class="packagesTable" id="packagesTable">
+                <thead>
+                  <tr>
+                    <th>Paket Adı</th>
+                    <th>Ders Adet</th>
+                    <th>Ay Aşım Süresi</th>
+                    <th></th>
+                    <th></th>
+                  </tr>
+                </thead>
+                <tbody id="packagesList"></tbody>
+              </table>
+            </div>
+          </div>
+          <div style="flex:0 0 280px;">
+            <div class="panel__title" style="margin-bottom:12px;">Yeni Kayıt</div>
+            <div class="formGrid">
+              <div class="formRow formRow--full">
+                <label class="label" for="packageName">Paket Adı</label>
+                <input id="packageName" class="input" placeholder="Paket adı" />
+              </div>
+              <div class="formRow">
+                <label class="label" for="packageLessonCount">Ders Adet</label>
+                <input id="packageLessonCount" class="input" type="number" min="1" value="1" />
+              </div>
+              <div class="formRow">
+                <label class="label" for="packageMonthOverrun">Ay Aşım Süresi</label>
+                <input id="packageMonthOverrun" class="input" type="number" min="0" value="0" />
+              </div>
+              <div class="formRow formRow--full">
+                <label class="label" for="packageWeeklyLessonCount">Haftalık Ders Sayısı</label>
+                <input id="packageWeeklyLessonCount" class="input" type="number" min="0" placeholder="Boş bırakılabilir" />
+              </div>
+              <div class="formRow formRow--full">
+                <label class="label" for="packageType">Paket Tipi</label>
+                <select id="packageType" class="input">
+                  <option value="fixed">Sabit</option>
+                  <option value="flexible">Esnek</option>
+                </select>
+              </div>
+            </div>
+            <div style="margin-top:12px; display:flex; gap:8px;">
+              <button id="packageSaveBtn" class="btn btn--primary" type="button">Kaydet</button>
+              <button id="packageCancelBtn" class="btn btn--ghost" type="button">İptal</button>
+            </div>
+            <div id="packagesFormError" class="error hidden" style="margin-top:8px;"></div>
+          </div>
+        </div>
+        <div class="modal__footer">
+          <div class="spacer"></div>
+          <button class="btn btn--ghost" type="button" data-close="packagesModal">Kapat</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: İşlem Logları -->
+    <div class="modal hidden" id="activityLogsModal" role="dialog" aria-modal="true">
+      <div class="modal__backdrop" data-close="activityLogsModal"></div>
+      <div class="modal__card" style="width:min(960px, calc(100vw - 24px)); max-height:90vh; display:flex; flex-direction:column;">
+        <div class="modal__title">İşlem Logları</div>
+        <div class="modal__body" style="overflow:auto; flex:1;">
+          <div class="hint" style="margin-bottom:12px;">
+            Kim, ne işlemi, ne zaman yaptı. Sadece admin/manager görebilir.
+          </div>
+          <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:center; margin-bottom:12px;">
+            <select id="activityLogsActionFilter" class="input" style="width:180px;">
+              <option value="">Tüm işlemler</option>
+              <option value="auth.login">Giriş</option>
+              <option value="auth.login_failed">Giriş başarısız</option>
+              <option value="member.create">Üye ekleme</option>
+              <option value="member.update">Üye güncelleme</option>
+              <option value="member.delete">Üye silme</option>
+              <option value="session.create">Seans ekleme</option>
+              <option value="session.update">Seans güncelleme</option>
+              <option value="session.delete">Seans silme</option>
+              <option value="room.create">Oda ekleme</option>
+              <option value="room.update">Oda güncelleme</option>
+              <option value="room.delete">Oda silme</option>
+              <option value="staff.create">Personel ekleme</option>
+              <option value="staff.update">Personel güncelleme</option>
+              <option value="staff.delete">Personel silme</option>
+              <option value="package.create">Paket ekleme</option>
+              <option value="package.update">Paket güncelleme</option>
+              <option value="package.delete">Paket silme</option>
+              <option value="member_package.create">Üye paketi ekleme</option>
+              <option value="member_package.update">Üye paketi güncelleme</option>
+              <option value="member_package.end">Üye paketi sonlandırma</option>
+              <option value="settings.working_hours_update">Çalışma saatleri</option>
+            </select>
+            <label class="label" style="display:flex; align-items:center; gap:4px;">Başlangıç <input id="activityLogsFrom" class="input" type="date" style="width:140px;" /></label>
+            <label class="label" style="display:flex; align-items:center; gap:4px;">Bitiş <input id="activityLogsTo" class="input" type="date" style="width:140px;" /></label>
+            <button id="activityLogsApplyFilterBtn" class="btn btn--ghost" type="button">Filtrele</button>
+          </div>
+          <div id="activityLogsError" class="error hidden"></div>
+          <div style="overflow:auto; max-height:50vh;">
+            <table class="packagesTable" style="width:100%;">
+              <thead>
+                <tr>
+                  <th>Tarih / Saat</th>
+                  <th>Kim</th>
+                  <th>İşlem</th>
+                  <th>Varlık</th>
+                  <th>Detay</th>
+                </tr>
+              </thead>
+              <tbody id="activityLogsTableBody"></tbody>
+            </table>
+          </div>
+          <div id="activityLogsPagination" style="margin-top:12px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;"></div>
+        </div>
+        <div class="modal__footer">
+          <div class="spacer"></div>
+          <button class="btn btn--ghost" type="button" data-close="activityLogsModal">Kapat</button>
         </div>
       </div>
     </div>
@@ -414,10 +698,10 @@
     <div class="modal hidden" id="taskDistributionModal" role="dialog" aria-modal="true">
       <div class="modal__backdrop" data-close="1"></div>
       <div class="modal__card" style="width:min(900px, calc(100vw - 24px));">
-        <div class="modal__title">Görev Dağıtımı - 4 Personel Merkezde</div>
+        <div class="modal__title">Görev Dağıtımı – Tüm Odalar Dolu</div>
         <div class="modal__body">
           <div class="hint" style="margin-bottom:14px;">
-            Aynı anda 4 personelin merkezde olduğu saatleri ve seans dağılımını görüntüleyin.
+            Her odada en fazla 1 personel çalışabildiği için, merkezdeki oda sayısı kadar personelin aynı anda olduğu saatleri ve seans dağılımını görüntüleyin.
           </div>
           <div id="taskDistributionContent"></div>
         </div>
@@ -428,6 +712,53 @@
       </div>
     </div>
 
+    <!-- Modal: Üyeleri Listele (aktif paketi olan üyeler) -->
+    <div class="modal hidden" id="listMembersModal" role="dialog" aria-modal="true">
+      <div class="modal__backdrop" data-close="listMembersModal"></div>
+      <div class="modal__card" style="width:min(1280px, calc(100vw - 24px)); max-height:90vh; display:flex; flex-direction:column;">
+        <div class="modal__title">Üyeleri Listele – Aktif Üyeler</div>
+        <div class="modal__body" style="overflow-y:auto; flex:1;">
+          <div class="hint" style="margin-bottom:14px;">
+            Sadece aktif paketi olan üyeler listelenir. Satıra tıklayarak aktif paket seanslarını görebilir; Kimlik Kartı, Paket ve Sil işlemlerini butonlardan yapabilirsiniz.
+          </div>
+          <div class="formRow" style="margin-bottom:14px;">
+            <label class="label" for="listMembersFilter">Filtre</label>
+            <input id="listMembersFilter" class="input" type="text" placeholder="Ad, soyad veya telefon numarasına göre ara..." style="max-width:320px;" />
+          </div>
+          <div id="listMembersContent"></div>
+        </div>
+        <div class="modal__footer">
+          <div class="spacer"></div>
+          <button class="btn btn--ghost" type="button" data-close="listMembersModal">Kapat</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Üyeliği Bitmiş Üyeler (paket ve seans listesi) -->
+    <div class="modal hidden" id="expiredMembershipsModal" role="dialog" aria-modal="true">
+      <div class="modal__backdrop" data-close="expiredMembershipsModal"></div>
+      <div class="modal__card" style="width:min(1100px, calc(100vw - 24px)); max-height:90vh; display:flex; flex-direction:column;">
+        <div class="modal__title">Üyeliği Bitmiş Üyeler – Paket ve Seanslar</div>
+        <div class="modal__body" style="overflow-y:auto; flex:1;">
+          <div class="hint" style="margin-bottom:14px;">
+            Bitiş tarihi geçmiş üyelik paketleri ve bu paketlerdeki seanslar ayrı listelenir.
+          </div>
+          <div class="formRow" style="margin-bottom:14px;">
+            <label class="label" for="expiredMembershipsFilter">Filtre</label>
+            <input id="expiredMembershipsFilter" class="input" type="text" placeholder="Ad, soyad veya telefon numarasına göre ara..." style="max-width:320px;" />
+          </div>
+          <div id="expiredMembershipsContent"></div>
+        </div>
+        <div class="modal__footer">
+          <div class="spacer"></div>
+          <button class="btn btn--ghost" type="button" data-close="expiredMembershipsModal">Kapat</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.31/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="./api.js"></script>
     <script src="./app.js"></script>
   </body>

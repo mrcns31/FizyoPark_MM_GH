@@ -1,8 +1,10 @@
 import express from 'express';
 import { body, validationResult } from 'express-validator';
+import bcrypt from 'bcrypt';
 import db from '../config/database.js';
 import { verifyToken } from './auth.js';
 import { toPhoneFormat } from '../utils/phone.js';
+import { log as activityLog } from '../utils/activityLogger.js';
 
 const router = express.Router();
 router.use(verifyToken);
@@ -13,12 +15,19 @@ const MEMBER_FIELDS = [
   'systemic_diseases', 'clinical_conditions', 'past_operations', 'notes'
 ];
 
-// Üye listesi (migration sonrası first_name/last_name/member_no alanları kullanılır)
+// Üye listesi (silinmemiş üyeler; deleted_at sütunu yoksa tümü döner)
 router.get('/', async (req, res) => {
   try {
-    const result = await db.query(
-      'SELECT * FROM members ORDER BY name'
-    );
+    let result;
+    try {
+      result = await db.query(
+        `SELECT * FROM members WHERE (deleted_at IS NULL) ORDER BY name`
+      );
+    } catch (colErr) {
+      if (colErr.code === '42703') {
+        result = await db.query('SELECT * FROM members ORDER BY name');
+      } else throw colErr;
+    }
     res.json(result.rows);
   } catch (error) {
     console.error('Members list error:', error);
@@ -101,8 +110,10 @@ router.post('/', [
         row.systemic_diseases, row.clinical_conditions, row.past_operations, row.notes
       ]
     );
+    const created = result.rows[0];
+    await activityLog(req, { action: 'member.create', entityType: 'member', entityId: created.id, details: { member_no: created.member_no, name: created.name } }).catch(() => {});
 
-    res.status(201).json(result.rows[0]);
+    res.status(201).json(created);
   } catch (error) {
     if (error.code === '23505') {
       return res.status(409).json({ error: 'Bu üye numarası veya telefon zaten kayıtlı.' });
@@ -190,7 +201,9 @@ router.put('/:id', [
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Üye bulunamadı' });
     }
-    res.json(result.rows[0]);
+    const updated = result.rows[0];
+    await activityLog(req, { action: 'member.update', entityType: 'member', entityId: updated.id, details: { member_no: updated.member_no, name: updated.name } }).catch(() => {});
+    res.json(updated);
   } catch (error) {
     if (error.code === '23505') {
       return res.status(409).json({ error: 'Bu üye numarası veya telefon zaten kayıtlı.' });
@@ -210,15 +223,51 @@ router.put('/:id', [
   }
 });
 
-// Üye sil
-router.delete('/:id', async (req, res) => {
+// Üye sil (admin şifresi zorunlu; deleteHistory: true ise tam silme, false ise soft delete)
+router.delete('/:id', [
+  body('adminPassword').notEmpty().withMessage('Admin şifresi gerekli'),
+  body('deleteHistory').isBoolean().withMessage('deleteHistory true/false olmalı')
+], async (req, res) => {
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ error: errors.array().map(e => e.msg).join(', ') });
+    }
     const { id } = req.params;
-    const result = await db.query('DELETE FROM members WHERE id = $1 RETURNING *', [id]);
-    if (result.rows.length === 0) {
+    const { adminPassword, deleteHistory } = req.body;
+
+    // Admin kullanıcı şifresini doğrula
+    const adminResult = await db.query(
+      "SELECT password_hash FROM users WHERE role = 'admin' AND is_active = true LIMIT 1"
+    );
+    if (adminResult.rows.length === 0) {
+      return res.status(403).json({ error: 'Admin hesabı bulunamadı.' });
+    }
+    const valid = await bcrypt.compare(adminPassword, adminResult.rows[0].password_hash);
+    if (!valid) {
+      return res.status(401).json({ error: 'Admin şifresi hatalı.' });
+    }
+
+    const memberCheck = await db.query('SELECT id FROM members WHERE id = $1', [id]);
+    if (memberCheck.rows.length === 0) {
       return res.status(404).json({ error: 'Üye bulunamadı' });
     }
-    res.json({ message: 'Üye silindi' });
+
+    if (deleteHistory === true) {
+      // Tam silme: üye kaydı silinir; seanslar soft delete (veritabanında kalır, log için)
+      await db.query('UPDATE sessions SET deleted_at = CURRENT_TIMESTAMP WHERE member_id = $1', [id]);
+      await db.query('DELETE FROM members WHERE id = $1', [id]);
+      await activityLog(req, { action: 'member.delete_permanent', entityType: 'member', entityId: id, details: { deleteHistory: true } }).catch(() => {});
+      return res.json({ message: 'Üye ve geçmiş bilgileri silindi' });
+    }
+
+    // Soft delete: listede görünmez, veritabanında deleted_at işaretlenir
+    await db.query(
+      'UPDATE members SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *',
+      [id]
+    );
+    await activityLog(req, { action: 'member.delete', entityType: 'member', entityId: id, details: { softDelete: true } }).catch(() => {});
+    res.json({ message: 'Üye silindi (sistemde görünmeyecek)' });
   } catch (error) {
     console.error('Member delete error:', error);
     res.status(500).json({ error: 'Üye silinirken hata oluştu' });

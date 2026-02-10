@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 import { body, validationResult } from 'express-validator';
 import db from '../config/database.js';
+import { log as activityLog } from '../utils/activityLogger.js';
 
 const router = express.Router();
 
@@ -35,6 +36,7 @@ router.post('/login', [
     );
 
     if (result.rows.length === 0) {
+      await activityLog(req, { action: 'auth.login_failed', details: { username, reason: 'user_not_found' } }).catch(() => {});
       return res.status(401).json({ error: 'Kullanıcı adı veya şifre hatalı' });
     }
 
@@ -43,11 +45,22 @@ router.post('/login', [
     // Şifre kontrolü
     const isValidPassword = await bcrypt.compare(password, user.password_hash);
     if (!isValidPassword) {
+      await activityLog(req, { action: 'auth.login_failed', details: { username, reason: 'invalid_password' } }).catch(() => {});
       return res.status(401).json({ error: 'Kullanıcı adı veya şifre hatalı' });
     }
 
     // Token oluştur
     const token = generateToken(user.id, user.role);
+
+    await activityLog(req, {
+      action: 'auth.login',
+      entityType: 'user',
+      entityId: user.id,
+      details: { role: user.role },
+      actorId: user.id,
+      actorType: 'user',
+      actorName: user.username
+    }).catch(() => {});
 
     res.json({
       token,

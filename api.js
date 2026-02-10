@@ -108,15 +108,43 @@
   function roomFromApi(row) {
     return { id: row.id, name: row.name || '', devices: row.devices || 1 };
   }
+  function packageFromApi(row) {
+    return {
+      id: row.id,
+      name: row.name || '',
+      lessonCount: row.lesson_count,
+      monthOverrun: row.month_overrun,
+      weeklyLessonCount: row.weekly_lesson_count,
+      packageType: row.package_type || 'fixed',
+    };
+  }
   function sessionFromApi(row) {
     return {
       id: row.id,
       staffId: row.staff_id,
       memberId: row.member_id,
       roomId: row.room_id || null,
+      memberPackageId: row.member_package_id || null,
       startTs: Number(row.start_ts),
       endTs: Number(row.end_ts),
       note: row.note || '',
+    };
+  }
+  function memberPackageFromApi(row) {
+    return {
+      id: row.id,
+      memberId: row.member_id,
+      packageId: row.package_id,
+      packageName: row.package_name || '',
+      lessonCount: row.lesson_count,
+      startDate: row.start_date,
+      endDate: row.end_date,
+      skipDayDistribution: !!row.skip_day_distribution,
+      status: row.status || 'active',
+      slots: (row.slots || []).map(function (s) {
+        return { id: s.id, dayOfWeek: s.day_of_week, startTime: s.start_time, staffId: s.staff_id };
+      }),
+      sessionConflicts: row.sessionConflicts || [],
     };
   }
   function tryParse(s) {
@@ -137,10 +165,12 @@
   }
 
   async function loadFullState() {
-    const [members, staff, rooms, workingHours, sessionsRes] = await Promise.all([
+    const [members, staff, rooms, packages, memberPackagesRes, workingHours, sessionsRes] = await Promise.all([
       apiFetch('/members'),
       apiFetch('/staff'),
       apiFetch('/rooms'),
+      apiFetch('/packages'),
+      apiFetch('/member-packages'),
       apiFetch('/settings/working-hours'),
       apiFetch('/sessions?startDate=2000-01-01&endDate=2030-12-31'),
     ]);
@@ -154,6 +184,8 @@
       settings: { slotMinutes: 60 },
       workingHours: defaultWh,
       rooms: (rooms || []).map(roomFromApi),
+      packages: (packages || []).map(packageFromApi),
+      memberPackages: (memberPackagesRes || []).map(memberPackageFromApi),
       staff: (staff || []).map(staffFromApi),
       members: (members || []).map(memberFromApi),
       sessions: (sessionsRes || []).map(sessionFromApi),
@@ -169,8 +201,11 @@
     var row = await apiFetch('/members/' + id, { method: 'PUT', body: JSON.stringify(memberToApi(body)) });
     return memberFromApi(row);
   }
-  async function deleteMember(id) {
-    await apiFetch('/members/' + id, { method: 'DELETE' });
+  async function deleteMember(id, body) {
+    await apiFetch('/members/' + id, {
+      method: 'DELETE',
+      body: body ? JSON.stringify(body) : undefined
+    });
   }
 
   async function createStaff(body) {
@@ -213,6 +248,107 @@
     await apiFetch('/rooms/' + id, { method: 'DELETE' });
   }
 
+  async function createPackage(body) {
+    const payload = {
+      name: body.name,
+      lesson_count: body.lessonCount ?? body.lesson_count ?? 1,
+      month_overrun: body.monthOverrun ?? body.month_overrun ?? 0,
+      package_type: body.packageType ?? body.package_type ?? 'fixed',
+    };
+    const wlc = body.weeklyLessonCount ?? body.weekly_lesson_count;
+    if (wlc != null && wlc !== '') payload.weekly_lesson_count = Number(wlc);
+    const row = await apiFetch('/packages', { method: 'POST', body: JSON.stringify(payload) });
+    return packageFromApi(row);
+  }
+  async function updatePackage(id, body) {
+    const payload = {};
+    if (body.name !== undefined) payload.name = body.name;
+    if (body.lessonCount !== undefined) payload.lesson_count = body.lessonCount;
+    if (body.monthOverrun !== undefined) payload.month_overrun = body.monthOverrun;
+    if (body.weeklyLessonCount !== undefined) payload.weekly_lesson_count = body.weeklyLessonCount;
+    if (body.packageType !== undefined) payload.package_type = body.packageType;
+    const row = await apiFetch('/packages/' + id, { method: 'PUT', body: JSON.stringify(payload) });
+    return packageFromApi(row);
+  }
+  async function deletePackage(id) {
+    await apiFetch('/packages/' + id, { method: 'DELETE' });
+  }
+
+  async function getMemberPackages(memberId) {
+    const rows = memberId != null ? await apiFetch('/member-packages?memberId=' + memberId) : await apiFetch('/member-packages');
+    return (rows || []).map(memberPackageFromApi);
+  }
+  async function getMemberPackage(id) {
+    const row = await apiFetch('/member-packages/' + id);
+    return memberPackageFromApi(row);
+  }
+  async function checkMemberPackageAvailability(body) {
+    const payload = {
+      member_id: body.memberId,
+      start_date: body.startDate,
+      end_date: body.endDate,
+      slots: (body.slots || []).map(function (s) {
+        return { day_of_week: s.dayOfWeek, start_time: s.startTime, staff_id: s.staffId };
+      }),
+    };
+    if (body.excludeMemberPackageId != null) payload.exclude_member_package_id = body.excludeMemberPackageId;
+    return apiFetch('/member-packages/check-availability', { method: 'POST', body: JSON.stringify(payload) });
+  }
+  async function createMemberPackage(body) {
+    const payload = {
+      member_id: body.memberId,
+      package_id: body.packageId,
+      start_date: body.startDate,
+      end_date: body.endDate,
+      skip_day_distribution: !!body.skipDayDistribution,
+      slots: (body.slots || []).map(function (s) {
+        return { day_of_week: s.dayOfWeek, start_time: s.startTime, staff_id: s.staffId };
+      }),
+    };
+    const row = await apiFetch('/member-packages', { method: 'POST', body: JSON.stringify(payload) });
+    return memberPackageFromApi(row);
+  }
+  async function updateMemberPackage(id, body) {
+    const payload = {};
+    if (body.startDate !== undefined) payload.start_date = body.startDate;
+    if (body.endDate !== undefined) payload.end_date = body.endDate;
+    if (body.skipDayDistribution !== undefined) payload.skip_day_distribution = body.skipDayDistribution;
+    if (body.effectiveDate !== undefined) payload.effective_date = body.effectiveDate;
+    if (body.packageId !== undefined) payload.package_id = body.packageId;
+    if (body.slots !== undefined) payload.slots = body.slots.map(function (s) {
+      return { day_of_week: s.dayOfWeek, start_time: s.startTime, staff_id: s.staffId };
+    });
+    const row = await apiFetch('/member-packages/' + id, { method: 'PUT', body: JSON.stringify(payload) });
+    return memberPackageFromApi(row);
+  }
+  async function endMemberPackage(id, endDate) {
+    const body = endDate ? { end_date: endDate } : {};
+    const row = await apiFetch('/member-packages/' + id + '/end', { method: 'POST', body: JSON.stringify(body) });
+    return row ? memberPackageFromApi(row) : null;
+  }
+  async function getMemberPackageSessions(id) {
+    return apiFetch('/member-packages/' + id + '/sessions');
+  }
+  async function getSessions() {
+    const rows = await apiFetch('/sessions?startDate=2000-01-01&endDate=2030-12-31&_=' + Date.now());
+    return (rows || []).map(sessionFromApi);
+  }
+
+  async function exportPackagesCsv() {
+    const url = API_BASE.replace(/\/$/, '') + '/packages/export/csv';
+    const token = getToken();
+    const headers = { Accept: 'text/csv' };
+    if (token) headers['Authorization'] = 'Bearer ' + token;
+    const res = await fetch(url, { headers });
+    if (!res.ok) throw new Error(res.status === 401 ? 'Oturum açmanız gerekir' : 'Dışa aktarım başarısız');
+    const blob = await res.blob();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'paketler.csv';
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
   function toValidInt(val, name) {
     const n = typeof val === 'number' && !isNaN(val) ? Math.floor(val) : parseInt(String(val).trim(), 10);
     if (isNaN(n) || !Number.isFinite(n)) throw new Error(name + ' geçerli bir sayı olmalı');
@@ -230,16 +366,25 @@
     const startTs = toValidInt(body.startTs, 'Başlangıç zamanı');
     const endTs = toValidInt(body.endTs, 'Bitiş zamanı');
     const note = body.note != null && body.note !== '' ? String(body.note) : null;
+    const memberPackageId = body.memberPackageId != null && body.memberPackageId !== '' ? parseInt(body.memberPackageId, 10) : null;
+
+    const payload = { staffId, memberId, roomId, startTs, endTs, note };
+    if (memberPackageId != null) payload.memberPackageId = memberPackageId;
 
     const row = await apiFetch('/sessions', {
       method: 'POST',
-      body: JSON.stringify({ staffId, memberId, roomId, startTs, endTs, note }),
+      body: JSON.stringify(payload),
     });
     return sessionFromApi(row);
   }
   async function updateSession(id, body) {
-    await apiFetch('/sessions/' + id, { method: 'PUT', body: JSON.stringify(body) });
-    return { ...body, id: parseInt(id, 10) };
+    const payload = {};
+    ['staffId', 'memberId', 'roomId', 'startTs', 'endTs', 'note', 'memberPackageId'].forEach(function (k) {
+      if (body[k] !== undefined) payload[k] = body[k];
+    });
+    const res = await apiFetch('/sessions/' + id, { method: 'PUT', body: JSON.stringify(payload) });
+    const session = res && res.session ? res.session : res;
+    return session && session.id ? sessionFromApi(session) : { ...payload, id: parseInt(id, 10) };
   }
   async function deleteSession(id) {
     await apiFetch('/sessions/' + id, { method: 'DELETE' });
@@ -251,6 +396,22 @@
       payload[k] = workingHours[k];
     });
     await apiFetch('/settings/working-hours', { method: 'PUT', body: JSON.stringify(payload) });
+  }
+
+  /** İşlem logları listesi (admin/manager). params: { page, limit, action, entityType, from, to } */
+  async function getActivityLogs(params) {
+    var q = new URLSearchParams();
+    if (params && typeof params === 'object') {
+      if (params.page != null) q.set('page', params.page);
+      if (params.limit != null) q.set('limit', params.limit);
+      if (params.action) q.set('action', params.action);
+      if (params.entityType) q.set('entityType', params.entityType);
+      if (params.actorId != null) q.set('actorId', params.actorId);
+      if (params.from) q.set('from', params.from);
+      if (params.to) q.set('to', params.to);
+    }
+    var path = '/activity-logs' + (q.toString() ? '?' + q.toString() : '');
+    return apiFetch(path);
   }
 
   window.API = {
@@ -268,11 +429,24 @@
     createRoom,
     updateRoom,
     deleteRoom,
+    createPackage,
+    updatePackage,
+    deletePackage,
+    exportPackagesCsv,
+    getMemberPackages,
+    getMemberPackage,
+    checkMemberPackageAvailability,
+    createMemberPackage,
+    updateMemberPackage,
+    endMemberPackage,
+    getMemberPackageSessions,
+    getSessions,
     createSession,
     updateSession,
     deleteSession,
     updateWorkingHours,
     apiFetch,
+    getActivityLogs,
   };
   window.__API_BASE__ = API_BASE;
 })();

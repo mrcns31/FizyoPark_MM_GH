@@ -2,6 +2,7 @@ import express from 'express';
 import { body, validationResult } from 'express-validator';
 import db from '../config/database.js';
 import { verifyToken } from './auth.js';
+import { log as activityLog } from '../utils/activityLogger.js';
 
 const router = express.Router();
 router.use(verifyToken);
@@ -81,6 +82,7 @@ router.put('/working-hours', checkAdminOrManager, [
       }
     }
 
+    await activityLog(req, { action: 'settings.working_hours_update', entityType: 'settings', details: { daysUpdated: Object.keys(workingHours).length } }).catch(() => {});
     res.json({ message: 'Çalışma saatleri güncellendi' });
   } catch (error) {
     console.error('Working hours update error:', error);
