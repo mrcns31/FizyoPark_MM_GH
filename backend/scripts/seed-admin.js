@@ -41,7 +41,7 @@ async function seed() {
        VALUES ('admin', 'admin@local', $1, 'admin')`,
       [hash]
     );
-    console.log('Admin kullanıcı oluşturuldu: username=admin, password=admin123');
+    console.log('Admin kullanıcı oluşturuldu: e-posta=admin@local, password=admin123');
 
     // working_hours boşsa varsayılanları ekle
     const whCheck = await client.query('SELECT COUNT(*) FROM working_hours');

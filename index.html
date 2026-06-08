@@ -14,8 +14,8 @@
         <p class="login-hint">Backend'e bağlanmak için giriş yapın.</p>
         <form id="loginForm" class="login-form">
           <div class="formRow">
-            <label class="label" for="loginUsername">Kullanıcı adı</label>
-            <input id="loginUsername" class="input" type="text" autocomplete="username" required />
+            <label class="label" for="loginEmail">E-posta</label>
+            <input id="loginEmail" class="input" type="email" autocomplete="email" placeholder="ornek@email.com" required />
           </div>
           <div class="formRow">
             <label class="label" for="loginPassword">Şifre</label>
@@ -24,24 +24,66 @@
           <p id="loginError" class="error hidden"></p>
           <button id="loginBtn" class="btn btn--primary" type="submit">Giriş</button>
         </form>
-        <p class="login-footer">İlk kurulumda: <code>admin</code> / <code>admin123</code> (seed sonrası)</p>
+        <p class="login-footer">Admin: <code>admin@local</code> / <code>admin123</code><br/>Personel / Üye: kayıtlı e-posta + şifre (telefon son 4 hane)</p>
+      </div>
+    </div>
+
+    <!-- İlk girişte şifre belirleme -->
+    <div id="changePasswordOverlay" class="login-overlay hidden" aria-hidden="true">
+      <div class="login-card">
+        <h1 class="login-title">Şifrenizi Belirleyin</h1>
+        <p class="login-hint">İlk girişiniz. Lütfen yeni şifrenizi tanımlayın; sonraki girişlerde bu şifreyi kullanacaksınız.</p>
+        <form id="changePasswordForm" class="login-form">
+          <div class="formRow">
+            <label class="label" for="newPassword">Yeni şifre</label>
+            <input id="newPassword" class="input" type="password" autocomplete="new-password" minlength="4" required />
+          </div>
+          <div class="formRow">
+            <label class="label" for="confirmPassword">Yeni şifre (tekrar)</label>
+            <input id="confirmPassword" class="input" type="password" autocomplete="new-password" minlength="4" required />
+          </div>
+          <p id="changePasswordError" class="error hidden"></p>
+          <button id="changePasswordBtn" class="btn btn--primary" type="submit">Kaydet ve Devam Et</button>
+        </form>
       </div>
     </div>
 
     <div class="app" id="mainApp">
       <header class="topbar">
-        <div class="topbar__left">
-          <div class="brand">Seans Planlayıcı</div>
-          <div class="weeknav">
-            <div style="display:flex; gap:8px; align-items:center; margin-right:12px;">
-              <button id="viewWeekBtn" class="btn btn--ghost" type="button" data-view="week">Haftalık</button>
-              <button id="viewDayBtn" class="btn btn--ghost" type="button" data-view="day">Günlük</button>
+        <div class="topbar__brand">
+          <div class="brand" id="topbarBrand">Seans Planlayıcı</div>
+        </div>
+        <div class="topbar__center">
+          <div class="topbar__toolbar weeknav">
+            <input id="plannerFilterInput" class="input topbar__filterInput" type="text" placeholder="Üye veya personel ara..." title="Üye veya personel adı ile filtrele" />
+            <div class="topbar__filterSelect" id="plannerStaffFilterWrap">
+              <span class="topbar__filterIcon" aria-hidden="true">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+              </span>
+              <select id="plannerStaffFilter" class="input topbar__select" title="Personel">
+                <option value="">Tüm Personel</option>
+              </select>
             </div>
-            <input id="plannerFilterInput" class="input" type="text" placeholder="Üye veya personel ismi ile filtrele..." title="Üye veya personel adı yazın. Haftalık: hangi günlerde, Günlük: hangi saatte gösterilir." style="width:200px; min-width:160px;" />
-            <button id="prevBtn" class="btn btn--ghost" type="button">◀</button>
-            <div class="weeknav__label" id="weekLabel">-</div>
-            <button id="nextBtn" class="btn btn--ghost" type="button">▶</button>
-            <button id="todayBtn" class="btn btn--ghost" type="button">Bugün</button>
+            <div class="topbar__filterSelect">
+              <span class="topbar__filterIcon" aria-hidden="true">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l7-4 7 4v14"/></svg>
+              </span>
+              <select id="plannerRoomFilter" class="input topbar__select" title="Oda">
+                <option value="">Tüm Odalar</option>
+              </select>
+            </div>
+            <div class="topbar__dateNav">
+              <button id="prevBtn" class="btn btn--ghost btn--icon" type="button" aria-label="Önceki">◀</button>
+              <div class="weeknav__label" id="weekLabel">-</div>
+              <button id="nextBtn" class="btn btn--ghost btn--icon" type="button" aria-label="Sonraki">▶</button>
+            </div>
+            <div class="topbar__viewGroup" role="group" aria-label="Görünüm">
+              <button id="viewDayBtn" class="btn btn--ghost topbar__viewBtn" type="button" data-view="day">Günlük</button>
+              <button id="viewWeekBtn" class="btn btn--ghost topbar__viewBtn" type="button" data-view="week">Haftalık</button>
+              <button id="viewMonthBtn" class="btn btn--ghost topbar__viewBtn" type="button" data-view="month">Aylık</button>
+              <button id="viewDayListBtn" class="btn btn--ghost topbar__viewBtn hidden" type="button" title="Günlük seansları liste olarak göster">Liste</button>
+            </div>
+            <button id="todayBtn" class="btn btn--primary topbar__todayBtn hidden" type="button">Bugün</button>
           </div>
         </div>
         <div class="topbar__right">
@@ -64,75 +106,254 @@
             İçe Aktar
             <input id="importFile" type="file" accept="application/json" />
           </label>
+          <button id="logoutBtn" class="btn btn--ghost" type="button" title="Oturumu kapat">Çıkış</button>
         </div>
       </header>
 
-      <button class="sidebar__open-tab hidden" id="sidebarOpenBtn" type="button" title="Sidebar'ı aç" aria-label="Sidebar'ı aç">☰</button>
       <main class="content" id="mainContent">
-        <aside class="sidebar" id="sidebar">
-          <div class="sidebar__inner">
-          <section class="panel">
-            <div class="panel__title">Ayarlar</div>
-            <div class="formRow">
-              <button id="openWorkingHoursBtn" class="btn btn--ghost" type="button" style="width:100%;">
-                Çalışma Saatleri
-              </button>
+        <div class="sidebar-shell" id="sidebarShell" title="Menü için fareyi sidebar üzerine getirin">
+          <aside class="sidebar" id="sidebar">
+            <div class="sidebar__brand">
+              <span class="sidebar__brand-icon" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+              </span>
+              <span class="sidebar__brand-text">Seans Planlayıcı</span>
             </div>
-            <div class="formRow" style="margin-top:12px;">
-              <button id="openRoomsBtn" class="btn btn--ghost" type="button" style="width:100%;">
-                Odalar / Alet
-              </button>
-            </div>
-            <div class="formRow" style="margin-top:12px;">
-              <button id="openPackagesBtn" class="btn btn--ghost" type="button" style="width:100%;">
-                Paket Tanımlama
-              </button>
-            </div>
-            <div class="formRow" style="margin-top:12px;">
-              <button id="openStaffBtn" class="btn btn--ghost" type="button" style="width:100%;">
-                Personel
-              </button>
-            </div>
-            <div class="formRow" style="margin-top:12px;">
-              <button id="openActivityLogsBtn" class="btn btn--ghost" type="button" style="width:100%;" title="Kim, ne, ne zaman – işlem geçmişi">
-                İşlem Logları
-              </button>
-            </div>
-          </section>
+            <div class="sidebar__inner">
+              <!-- Eski inline ayarlar (artık kullanılmıyor; admin modal, personel profil) -->
+              <section class="panel sidebar-panel hidden" id="sidebarStaffSettings">
+                <div class="panel__title sidebar-section-title">Ayarlar</div>
+                <nav class="sidebar-nav" id="sidebarSettingsNav">
+                  <button id="openWorkingHoursBtn" class="sidebar-nav__btn btn btn--ghost" type="button" title="Çalışma Saatleri">
+                    <span class="sidebar-nav__icon" aria-hidden="true">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                    </span>
+                    <span class="sidebar-nav__label">Çalışma Saatleri</span>
+                  </button>
+                  <button id="openRoomsBtn" class="sidebar-nav__btn btn btn--ghost" type="button" title="Odalar / Alet">
+                    <span class="sidebar-nav__icon" aria-hidden="true">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/></svg>
+                    </span>
+                    <span class="sidebar-nav__label">Odalar / Alet</span>
+                  </button>
+                  <button id="openPackagesBtn" class="sidebar-nav__btn btn btn--ghost" type="button" title="Paket Tanımlama">
+                    <span class="sidebar-nav__icon" aria-hidden="true">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+                    </span>
+                    <span class="sidebar-nav__label">Paket Tanımlama</span>
+                  </button>
+                  <button id="openStaffBtn" class="sidebar-nav__btn btn btn--ghost" type="button" title="Personel">
+                    <span class="sidebar-nav__icon" aria-hidden="true">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    </span>
+                    <span class="sidebar-nav__label">Personel</span>
+                  </button>
+                  <button id="openActivityLogsBtn" class="sidebar-nav__btn btn btn--ghost" type="button" title="İşlem Logları">
+                    <span class="sidebar-nav__icon" aria-hidden="true">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+                    </span>
+                    <span class="sidebar-nav__label">İşlem Logları</span>
+                  </button>
+                  <button id="openDevResetBtn" class="sidebar-nav__btn btn btn--danger hidden" type="button" title="Test – Veritabanı Sıfırla">
+                    <span class="sidebar-nav__icon" aria-hidden="true">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
+                    </span>
+                    <span class="sidebar-nav__label">Test – Veritabanı Sıfırla</span>
+                  </button>
+                </nav>
+              </section>
 
-          <section class="panel">
-            <div class="panel__title">Üyeler</div>
-            <div id="membersList" class="list"></div>
-            <button id="addMemberBtn" class="btn btn--ghost" type="button" style="width:100%; margin-top:8px;">+ Üye Ekle</button>
-            <button id="openListMembersBtn" class="btn btn--ghost" type="button" style="width:100%; margin-top:8px;" title="Aktif paketi olan üyeler">Üyeleri Listele</button>
-            <button id="openExpiredMembershipsBtn" class="btn btn--ghost" type="button" style="width:100%; margin-top:8px;" title="Bitiş tarihi geçmiş paketler ve seansları">Üyeliği Bitmiş Üyeler</button>
-          </section>
+              <section class="panel sidebar-panel" id="sidebarMembersPanel">
+                <div class="panel__title sidebar-section-title">Üyeler</div>
+                <div id="membersList" class="list sidebar-members-list"></div>
+                <nav class="sidebar-nav">
+                  <button id="addMemberBtn" class="sidebar-nav__btn btn btn--ghost" type="button" title="Üye Ekle">
+                    <span class="sidebar-nav__icon" aria-hidden="true">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></svg>
+                    </span>
+                    <span class="sidebar-nav__label">Üye Ekle</span>
+                  </button>
+                  <button id="openListMembersBtn" class="sidebar-nav__btn btn btn--ghost" type="button" title="Üyeleri Listele">
+                    <span class="sidebar-nav__icon" aria-hidden="true">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    </span>
+                    <span class="sidebar-nav__label">Üyeleri Listele</span>
+                  </button>
+                  <button id="openExpiredMembershipsBtn" class="sidebar-nav__btn btn btn--ghost" type="button" title="Üyeliği Bitmiş Üyeler">
+                    <span class="sidebar-nav__icon" aria-hidden="true">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18M8 14h.01M12 14h.01M16 14h.01"/></svg>
+                    </span>
+                    <span class="sidebar-nav__label">Üyeliği Bitmiş Üyeler</span>
+                  </button>
+                </nav>
+              </section>
 
-          <section class="panel">
-            <div class="panel__title">Notlar</div>
-            <div class="hint">
-              Seans eklerken:
-              <ul>
-                <li>Personel aynı anda 2 seansa atanamaz.</li>
-                <li>Oda kapasitesi (alet sayısı) aşılırsa engellenir.</li>
-                <li>Oda seçimi <b>AUTO</b> ise uygun oda otomatik seçilir.</li>
-              </ul>
+              <section class="panel sidebar-panel hidden" id="sidebarMemberPanel">
+                <div id="memberNotifications" class="member-notifications"></div>
+                <div class="panel__title sidebar-section-title">Mevcut Paket</div>
+                <div id="memberActivePackageCard" class="member-package-card">
+                  <p class="hint">Aktif paket bulunmuyor.</p>
+                </div>
+                <div class="panel__title sidebar-section-title" style="margin-top:12px;">Bitmiş Paketler</div>
+                <div id="memberPastPackagesList" class="member-past-packages">
+                  <p class="hint">Bitmiş paket yok.</p>
+                </div>
+              </section>
+
+              <section class="panel sidebar-panel sidebar-panel--notes" id="sidebarNotesPanel">
+                <div class="panel__title sidebar-section-title">Notlar</div>
+                <div class="hint sidebar-notes">
+                  Seans eklerken:
+                  <ul>
+                    <li>Personel aynı anda 2 seansa atanamaz.</li>
+                    <li>Oda kapasitesi (alet sayısı) aşılırsa engellenir.</li>
+                    <li>Oda seçimi <b>AUTO</b> ise uygun oda otomatik seçilir.</li>
+                  </ul>
+                </div>
+              </section>
             </div>
-          </section>
-          </div>
-          <div class="sidebar__actions">
-            <button class="sidebar__resize-btn" id="sidebarResizeBtn" type="button" title="Daralt / Genişlet">«</button>
-            <button class="sidebar__toggle-btn" id="sidebarToggleBtn" type="button" title="Sidebar'ı kapat">◀</button>
-          </div>
-        </aside>
+            <div class="sidebar__admin-footer hidden" id="sidebarAdminFooter">
+              <nav class="sidebar-nav sidebar-nav--footer">
+                <button id="openAdminSettingsBtn" class="sidebar-nav__btn btn btn--ghost" type="button" title="Ayarlar">
+                  <span class="sidebar-nav__icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+                  </span>
+                  <span class="sidebar-nav__label">Ayarlar</span>
+                </button>
+                <button id="openAdminProfileBtn" class="sidebar-nav__btn btn btn--ghost" type="button" title="Profil">
+                  <span class="sidebar-nav__icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                  </span>
+                  <span class="sidebar-nav__label">Profil</span>
+                </button>
+              </nav>
+            </div>
+          </aside>
+        </div>
 
         <section class="planner">
           <div class="planner__header" id="plannerHeader"></div>
-          <div class="planner__gridWrap">
+          <div class="planner__gridWrap" id="plannerGridWrap">
             <div class="planner__grid" id="plannerGrid"></div>
           </div>
+          <div class="planner__dayList hidden" id="plannerDayList"></div>
+          <div class="planner__month hidden" id="plannerMonth"></div>
         </section>
       </main>
+    </div>
+
+    <!-- Modal: Admin – Ayarlar -->
+    <div class="modal hidden" id="adminSettingsModal" role="dialog" aria-modal="true">
+      <div class="modal__backdrop" data-close="adminSettingsModal"></div>
+      <div class="modal__card" style="width:min(420px, calc(100vw - 24px));">
+        <div class="modal__title">Ayarlar</div>
+        <div class="modal__body">
+          <p class="hint" style="margin-top:0;">Salon yapılandırması ve sistem ayarları.</p>
+          <nav class="sidebar-nav" style="margin-top:12px;">
+            <button id="adminSettingsWorkingHoursBtn" class="sidebar-nav__btn btn btn--ghost" type="button">
+              <span class="sidebar-nav__icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+              </span>
+              <span class="sidebar-nav__label">Çalışma Saatleri</span>
+            </button>
+            <button id="adminSettingsRoomsBtn" class="sidebar-nav__btn btn btn--ghost" type="button">
+              <span class="sidebar-nav__icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/></svg>
+              </span>
+              <span class="sidebar-nav__label">Odalar / Alet</span>
+            </button>
+            <button id="adminSettingsPackagesBtn" class="sidebar-nav__btn btn btn--ghost" type="button">
+              <span class="sidebar-nav__icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
+              </span>
+              <span class="sidebar-nav__label">Paket Tanımlama</span>
+            </button>
+            <button id="adminSettingsStaffBtn" class="sidebar-nav__btn btn btn--ghost" type="button">
+              <span class="sidebar-nav__icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              </span>
+              <span class="sidebar-nav__label">Personel</span>
+            </button>
+            <button id="adminSettingsLogsBtn" class="sidebar-nav__btn btn btn--ghost" type="button">
+              <span class="sidebar-nav__icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+              </span>
+              <span class="sidebar-nav__label">İşlem Logları</span>
+            </button>
+            <button id="adminSettingsDevResetBtn" class="sidebar-nav__btn btn btn--danger hidden" type="button">
+              <span class="sidebar-nav__icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></svg>
+              </span>
+              <span class="sidebar-nav__label">Test – Veritabanı Sıfırla</span>
+            </button>
+          </nav>
+        </div>
+        <div class="modal__footer">
+          <div class="spacer"></div>
+          <button class="btn btn--ghost" type="button" data-close="adminSettingsModal">Kapat</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Admin – Profil -->
+    <div class="modal hidden" id="adminProfileModal" role="dialog" aria-modal="true">
+      <div class="modal__backdrop" data-close="adminProfileModal"></div>
+      <div class="modal__card" style="width:min(440px, calc(100vw - 24px));">
+        <div class="modal__title">Profil Bilgilerim</div>
+        <div class="modal__body">
+          <div class="profile-card">
+            <div class="profile-card__row">
+              <span class="profile-card__label">Ad Soyad</span>
+              <span class="profile-card__value" id="adminProfileName">—</span>
+            </div>
+            <div class="profile-card__row">
+              <span class="profile-card__label">E-posta</span>
+              <span class="profile-card__value" id="adminProfileEmail">—</span>
+            </div>
+            <div class="profile-card__row">
+              <span class="profile-card__label">Telefon</span>
+              <span class="profile-card__value" id="adminProfilePhone">—</span>
+            </div>
+          </div>
+          <div class="panel__title" style="margin:18px 0 10px; font-size:13px;">Hesap İşlemleri</div>
+          <div style="display:flex; flex-wrap:wrap; gap:10px;">
+            <button id="adminProfileChangePasswordBtn" class="btn btn--ghost" type="button" style="flex:1; min-width:160px;">Şifre Değiştir</button>
+            <button id="adminProfileLogoutBtn" class="btn btn--danger" type="button" style="flex:1; min-width:160px;">Çıkış</button>
+          </div>
+        </div>
+        <div class="modal__footer">
+          <div class="spacer"></div>
+          <button class="btn btn--ghost" type="button" data-close="adminProfileModal">Kapat</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Admin – Şifre Değiştir -->
+    <div class="modal hidden" id="adminChangePasswordModal" role="dialog" aria-modal="true">
+      <div class="modal__backdrop" data-close="adminChangePasswordModal"></div>
+      <div class="modal__card" style="width:min(400px, calc(100vw - 24px));">
+        <div class="modal__title">Şifre Değiştir</div>
+        <form id="adminChangePasswordForm" class="modal__body">
+          <div class="formRow">
+            <label class="label" for="adminCurrentPassword">Mevcut şifre</label>
+            <input id="adminCurrentPassword" class="input" type="password" autocomplete="current-password" required />
+          </div>
+          <div class="formRow">
+            <label class="label" for="adminNewPassword">Yeni şifre</label>
+            <input id="adminNewPassword" class="input" type="password" autocomplete="new-password" minlength="4" required />
+          </div>
+          <div class="formRow">
+            <label class="label" for="adminConfirmPassword">Yeni şifre (tekrar)</label>
+            <input id="adminConfirmPassword" class="input" type="password" autocomplete="new-password" minlength="4" required />
+          </div>
+          <p id="adminChangePasswordError" class="error hidden"></p>
+        </form>
+        <div class="modal__footer">
+          <div class="spacer"></div>
+          <button class="btn btn--ghost" type="button" data-close="adminChangePasswordModal">Vazgeç</button>
+          <button id="adminChangePasswordSubmitBtn" class="btn btn--primary" type="submit" form="adminChangePasswordForm">Kaydet</button>
+        </div>
+      </div>
     </div>
 
     <!-- Modal: Grup Seans (Ekle / Düzenle) -->
@@ -233,8 +454,8 @@
               <input id="mcProfession" class="input" />
             </div>
             <div class="formRow formRow--full">
-              <label class="label" for="mcEmail">E-Posta</label>
-              <input id="mcEmail" class="input" type="email" />
+              <label class="label" for="mcEmail">E-Posta (üye girişi için)</label>
+              <input id="mcEmail" class="input" type="email" placeholder="Giriş kullanıcı adı olarak kullanılır" />
             </div>
             
             <div class="formRow formRow--full">
@@ -266,6 +487,7 @@
         </div>
         <div class="modal__footer">
           <button id="memberPackageInfoBtn" class="btn btn--ghost" type="button" title="Aldığı paket bilgisi ve geçmişi">Aldığı Paket Bilgisi</button>
+          <button id="resetMemberPasswordBtn" class="btn btn--ghost hidden" type="button" title="Giriş şifresini telefon son 4 haneye sıfırla">Şifre Sıfırla</button>
           <button id="deleteMemberCardBtn" class="btn btn--danger" type="button" style="display:none;">Sil</button>
           <div class="spacer"></div>
           <button class="btn btn--ghost" type="button" data-close="memberCardModal">Vazgeç</button>
@@ -404,6 +626,41 @@
           <button type="button" id="packageSessionsExportPdfBtn" class="btn btn--ghost">PDF</button>
           <div class="spacer"></div>
           <button type="button" class="btn btn--ghost" data-close="packageSessionsModal">Kapat</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Üye – Paket Seansları (görüntüle / iptal) -->
+    <div class="modal hidden" id="memberPortalSessionsModal" role="dialog" aria-modal="true">
+      <div class="modal__backdrop" data-close="memberPortalSessionsModal"></div>
+      <div class="modal__card" style="width:min(720px, calc(100vw - 24px)); max-height:90vh; display:flex; flex-direction:column;">
+        <div class="modal__title" id="memberPortalSessionsTitle">Paket Seansları</div>
+        <div class="modal__body" style="overflow:auto; flex:1;">
+          <p id="memberPortalSessionsSubtitle" class="hint" style="margin-bottom:12px;"></p>
+          <p id="memberPortalSessionsHint" class="hint" style="margin-bottom:12px; font-size:0.9em;">
+            Geçmiş seanslar salt okunurdur. Sabit pakette iptal yapılamaz. Esnek pakette seans saatine 2 saat kalana kadar iptal edebilirsiniz.
+          </p>
+          <div id="memberPortalSessionsTableWrap" style="overflow:auto;">
+            <table class="table" id="memberPortalSessionsTable" style="width:100%; border-collapse:collapse;">
+              <thead>
+                <tr>
+                  <th style="text-align:left; padding:8px 10px; border-bottom:2px solid var(--border);">#</th>
+                  <th style="text-align:left; padding:8px 10px; border-bottom:2px solid var(--border);">Tarih</th>
+                  <th style="text-align:left; padding:8px 10px; border-bottom:2px solid var(--border);">Saat</th>
+                  <th style="text-align:left; padding:8px 10px; border-bottom:2px solid var(--border);">Personel</th>
+                  <th style="text-align:left; padding:8px 10px; border-bottom:2px solid var(--border);">Durum</th>
+                  <th style="text-align:left; padding:8px 10px; border-bottom:2px solid var(--border);"></th>
+                </tr>
+              </thead>
+              <tbody id="memberPortalSessionsTableBody"></tbody>
+            </table>
+          </div>
+          <p id="memberPortalSessionsEmpty" class="hint hidden" style="margin-top:12px;">Seans kaydı yok.</p>
+          <p id="memberPortalSessionsError" class="error hidden" style="margin-top:12px;"></p>
+        </div>
+        <div class="modal__footer">
+          <div class="spacer"></div>
+          <button type="button" class="btn btn--ghost" data-close="memberPortalSessionsModal">Kapat</button>
         </div>
       </div>
     </div>
@@ -564,6 +821,7 @@
               <option value="room.delete">Oda silme</option>
               <option value="staff.create">Personel ekleme</option>
               <option value="staff.update">Personel güncelleme</option>
+              <option value="staff.reset_password">Personel şifre sıfırlama</option>
               <option value="staff.delete">Personel silme</option>
               <option value="package.create">Paket ekleme</option>
               <option value="package.update">Paket güncelleme</option>
@@ -597,6 +855,32 @@
         <div class="modal__footer">
           <div class="spacer"></div>
           <button class="btn btn--ghost" type="button" data-close="activityLogsModal">Kapat</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Test – Veritabanı Sıfırlama (yalnızca admin) -->
+    <div class="modal hidden" id="devResetModal" role="dialog" aria-modal="true">
+      <div class="modal__backdrop" data-close="devResetModal"></div>
+      <div class="modal__card" style="width:min(560px, calc(100vw - 24px)); max-height:90vh; display:flex; flex-direction:column;">
+        <div class="modal__title">Test – Veritabanı Sıfırlama</div>
+        <div class="modal__body" style="overflow-y:auto; flex:1;">
+          <p class="hint" style="margin-top:0;">
+            <strong>Yalnızca test ortamı.</strong> Seçtiğiniz kayıtlar kalıcı silinir. Admin hesabı korunur.
+          </p>
+          <div class="panel__title" style="margin:12px 0 8px;">Hangi veriler sıfırlansın?</div>
+          <div id="devResetCheckboxes" class="list"></div>
+          <div id="devResetWarnings" class="hint" style="margin-top:12px; padding:10px; border:1px solid rgba(255,77,109,.35); border-radius:8px; background:rgba(255,77,109,.08); display:none;"></div>
+          <div class="formRow formRow--full" style="margin-top:16px;">
+            <label class="label" for="devResetAdminPassword">Admin şifresi (onay)</label>
+            <input id="devResetAdminPassword" class="input" type="password" autocomplete="current-password" placeholder="Sıfırlamak için admin şifreniz" />
+          </div>
+          <div id="devResetError" class="error hidden"></div>
+        </div>
+        <div class="modal__footer">
+          <div class="spacer"></div>
+          <button class="btn btn--ghost" type="button" data-close="devResetModal">Vazgeç</button>
+          <button id="devResetConfirmBtn" class="btn btn--danger" type="button">Seçilenleri Sıfırla</button>
         </div>
       </div>
     </div>
@@ -643,9 +927,14 @@
                 <label class="label" for="newStaffLastName">Soyad</label>
                 <input id="newStaffLastName" class="input" placeholder="Soyad" />
               </div>
-              <div class="formRow">
-                <label class="label" for="newStaffPhone">Telefon</label>
-                <input id="newStaffPhone" class="input" type="tel" placeholder="(xxx)xxx-xx-xx" maxlength="14" inputmode="numeric" autocomplete="tel" />
+              <div class="formRow formRow--full">
+                <label class="label" for="newStaffPhone">Telefon (giriş hesabı için zorunlu)</label>
+                <input id="newStaffPhone" class="input" type="tel" placeholder="(xxx)xxx-xx-xx" maxlength="14" inputmode="numeric" autocomplete="tel" required />
+                <span class="hint" style="font-size:0.85em;">Giriş: e-posta · Geçici şifre: telefon son 4 hane</span>
+              </div>
+              <div class="formRow formRow--full">
+                <label class="label" for="newStaffEmail">E-posta</label>
+                <input id="newStaffEmail" class="input" type="email" placeholder="ornek@email.com" autocomplete="email" required />
               </div>
             </div>
             <button id="addStaffBtn" class="btn btn--primary" type="button" style="margin-top:12px;">Personel Ekle</button>
@@ -674,9 +963,13 @@
               <label class="label" for="editStaffLastName">Soyad</label>
               <input id="editStaffLastName" class="input" />
             </div>
-            <div class="formRow">
+            <div class="formRow formRow--full">
               <label class="label" for="editStaffPhone">Telefon</label>
               <input id="editStaffPhone" class="input" type="tel" placeholder="(xxx)xxx-xx-xx" maxlength="14" inputmode="numeric" autocomplete="tel" />
+            </div>
+            <div class="formRow formRow--full">
+              <label class="label" for="editStaffEmail">E-posta</label>
+              <input id="editStaffEmail" class="input" type="email" placeholder="ornek@email.com" autocomplete="email" />
             </div>
           </div>
           <div style="margin-top:20px; border-top:1px solid var(--border); padding-top:16px;">
@@ -687,6 +980,7 @@
         </div>
         <div class="modal__footer">
           <button id="deleteStaffCardBtn" class="btn btn--danger" type="button">Sil</button>
+          <button id="resetStaffPasswordBtn" class="btn btn--ghost hidden" type="button" title="Geçici şifre: telefon son 4 hane">Şifreyi Sıfırla</button>
           <div class="spacer"></div>
           <button class="btn btn--ghost" type="button" data-close="1">Vazgeç</button>
           <button id="saveStaffCardBtn" class="btn btn--primary" type="button">Kaydet</button>

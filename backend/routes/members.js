@@ -4,10 +4,19 @@ import bcrypt from 'bcrypt';
 import db from '../config/database.js';
 import { verifyToken } from './auth.js';
 import { toPhoneFormat } from '../utils/phone.js';
+import { ensureMemberUserAccount, resetMemberPassword } from '../utils/memberAccount.js';
 import { log as activityLog } from '../utils/activityLogger.js';
 
 const router = express.Router();
 router.use(verifyToken);
+
+const blockMemberRole = (req, res, next) => {
+  if (req.user.role === 'member') {
+    return res.status(403).json({ error: 'Bu işlem için yetkiniz yok' });
+  }
+  next();
+};
+router.use(blockMemberRole);
 
 const MEMBER_FIELDS = [
   'member_no', 'first_name', 'last_name', 'phone', 'email',
@@ -110,7 +119,25 @@ router.post('/', [
         row.systemic_diseases, row.clinical_conditions, row.past_operations, row.notes
       ]
     );
-    const created = result.rows[0];
+    let created = result.rows[0];
+    if (created.email && created.phone) {
+      const client = await db.pool.connect();
+      try {
+        await client.query('BEGIN');
+        await ensureMemberUserAccount(client, created);
+        await client.query('COMMIT');
+        const refreshed = await db.query('SELECT * FROM members WHERE id = $1', [created.id]);
+        created = refreshed.rows[0] || created;
+      } catch (accErr) {
+        await client.query('ROLLBACK');
+        if (accErr.code === 'EMAIL_TAKEN') {
+          return res.status(409).json({ error: accErr.message });
+        }
+        throw accErr;
+      } finally {
+        client.release();
+      }
+    }
     await activityLog(req, { action: 'member.create', entityType: 'member', entityId: created.id, details: { member_no: created.member_no, name: created.name } }).catch(() => {});
 
     res.status(201).json(created);
@@ -201,7 +228,25 @@ router.put('/:id', [
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Üye bulunamadı' });
     }
-    const updated = result.rows[0];
+    let updated = result.rows[0];
+    if (updated.email && updated.phone) {
+      const client = await db.pool.connect();
+      try {
+        await client.query('BEGIN');
+        await ensureMemberUserAccount(client, updated);
+        await client.query('COMMIT');
+        const refreshed = await db.query('SELECT * FROM members WHERE id = $1', [updated.id]);
+        updated = refreshed.rows[0] || updated;
+      } catch (accErr) {
+        await client.query('ROLLBACK');
+        if (accErr.code === 'EMAIL_TAKEN') {
+          return res.status(409).json({ error: accErr.message });
+        }
+        throw accErr;
+      } finally {
+        client.release();
+      }
+    }
     await activityLog(req, { action: 'member.update', entityType: 'member', entityId: updated.id, details: { member_no: updated.member_no, name: updated.name } }).catch(() => {});
     res.json(updated);
   } catch (error) {
@@ -220,6 +265,41 @@ router.put('/:id', [
       error: 'Üye güncellenirken hata oluştu',
       details: process.env.NODE_ENV === 'development' ? error.message : undefined
     });
+  }
+});
+
+// Üye giriş şifresini sıfırla (yalnızca admin): geçici şifre = telefon son 4 hane
+router.post('/:id/reset-password', async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Bu işlem yalnızca admin tarafından yapılabilir' });
+    }
+    const { id } = req.params;
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const result = await resetMemberPassword(client, id);
+      if (!result) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Giriş hesabı oluşturulamadı. E-posta ve telefon (10 hane) kayıtlı olmalı.' });
+      }
+      await client.query('COMMIT');
+      await activityLog(req, { action: 'member.reset_password', entityType: 'member', entityId: id }).catch(() => {});
+      res.json({
+        message: 'Üye şifresi sıfırlandı',
+        loginUsername: result.loginUsername,
+        temporaryPassword: result.temporaryPassword,
+        temporaryPasswordHint: 'Telefon numarasının son 4 hanesi',
+      });
+    } catch (err) {
+      await client.query('ROLLBACK');
+      throw err;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('Member reset password error:', error);
+    res.status(500).json({ error: 'Şifre sıfırlanırken hata oluştu' });
   }
 });
 

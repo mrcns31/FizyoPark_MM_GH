@@ -8,6 +8,13 @@ import { log as activityLog } from '../utils/activityLogger.js';
 const router = express.Router();
 router.use(verifyToken);
 
+router.use((req, res, next) => {
+  if (req.user.role === 'member') {
+    return res.status(403).json({ error: 'Bu işlem için yetkiniz yok' });
+  }
+  next();
+});
+
 const SLOT_DURATION_MS = 60 * 60 * 1000; // 1 saat
 
 /**

@@ -17,6 +17,8 @@ import settingsRoutes from './routes/settings.js';
 import packagesRoutes from './routes/packages.js';
 import memberPackagesRoutes from './routes/member-packages.js';
 import activityLogsRoutes from './routes/activity-logs.js';
+import devResetRoutes from './routes/dev-reset.js';
+import memberPortalRoutes from './routes/member-portal.js';
 
 dotenv.config();
 
@@ -67,6 +69,8 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/packages', packagesRoutes);
 app.use('/api/member-packages', memberPackagesRoutes);
 app.use('/api/activity-logs', activityLogsRoutes);
+app.use('/api/dev-reset', devResetRoutes);
+app.use('/api/member-portal', memberPortalRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

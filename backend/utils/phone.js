@@ -47,3 +47,16 @@ export function toPhoneFormat(value) {
   if (value == null || value === '') return null;
   return normalizePhone(String(value));
 }
+
+/** Telefondan 10 haneli rakam dizisini döner; geçersizse null. */
+export function phoneDigits(value) {
+  if (value == null || value === '') return null;
+  const digits = String(value).replace(/\D/g, '');
+  return digits.length === PHONE_DIGITS ? digits : null;
+}
+
+/** Telefon numarasının son 4 hanesini döner (giriş şifresi için). */
+export function phoneLast4(value) {
+  const digits = phoneDigits(value);
+  return digits ? digits.slice(-4) : null;
+}

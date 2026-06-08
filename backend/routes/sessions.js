@@ -3,6 +3,7 @@ import { body, validationResult, query } from 'express-validator';
 import db from '../config/database.js';
 import { verifyToken } from './auth.js';
 import { validateAndPickRoom } from '../utils/sessionSlot.js';
+import { addNextSessionAfterLastForPackage } from '../utils/packageSessions.js';
 import { log as activityLog } from '../utils/activityLogger.js';
 
 const router = express.Router();
@@ -77,92 +78,6 @@ async function trimPackageSessionsIfOver(db, memberPackageId, excludeSessionId =
   }
 }
 
-/** Veritabanından gelen tarihi (string veya Date) yerel YYYY-MM-DD gününe çevirir. */
-function parseLocalDateFromDb(val) {
-  if (val instanceof Date) {
-    return new Date(val.getFullYear(), val.getMonth(), val.getDate(), 0, 0, 0, 0);
-  }
-  const s = String(val || '').trim();
-  const isoMatch = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
-  if (isoMatch) {
-    const [, y, m, d] = isoMatch.map((x) => parseInt(x, 10) || 0);
-    return new Date(y, m - 1, d, 0, 0, 0, 0);
-  }
-  return new Date(NaN);
-}
-
-/** Paketten bir seans silindiğinde: son kalan seanstan sonraki randevu gününe bir seans ekler. */
-async function addNextSessionAfterLastForPackage(db, memberPackageId) {
-  try {
-    const mp = await db.query(
-      `SELECT mp.member_id, mp.start_date, mp.end_date, p.lesson_count
-       FROM member_packages mp JOIN packages p ON p.id = mp.package_id WHERE mp.id = $1`,
-      [memberPackageId]
-    );
-    if (mp.rows.length === 0) return;
-    const { member_id, start_date, end_date, lesson_count } = mp.rows[0];
-    const countRes = await db.query(
-      'SELECT COUNT(*)::int AS cnt FROM sessions WHERE member_package_id = $1 AND (deleted_at IS NULL)',
-      [memberPackageId]
-    );
-    const count = countRes.rows[0]?.cnt ?? 0;
-    if (count >= lesson_count) return;
-    const lastRes = await db.query(
-      'SELECT start_ts FROM sessions WHERE member_package_id = $1 AND (deleted_at IS NULL) ORDER BY start_ts DESC LIMIT 1',
-      [memberPackageId]
-    );
-    const end = parseLocalDateFromDb(end_date);
-    end.setHours(23, 59, 59, 999);
-    if (Number.isNaN(end.getTime())) {
-      console.error('addNextSessionAfterLastForPackage: geçersiz end_date', end_date);
-      return;
-    }
-    let startDay;
-    if (lastRes.rows.length > 0) {
-      const lastDay = new Date(Number(lastRes.rows[0].start_ts));
-      startDay = new Date(lastDay.getFullYear(), lastDay.getMonth(), lastDay.getDate() + 1, 0, 0, 0, 0);
-    } else {
-      startDay = parseLocalDateFromDb(start_date);
-      if (Number.isNaN(startDay.getTime())) {
-        console.error('addNextSessionAfterLastForPackage: geçersiz start_date', start_date);
-        return;
-      }
-    }
-    const slotsRes = await db.query(
-      'SELECT day_of_week, start_time, staff_id FROM member_package_slots WHERE member_package_id = $1',
-      [memberPackageId]
-    );
-    const slots = slotsRes.rows;
-    if (slots.length === 0) {
-      console.error('addNextSessionAfterLastForPackage: paket için slot tanımlı değil, member_package_id=', memberPackageId);
-      return;
-    }
-    for (let d = new Date(startDay.getTime()); d.getTime() <= end.getTime(); d.setDate(d.getDate() + 1)) {
-      const dayOfWeek = d.getDay();
-      for (const slot of slots) {
-        if (Number(slot.day_of_week) !== dayOfWeek) continue;
-        const timeStr = String(slot.start_time || '08:00');
-        const [h, m] = timeStr.split(':').map((x) => parseInt(x, 10) || 0);
-        const slotStart = new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m, 0, 0);
-        const startTs = slotStart.getTime();
-        const endTs = startTs + SLOT_DURATION_MS;
-        const validation = await validateAndPickRoom(db, { staffId: slot.staff_id, startTs, endTs });
-        if (!validation.ok) continue;
-        const roomId = validation.roomId ?? null;
-        await db.query(
-          `INSERT INTO sessions (staff_id, member_id, room_id, start_ts, end_ts, note, member_package_id)
-           VALUES ($1, $2, $3, $4, $5, NULL, $6)`,
-          [slot.staff_id, member_id, roomId, startTs, endTs, memberPackageId]
-        );
-        return;
-      }
-    }
-    console.error('addNextSessionAfterLastForPackage: bitiş tarihine kadar uygun gün bulunamadı', { memberPackageId, startDay: startDay.toISOString(), end: end.toISOString() });
-  } catch (err) {
-    console.error('addNextSessionAfterLastForPackage error:', err);
-  }
-}
-
 // Seansları listele (filtreleme ile)
 router.get('/', [
   query('startDate').optional().isISO8601(),
@@ -219,6 +134,20 @@ router.get('/', [
       }
     }
 
+    // Üye rolü yalnızca kendi seanslarını görebilir
+    if (req.user.role === 'member') {
+      const memberResult = await db.query(
+        'SELECT id FROM members WHERE user_id = $1',
+        [req.user.userId]
+      );
+      if (memberResult.rows.length > 0) {
+        query += ` AND s.member_id = $${paramIndex++}`;
+        params.push(memberResult.rows[0].id);
+      } else {
+        query += ' AND 1=0';
+      }
+    }
+
     query += ' ORDER BY s.start_ts ASC';
 
     let result;
@@ -248,6 +177,9 @@ router.post('/', [
   body('memberPackageId').optional({ nullable: true }).isInt()
 ], async (req, res) => {
   try {
+    if (req.user.role === 'member') {
+      return res.status(403).json({ error: 'Üyeler seans oluşturamaz' });
+    }
     const errors = validationResult(req);
     if (!errors.isEmpty()) {
       return res.status(400).json({ errors: errors.array() });
@@ -332,6 +264,9 @@ router.put('/:id', [
   body('memberPackageId').optional({ nullable: true }).isInt()
 ], async (req, res) => {
   try {
+    if (req.user.role === 'member') {
+      return res.status(403).json({ error: 'Üyeler seans düzenleyemez' });
+    }
     const { id } = req.params;
     const updates = req.body;
 
@@ -404,6 +339,9 @@ router.put('/:id', [
 // Seans sil (soft delete: veritabanında kalır, deleted_at işaretlenir; ileride log için)
 router.delete('/:id', async (req, res) => {
   try {
+    if (req.user.role === 'member') {
+      return res.status(403).json({ error: 'Üyeler bu yolla seans silemez. İptal için üye portalını kullanın.' });
+    }
     const { id } = req.params;
 
     // Seans var mı ve silinmemiş mi kontrol et
@@ -428,14 +366,18 @@ router.delete('/:id', async (req, res) => {
     const memberId = existing.rows[0].member_id;
     const startTs = existing.rows[0].start_ts;
     await db.query(
-      'UPDATE sessions SET deleted_at = CURRENT_TIMESTAMP, deleted_by = $2 WHERE id = $1',
-      [id, req.user.userId ?? null]
+      `UPDATE sessions SET deleted_at = CURRENT_TIMESTAMP, deleted_by = $3
+       WHERE member_id = $1 AND start_ts = $2 AND deleted_at IS NULL`,
+      [memberId, startTs, req.user.userId ?? null]
     );
     if (memberPackageId == null && memberId != null && startTs != null) {
       memberPackageId = await resolveMemberPackageId(db, memberId, startTs);
     }
     if (memberPackageId != null) {
-      await addNextSessionAfterLastForPackage(db, memberPackageId);
+      await addNextSessionAfterLastForPackage(db, memberPackageId, {
+        afterCancelTs: startTs,
+        skipStartTs: startTs,
+      });
     }
     const row = existing.rows[0];
     await activityLog(req, {

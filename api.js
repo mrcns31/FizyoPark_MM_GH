@@ -102,7 +102,9 @@
       firstName: row.first_name || '',
       lastName: row.last_name || '',
       phone: row.phone || '',
+      email: row.user_email || row.email || '',
       workingHours: wh,
+      loginUsername: row.login_username || null,
     };
   }
   function roomFromApi(row) {
@@ -155,17 +157,117 @@
     }
   }
 
-  async function login(username, password) {
+  async function login(email, password) {
     const data = await apiFetch('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ username, password }),
+      body: JSON.stringify({ email, password }),
     });
     if (data.token) setToken(data.token);
     return data;
   }
 
+  async function getMe() {
+    return apiFetch('/auth/me');
+  }
+
+  async function setPassword(newPassword, confirmPassword) {
+    return apiFetch('/auth/set-password', {
+      method: 'POST',
+      body: JSON.stringify({ newPassword, confirmPassword }),
+    });
+  }
+  async function changePassword(currentPassword, newPassword, confirmPassword) {
+    return apiFetch('/auth/change-password', {
+      method: 'POST',
+      body: JSON.stringify({ currentPassword, newPassword, confirmPassword }),
+    });
+  }
+
+  async function logout() {
+    try {
+      if (getToken()) {
+        await apiFetch('/auth/logout', { method: 'POST', body: JSON.stringify({}) });
+      }
+    } catch (_) {
+      /* ağ hatası olsa bile yerel oturumu kapat */
+    }
+    removeToken();
+  }
+
+  async function loadMemberPortalState() {
+    const settled = await Promise.allSettled([
+      apiFetch('/member-portal/dashboard'),
+      apiFetch('/sessions?startDate=2000-01-01&endDate=2030-12-31'),
+      apiFetch('/staff'),
+      apiFetch('/settings/working-hours'),
+      apiFetch('/rooms'),
+    ]);
+
+    function unwrap(index, fallback) {
+      const r = settled[index];
+      if (r.status === 'fulfilled') return r.value != null ? r.value : fallback;
+      console.warn('loadMemberPortalState kısmi hata:', r.reason && (r.reason.message || r.reason));
+      return fallback;
+    }
+
+    const dashboard = unwrap(0, {});
+    const sessionsRes = unwrap(1, []);
+    const staff = unwrap(2, []);
+    const workingHours = unwrap(3, {});
+    const rooms = unwrap(4, []);
+
+    const whMap = workingHours || {};
+    const defaultWh = { 0: { start: '08:00', end: '20:00', enabled: false }, 1: { start: '08:00', end: '20:00', enabled: true }, 2: { start: '08:00', end: '20:00', enabled: true }, 3: { start: '08:00', end: '20:00', enabled: true }, 4: { start: '08:00', end: '20:00', enabled: true }, 5: { start: '08:00', end: '20:00', enabled: true }, 6: { start: '08:00', end: '20:00', enabled: true } };
+    Object.keys(whMap).forEach(function (k) {
+      const v = whMap[k];
+      defaultWh[k] = { start: v.start || '08:00', end: v.end || '20:00', enabled: !!v.enabled };
+    });
+
+    const profile = dashboard.profile || {};
+    return {
+      dashboard: dashboard,
+      settings: { slotMinutes: 60 },
+      workingHours: defaultWh,
+      rooms: (rooms || []).map(roomFromApi),
+      packages: [],
+      memberPackages: [],
+      staff: (staff || []).map(staffFromApi),
+      members: profile.id ? [memberFromApi({
+        id: profile.id,
+        member_no: profile.memberNo,
+        first_name: profile.firstName,
+        last_name: profile.lastName,
+        name: profile.fullName,
+        phone: profile.phone,
+        email: profile.email,
+        birth_date: profile.birthDate,
+        profession: profile.profession,
+        address: profile.address,
+        contact_name: profile.contactName,
+        contact_phone: profile.contactPhone,
+        systemic_diseases: profile.systemicDiseases,
+        clinical_conditions: profile.clinicalConditions,
+        past_operations: profile.pastOperations,
+        notes: profile.notes,
+      })] : [],
+      sessions: (sessionsRes || []).map(sessionFromApi),
+    };
+  }
+
+  async function getMemberDashboard() {
+    return apiFetch('/member-portal/dashboard');
+  }
+
+  async function cancelMemberSession(sessionId) {
+    return apiFetch('/member-portal/sessions/' + sessionId + '/cancel', { method: 'POST', body: JSON.stringify({}) });
+  }
+
+  async function resetMemberPassword(id) {
+    return apiFetch('/members/' + id + '/reset-password', { method: 'POST', body: JSON.stringify({}) });
+  }
+
   async function loadFullState() {
-    const [members, staff, rooms, packages, memberPackagesRes, workingHours, sessionsRes] = await Promise.all([
+    const settled = await Promise.allSettled([
       apiFetch('/members'),
       apiFetch('/staff'),
       apiFetch('/rooms'),
@@ -174,6 +276,22 @@
       apiFetch('/settings/working-hours'),
       apiFetch('/sessions?startDate=2000-01-01&endDate=2030-12-31'),
     ]);
+
+    function unwrap(index, fallback) {
+      const r = settled[index];
+      if (r.status === 'fulfilled') return r.value != null ? r.value : fallback;
+      console.warn('loadFullState kısmi hata:', r.reason && (r.reason.message || r.reason));
+      return fallback;
+    }
+
+    const members = unwrap(0, []);
+    const staff = unwrap(1, []);
+    const rooms = unwrap(2, []);
+    const packages = unwrap(3, []);
+    const memberPackagesRes = unwrap(4, []);
+    const workingHours = unwrap(5, {});
+    const sessionsRes = unwrap(6, []);
+
     const whMap = workingHours || {};
     const defaultWh = { 0: { start: '08:00', end: '20:00', enabled: false }, 1: { start: '08:00', end: '20:00', enabled: true }, 2: { start: '08:00', end: '20:00', enabled: true }, 3: { start: '08:00', end: '20:00', enabled: true }, 4: { start: '08:00', end: '20:00', enabled: true }, 5: { start: '08:00', end: '20:00', enabled: true }, 6: { start: '08:00', end: '20:00', enabled: true } };
     Object.keys(whMap).forEach(function (k) {
@@ -215,6 +333,7 @@
         firstName: body.firstName,
         lastName: body.lastName,
         phone: body.phone || null,
+        email: body.email,
         workingHours: body.workingHours || {},
       }),
     });
@@ -227,6 +346,7 @@
         firstName: body.firstName,
         lastName: body.lastName,
         phone: body.phone,
+        email: body.email,
         workingHours: body.workingHours,
       }),
     });
@@ -234,6 +354,10 @@
   }
   async function deleteStaff(id) {
     await apiFetch('/staff/' + id, { method: 'DELETE' });
+  }
+
+  async function resetStaffPassword(id) {
+    return apiFetch('/staff/' + id + '/reset-password', { method: 'POST', body: JSON.stringify({}) });
   }
 
   async function createRoom(body) {
@@ -398,7 +522,6 @@
     await apiFetch('/settings/working-hours', { method: 'PUT', body: JSON.stringify(payload) });
   }
 
-  /** İşlem logları listesi (admin/manager). params: { page, limit, action, entityType, from, to } */
   async function getActivityLogs(params) {
     var q = new URLSearchParams();
     if (params && typeof params === 'object') {
@@ -414,18 +537,37 @@
     return apiFetch(path);
   }
 
+  async function getDevResetMeta() {
+    return apiFetch('/dev-reset/meta');
+  }
+  async function previewDevReset(targets) {
+    return apiFetch('/dev-reset/preview', { method: 'POST', body: JSON.stringify({ targets }) });
+  }
+  async function executeDevReset(targets, adminPassword) {
+    return apiFetch('/dev-reset', { method: 'POST', body: JSON.stringify({ targets, adminPassword }) });
+  }
+
   window.API = {
     getToken,
     setToken,
     removeToken,
     login,
+    getMe,
+    setPassword,
+    changePassword,
+    logout,
     loadFullState,
+    loadMemberPortalState,
+    getMemberDashboard,
+    cancelMemberSession,
+    resetMemberPassword,
     createMember,
     updateMember,
     deleteMember,
     createStaff,
     updateStaff,
     deleteStaff,
+    resetStaffPassword,
     createRoom,
     updateRoom,
     deleteRoom,
@@ -447,6 +589,9 @@
     updateWorkingHours,
     apiFetch,
     getActivityLogs,
+    getDevResetMeta,
+    previewDevReset,
+    executeDevReset,
   };
   window.__API_BASE__ = API_BASE;
 })();
