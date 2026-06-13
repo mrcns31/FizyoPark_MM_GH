@@ -9581,10 +9581,12 @@ async function saveSessionFromModal() {
       const candidateTry = { ...candidateBase, roomId: busyRoomId };
       const conflicts = checkConflicts(candidateTry, { ignoreSessionId });
       if (conflicts.length) {
-        showError(conflicts.join(" "));
-        return;
+        // Aynı oda doğrudan uymuyor; sunucu oda dengeleme ile yeniden dağıtmayı deneyecek.
+        roomId = busyRoomId;
+        needsServerRebalanceSingle = true;
+      } else {
+        roomId = busyRoomId;
       }
-      roomId = busyRoomId;
     } else {
       const picked = autoAssignRoom(candidateBase, { ignoreSessionId });
       if (!picked) {
