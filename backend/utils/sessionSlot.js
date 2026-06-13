@@ -210,3 +210,91 @@ export async function rebalanceSlotRooms(db, { startTs, endTs }) {
 
   return { ok: true };
 }
+
+/**
+ * Yeni bir seansı, gerekirse aynı slottaki diğer personellerin odalarını
+ * yeniden dağıtarak ekler. Hipotetik fizibilite kontrolü infeasible ise
+ * hiçbir şey yazılmadan hata döner.
+ * @param {object} db - database pool/query (db.pool gereklidir)
+ * @param {object} params - { staffId, startTs, endTs, memberId, memberPackageId }
+ * @returns {Promise<{ ok: boolean, sessionId?: number, error?: string }>}
+ */
+export async function placeSessionWithRebalance(db, { staffId, startTs, endTs, memberId, memberPackageId }) {
+  // 1) Çalışma saati kontrolleri (validateAndPickRoom adım 1-2 ile aynı)
+  const startDate = new Date(Number(startTs));
+  const dayOfWeek = startDate.getDay();
+  const startMin = startDate.getHours() * 60 + startDate.getMinutes();
+  const endMin = startDate.getHours() * 60 + startDate.getMinutes() + Math.round((Number(endTs) - Number(startTs)) / 60000);
+
+  const whRow = await db.query(
+    'SELECT enabled, start_time, end_time FROM working_hours WHERE day_of_week = $1',
+    [dayOfWeek]
+  );
+  if (whRow.rows.length === 0) return { ok: false, error: 'Çalışma saati dışında' };
+  const wh = whRow.rows[0];
+  if (!wh.enabled) return { ok: false, error: 'Çalışma saati dışında' };
+  const [whStartH, whStartM] = (wh.start_time + '').split(':').map((x) => parseInt(x, 10) || 0);
+  const [whEndH, whEndM] = (wh.end_time + '').split(':').map((x) => parseInt(x, 10) || 0);
+  const whStartMin = whStartH * 60 + whStartM;
+  const whEndMin = whEndH * 60 + whEndM;
+  if (startMin < whStartMin || endMin > whEndMin) return { ok: false, error: 'Çalışma saati dışında' };
+
+  const staffRow = await db.query('SELECT working_hours FROM staff WHERE id = $1', [staffId]);
+  if (staffRow.rows.length === 0) return { ok: false, error: 'Çalışma saati dışında' };
+  const staffWhRaw = staffRow.rows[0].working_hours;
+  const staffWh = typeof staffWhRaw === 'string' ? (() => { try { return JSON.parse(staffWhRaw); } catch { return {}; } })() : (staffWhRaw || {});
+  const dayWh = staffWh[String(dayOfWeek)] || staffWh[dayOfWeek];
+  if (dayWh && (dayWh.enabled === false || !dayWh.start || !dayWh.end)) return { ok: false, error: 'Çalışma saati dışında' };
+  if (dayWh && dayWh.start && dayWh.end) {
+    const toMin = (t) => {
+      const p = (t + '').split(':').map((x) => parseInt(x, 10) || 0);
+      return (p[0] || 0) * 60 + (p[1] || 0);
+    };
+    const sMin = toMin(dayWh.start);
+    const eMin = toMin(dayWh.end);
+    if (startMin < sMin || endMin > eMin) return { ok: false, error: 'Çalışma saati dışında' };
+  }
+
+  // 2) Hipotetik fizibilite kontrolü: mevcut taleplere staffId için +1 ekle
+  const demandByStaff = await getDemandByStaff(db, startTs, endTs);
+  demandByStaff[staffId] = (demandByStaff[staffId] || 0) + 1;
+
+  const roomsRes = await db.query('SELECT id, devices FROM rooms ORDER BY id');
+  const rooms = roomsRes.rows.map((r) => ({ id: r.id, devices: Math.max(1, parseInt(r.devices, 10) || 0) }));
+  if (rooms.length === 0) return { ok: false, error: 'Bu saatte toplam oda kapasitesi yetersiz.' };
+
+  const match = matchStaffToRooms(demandByStaff, rooms);
+  if (!match.feasible) {
+    return { ok: false, error: 'Bu saatte toplam oda kapasitesi yetersiz.' };
+  }
+
+  // 3) Transaction: herhangi bir odaya ekle, sonra rebalance
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    // Etkilenecek odaları kilitle (yarış durumu önleme)
+    await client.query('SELECT id FROM rooms ORDER BY id FOR UPDATE');
+
+    const anyRoomId = rooms[0].id;
+    const insertResult = await client.query(
+      `INSERT INTO sessions (staff_id, member_id, room_id, start_ts, end_ts, note, member_package_id)
+       VALUES ($1, $2, $3, $4, $5, NULL, $6) RETURNING id`,
+      [staffId, memberId, anyRoomId, startTs, endTs, memberPackageId ?? null]
+    );
+    const sessionId = insertResult.rows[0]?.id;
+
+    const rebalanceResult = await rebalanceSlotRooms(client, { startTs, endTs });
+    if (!rebalanceResult.ok) {
+      await client.query('ROLLBACK');
+      return { ok: false, error: rebalanceResult.error || 'Bu saatte toplam oda kapasitesi yetersiz.' };
+    }
+
+    await client.query('COMMIT');
+    return { ok: true, sessionId };
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    return { ok: false, error: 'Seans eklenirken hata' };
+  } finally {
+    client.release();
+  }
+}
