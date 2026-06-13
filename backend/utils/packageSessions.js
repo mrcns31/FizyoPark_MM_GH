@@ -1,6 +1,72 @@
-import { validateAndPickRoom } from './sessionSlot.js';
+import { placeSessionWithRebalance } from './sessionSlot.js';
 
 const SLOT_DURATION_MS = 60 * 60 * 1000;
+
+/** Seans zamanı için yerel tarih string (YYYY-MM-DD). */
+function localDateStr(ts) {
+  const d = new Date(Number(ts));
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+/**
+ * Seans tarihi için uygun aktif paket bulur (tarih paket aralığında).
+ * @returns {Promise<number|null>} member_package_id veya null
+ */
+export async function resolveMemberPackageId(db, memberId, startTs) {
+  const dateStr = localDateStr(startTs);
+  const packages = await db.query(
+    `SELECT mp.id, mp.package_id, p.lesson_count
+     FROM member_packages mp
+     JOIN packages p ON p.id = mp.package_id
+     WHERE mp.member_id = $1 AND mp.status = 'active'
+       AND mp.start_date <= $2 AND mp.end_date >= $2
+     ORDER BY mp.end_date ASC`,
+    [memberId, dateStr]
+  );
+  if (packages.rows.length > 0) return packages.rows[0].id;
+  return null;
+}
+
+/**
+ * MP-03: Admin seans silme ve üye iptal — aynı mükerrer iptal + telafi parametreleri.
+ * Aynı member_id + start_ts aktif kayıtlarının tamamını soft-delete eder;
+ * ardından addNextSessionAfterLastForPackage(afterCancelTs, skipStartTs) çağırır.
+ */
+export async function cancelPackageSessionsAtSlot(db, {
+  memberId,
+  startTs,
+  memberPackageId = null,
+  deletedBy = null,
+}) {
+  const cancelRes = await db.query(
+    `UPDATE sessions SET deleted_at = CURRENT_TIMESTAMP, deleted_by = $3
+     WHERE member_id = $1 AND start_ts = $2 AND deleted_at IS NULL
+     RETURNING id, member_package_id`,
+    [memberId, startTs, deletedBy]
+  );
+
+  const cancelledIds = cancelRes.rows.map((r) => r.id);
+  let mpId = memberPackageId;
+  if (mpId == null) {
+    mpId = cancelRes.rows.find((r) => r.member_package_id != null)?.member_package_id ?? null;
+  }
+  if (mpId == null && memberId != null && startTs != null) {
+    mpId = await resolveMemberPackageId(db, memberId, startTs);
+  }
+
+  let replenished = { added: false };
+  if (mpId != null) {
+    replenished = await addNextSessionAfterLastForPackage(db, mpId, {
+      afterCancelTs: startTs,
+      skipStartTs: startTs,
+    });
+  }
+
+  return { cancelledIds, replenished, memberPackageId: mpId };
+}
 
 /** DB date / ISO → yerel gün başlangıcı */
 function toLocalDay(val) {
@@ -15,7 +81,7 @@ function toLocalDay(val) {
  * Paketten seans silindiğinde bir telafi seansı ekler.
  * @param {object} [options]
  * @param {number} [options.afterCancelTs] — iptal edilen seansın start_ts; arama bu tarihten sonra da başlar
- * @param {number} [options.skipStartTs] — iptal edilen slot; aynı start_ts tekrar eklenmez
+ * @param {number} [options.skipStartTs] — bu iptalin start_ts (ayrıca pakette daha önce iptal edilmiş tüm slotlar da atlanır)
  * @returns {Promise<{ added: boolean, sessionId?: number, reason?: string }>}
  */
 export async function addNextSessionAfterLastForPackage(db, memberPackageId, options = {}) {
@@ -57,7 +123,7 @@ export async function addNextSessionAfterLastForPackage(db, memberPackageId, opt
     if (options.afterCancelTs != null) {
       const cancelDay = new Date(Number(options.afterCancelTs));
       const fromCancel = new Date(cancelDay.getFullYear(), cancelDay.getMonth(), cancelDay.getDate() + 1, 0, 0, 0, 0);
-      if (!Number.isNaN(fromCancel.getTime()) && fromCancel.getTime() < startDay.getTime()) {
+      if (!Number.isNaN(fromCancel.getTime()) && fromCancel.getTime() > startDay.getTime()) {
         startDay = fromCancel;
       }
     }
@@ -75,6 +141,18 @@ export async function addNextSessionAfterLastForPackage(db, memberPackageId, opt
       return { added: false, reason: 'no_slots' };
     }
 
+    const cancelledRes = await db.query(
+      `SELECT DISTINCT start_ts FROM sessions
+       WHERE member_package_id = $1 AND deleted_at IS NOT NULL`,
+      [memberPackageId]
+    );
+    const cancelledStartTs = new Set(
+      cancelledRes.rows.map((r) => Number(r.start_ts)).filter((ts) => Number.isFinite(ts))
+    );
+    if (options.skipStartTs != null) {
+      cancelledStartTs.add(Number(options.skipStartTs));
+    }
+
     for (let d = new Date(startDay.getTime()); d.getTime() <= end.getTime(); d.setDate(d.getDate() + 1)) {
       const dayOfWeek = d.getDay();
       for (const slot of slots) {
@@ -85,7 +163,7 @@ export async function addNextSessionAfterLastForPackage(db, memberPackageId, opt
         const startTs = slotStart.getTime();
         const endTs = startTs + SLOT_DURATION_MS;
 
-        if (options.skipStartTs != null && startTs === Number(options.skipStartTs)) continue;
+        if (cancelledStartTs.has(startTs)) continue;
 
         const dup = await db.query(
           `SELECT id FROM sessions
@@ -95,17 +173,16 @@ export async function addNextSessionAfterLastForPackage(db, memberPackageId, opt
         );
         if (dup.rows.length > 0) continue;
 
-        const validation = await validateAndPickRoom(db, { staffId: slot.staff_id, startTs, endTs });
-        if (!validation.ok) continue;
+        const placed = await placeSessionWithRebalance(db, {
+          staffId: slot.staff_id,
+          startTs,
+          endTs,
+          memberId: member_id,
+          memberPackageId,
+        });
+        if (!placed.ok) continue;
 
-        const roomId = validation.roomId ?? null;
-        const ins = await db.query(
-          `INSERT INTO sessions (staff_id, member_id, room_id, start_ts, end_ts, note, member_package_id)
-           VALUES ($1, $2, $3, $4, $5, NULL, $6)
-           RETURNING id`,
-          [slot.staff_id, member_id, roomId, startTs, endTs, memberPackageId]
-        );
-        return { added: true, sessionId: ins.rows[0]?.id };
+        return { added: true, sessionId: placed.sessionId };
       }
     }
 
