@@ -2,8 +2,11 @@ import express from 'express';
 import { body, validationResult, query } from 'express-validator';
 import db from '../config/database.js';
 import { verifyToken } from './auth.js';
-import { validateAndPickRoom } from '../utils/sessionSlot.js';
+import { validateAndPickRoom, validateRoomForSession, placeSessionWithRebalance } from '../utils/sessionSlot.js';
 import { log as activityLog } from '../utils/activityLogger.js';
+import { ATTENDANCE_JOIN_SQL } from '../utils/sessionAttendance.js';
+import { loadStaffMap, sessionToDto } from '../utils/memberPackageDto.js';
+import { fulfillPendingPackageRequestsForMember } from './package-requests.js';
 
 const router = express.Router();
 router.use(verifyToken);
@@ -37,41 +40,78 @@ function countPossibleSessionsInRange(startDate, endDate, slots) {
   return count;
 }
 
-const DAY_NAMES = ['Pazar', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
-
-/** İki slot listesinin (day_of_week, start_time, staff_id) kümesi olarak aynı olup olmadığını döner. */
-function slotsEqual(slotsA, slotsB) {
-  const key = (s) => `${s.day_of_week}-${String(s.start_time || '').trim()}-${s.staff_id}`;
-  if (!slotsA && !slotsB) return true;
-  if (!slotsA || !slotsB || slotsA.length !== slotsB.length) return false;
-  const setA = new Set(slotsA.map(key));
-  const setB = new Set(slotsB.map(key));
-  for (const k of setA) if (!setB.has(k)) return false;
-  return true;
+/** lesson_count kadar seans sığacak bitiş tarihini (YYYY-MM-DD) hesaplar. */
+export function computeEndDateForLessonCount(startDate, slots, lessonCount) {
+  if (!slots?.length || !lessonCount || lessonCount < 1) {
+    return String(startDate || '').slice(0, 10);
+  }
+  const start = new Date(String(startDate).slice(0, 10) + 'T00:00:00');
+  let count = 0;
+  let lastDateStr = String(startDate).slice(0, 10);
+  const maxDays = Math.max(365 * 3, lessonCount * 14);
+  for (let i = 0; count < lessonCount && i < maxDays; i += 1) {
+    const d = new Date(start);
+    d.setDate(d.getDate() + i);
+    const dayOfWeek = d.getDay();
+    for (const slot of slots) {
+      if (Number(slot.day_of_week) !== dayOfWeek) continue;
+      count += 1;
+      lastDateStr = d.toISOString().slice(0, 10);
+      break;
+    }
+  }
+  return lastDateStr;
 }
 
-/**
- * Paket slot'larına göre start_date..end_date aralığında en fazla lesson_count (veya maxSessions) kadar seans oluşturur.
- * Dolu saatlerde seans eklemez; çakışan günleri döndürür.
- * @param {number} [maxSessions] - En fazla bu kadar seans oluştur (güncellemede geçmiş seanslar korunuyorsa lesson_count - kept)
- * @returns {{ conflicts: Array<{ date: string, day_name: string, start_time: string, staff_id: number, message: string }> }}
- */
-async function generateSessionsForMemberPackage(db, mpId, memberId, startDate, endDate, slots, maxSessions = null) {
-  const conflicts = [];
-  if (!slots || slots.length === 0) return { conflicts };
-  const pkg = await db.query(
-    'SELECT p.lesson_count FROM member_packages mp JOIN packages p ON p.id = mp.package_id WHERE mp.id = $1',
+async function backfillMissingPackageSessions(db, mpId, memberId, startDate, endDate, slots, lessonCount) {
+  const existingRes = await db.query(
+    'SELECT COUNT(*)::int AS cnt FROM sessions WHERE member_package_id = $1 AND (deleted_at IS NULL)',
     [mpId]
   );
-  const lessonCount = pkg.rows[0]?.lesson_count ?? 0;
-  if (lessonCount <= 0) return { conflicts };
-  const limit = maxSessions != null ? Math.max(0, Number(maxSessions)) : lessonCount;
-  if (limit <= 0) return { conflicts };
+  const existingCount = existingRes.rows[0]?.cnt ?? 0;
+  const maxToCreate = Math.max(0, lessonCount - existingCount);
+  if (maxToCreate <= 0) return { conflicts: [], sessionsCreated: 0 };
 
-  const start = new Date(startDate + 'T00:00:00');
-  const end = new Date(endDate + 'T23:59:59');
+  let effectiveEndDate = String(endDate).slice(0, 10);
+  const neededEnd = computeEndDateForLessonCount(startDate, slots, lessonCount);
+  if (neededEnd > effectiveEndDate) {
+    effectiveEndDate = neededEnd;
+    await db.query('UPDATE member_packages SET end_date = $1 WHERE id = $2', [effectiveEndDate, mpId]);
+  }
+
+  const lastRes = await db.query(
+    `SELECT start_ts FROM sessions WHERE member_package_id = $1 AND (deleted_at IS NULL)
+     ORDER BY start_ts DESC LIMIT 1`,
+    [mpId]
+  );
+  let genStart = String(startDate).slice(0, 10);
+  if (lastRes.rows[0]?.start_ts) {
+    const lastDate = new Date(Number(lastRes.rows[0].start_ts));
+    lastDate.setDate(lastDate.getDate() + 1);
+    genStart = lastDate.toISOString().slice(0, 10);
+  }
+  if (genStart > effectiveEndDate) return { conflicts: [], sessionsCreated: 0 };
+
+  const possible = countPossibleSessionsInRange(genStart, effectiveEndDate, slots);
+  const toCreate = Math.min(maxToCreate, possible);
+  if (toCreate <= 0) return { conflicts: [], sessionsCreated: 0 };
+
+  return generateSessionsForMemberPackage(db, mpId, memberId, genStart, effectiveEndDate, slots, toCreate, {
+    excludeMemberPackageId: mpId,
+  });
+}
+
+const DAY_NAMES = ['Pazar', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
+
+const PACKAGE_CONFLICT_ERROR =
+  'Seçilen gün/saat/personel için müsaitlik yok. Lütfen ilgili satırları düzenleyip tekrar kaydedin.';
+
+/** Paket slot'larına göre oluşturulacak seans planını (henüz DB'ye yazılmadan) üretir. */
+function buildPackageSessionInsertPlan(startDate, endDate, slots, limit, { memberId, mpId = null }) {
   const inserts = [];
-
+  if (!slots?.length || !limit || limit <= 0) return inserts;
+  const start = new Date(String(startDate).slice(0, 10) + 'T00:00:00');
+  const end = new Date(String(endDate).slice(0, 10) + 'T23:59:59');
   for (let d = new Date(start); d <= end && inserts.length < limit; d.setDate(d.getDate() + 1)) {
     const dayOfWeek = d.getDay();
     for (const slot of slots) {
@@ -80,12 +120,11 @@ async function generateSessionsForMemberPackage(db, mpId, memberId, startDate, e
       const [h, m] = (slot.start_time + '').split(':').map((x) => parseInt(x, 10) || 0);
       const slotStart = new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m, 0, 0);
       const startTs = slotStart.getTime();
-      const endTs = startTs + SLOT_DURATION_MS;
       inserts.push({
         staff_id: slot.staff_id,
         member_id: memberId,
         start_ts: startTs,
-        end_ts: endTs,
+        end_ts: startTs + SLOT_DURATION_MS,
         member_package_id: mpId,
         start_time: slot.start_time,
         dateStr: d.toISOString().slice(0, 10),
@@ -93,7 +132,13 @@ async function generateSessionsForMemberPackage(db, mpId, memberId, startDate, e
       });
     }
   }
+  return inserts;
+}
 
+/** Planlanan seansların tamamı için müsaitlik kontrolü; çakışma varsa liste döner. */
+async function validatePackageSessionInserts(db, inserts, { excludeMemberPackageId } = {}) {
+  const conflicts = [];
+  const pendingByRoom = new Map();
   for (const row of inserts) {
     const validation = await validateAndPickRoom(db, {
       staffId: row.staff_id,
@@ -111,61 +156,169 @@ async function generateSessionsForMemberPackage(db, mpId, memberId, startDate, e
       continue;
     }
     const roomId = validation.roomId ?? null;
-    if (roomId == null) continue;
-    // Transaction + oda kilidi: paralel isteklerde kapasite aşımını engeller
-    let client;
-    try {
-      client = await db.pool.connect();
-      await client.query('BEGIN');
-      const roomRow = await client.query('SELECT id, devices FROM rooms WHERE id = $1 FOR UPDATE', [roomId]);
-      if (roomRow.rows.length === 0) {
-        await client.query('ROLLBACK');
-        conflicts.push({
-          date: row.dateStr,
-          day_name: DAY_NAMES[row.day_of_week],
-          start_time: row.start_time,
-          staff_id: row.staff_id,
-          message: 'Oda bulunamadı',
-        });
-        continue;
-      }
-      const devices = Math.max(1, parseInt(roomRow.rows[0].devices, 10) || 0);
-      const countResult = await client.query(
-        `SELECT COUNT(*)::int AS cnt FROM sessions WHERE room_id = $1 AND start_ts < $3 AND end_ts > $2 AND (deleted_at IS NULL)`,
-        [roomId, row.start_ts, row.end_ts]
-      );
-      const currentSessions = parseInt(countResult.rows[0]?.cnt, 10) || 0;
-      if (currentSessions >= devices) {
-        await client.query('ROLLBACK');
-        conflicts.push({
-          date: row.dateStr,
-          day_name: DAY_NAMES[row.day_of_week],
-          start_time: row.start_time,
-          staff_id: row.staff_id,
-          message: 'Bu saatte oda müsait değil (kapasite dolu)',
-        });
-        continue;
-      }
-      await client.query(
-        `INSERT INTO sessions (staff_id, member_id, room_id, start_ts, end_ts, note, member_package_id)
-         VALUES ($1, $2, $3, $4, $5, NULL, $6)`,
-        [row.staff_id, row.member_id, roomId, row.start_ts, row.end_ts, row.member_package_id]
-      );
-      await client.query('COMMIT');
-    } catch (err) {
-      if (client) await client.query('ROLLBACK').catch(() => {});
+    if (roomId == null) {
       conflicts.push({
         date: row.dateStr,
         day_name: DAY_NAMES[row.day_of_week],
         start_time: row.start_time,
         staff_id: row.staff_id,
-        message: 'Seans eklenirken hata',
+        message: 'Bu saatte uygun oda bulunamadı',
       });
-    } finally {
-      if (client) client.release();
+      continue;
+    }
+    let countSql = `
+      SELECT COUNT(*)::int AS cnt FROM sessions
+      WHERE room_id = $1 AND start_ts < $3 AND end_ts > $2 AND (deleted_at IS NULL)
+    `;
+    const countParams = [roomId, row.start_ts, row.end_ts];
+    if (excludeMemberPackageId != null) {
+      countParams.push(excludeMemberPackageId);
+      countSql += ` AND (member_package_id IS NULL OR member_package_id != $${countParams.length})`;
+    }
+    const countResult = await db.query(countSql, countParams);
+    const roomKey = `${roomId}:${row.start_ts}:${row.end_ts}`;
+    const pending = pendingByRoom.get(roomKey) || 0;
+    const currentSessions = (parseInt(countResult.rows[0]?.cnt, 10) || 0) + pending;
+    const roomRow = await db.query('SELECT devices FROM rooms WHERE id = $1', [roomId]);
+    const devices = Math.max(1, parseInt(roomRow.rows[0]?.devices, 10) || 0);
+    if (currentSessions >= devices) {
+      conflicts.push({
+        date: row.dateStr,
+        day_name: DAY_NAMES[row.day_of_week],
+        start_time: row.start_time,
+        staff_id: row.staff_id,
+        message: 'Bu saatte oda müsait değil (kapasite dolu)',
+      });
+      continue;
+    }
+    const roomValidation = await validateRoomForSession(db, {
+      roomId,
+      staffId: row.staff_id,
+      startTs: row.start_ts,
+      endTs: row.end_ts,
+    });
+    if (!roomValidation.ok) {
+      conflicts.push({
+        date: row.dateStr,
+        day_name: DAY_NAMES[row.day_of_week],
+        start_time: row.start_time,
+        staff_id: row.staff_id,
+        message: roomValidation.error || 'Bu saatte oda müsait değil',
+      });
+      continue;
+    }
+    pendingByRoom.set(roomKey, pending + 1);
+  }
+  return conflicts;
+}
+
+async function enrichConflictsWithStaff(db, conflicts) {
+  if (!conflicts?.length) return conflicts || [];
+  const staffIds = [...new Set(conflicts.map((c) => c.staff_id).filter((id) => id != null))];
+  if (!staffIds.length) return conflicts;
+  const staffRes = await db.query(
+    `SELECT id, TRIM(first_name || ' ' || last_name) AS name FROM staff WHERE id = ANY($1::int[])`,
+    [staffIds]
+  );
+  const nameById = Object.fromEntries(staffRes.rows.map((r) => [r.id, r.name]));
+  return conflicts.map((c) => ({
+    ...c,
+    staff_name: nameById[c.staff_id] || null,
+  }));
+}
+
+async function restoreMemberPackageAfterFailedGeneration(db, mpId, oldSlots, futureSessionIds, slotsWereChanged) {
+  if (futureSessionIds?.length) {
+    await db.query('UPDATE sessions SET deleted_at = NULL WHERE id = ANY($1::int[])', [futureSessionIds]).catch(() => {});
+  }
+  if (slotsWereChanged && oldSlots?.length) {
+    await db.query('DELETE FROM member_package_slots WHERE member_package_id = $1', [mpId]);
+    for (const s of oldSlots) {
+      await db.query(
+        `INSERT INTO member_package_slots (member_package_id, day_of_week, start_time, staff_id)
+         VALUES ($1, $2, $3, $4)`,
+        [mpId, s.day_of_week, String(s.start_time).trim(), s.staff_id]
+      );
     }
   }
-  return { conflicts };
+}
+
+async function respondPackageSessionConflicts(res, db, conflicts) {
+  return res.status(409).json({
+    error: PACKAGE_CONFLICT_ERROR,
+    conflicts: await enrichConflictsWithStaff(db, conflicts),
+  });
+}
+
+/** İki slot listesinin (day_of_week, start_time, staff_id) kümesi olarak aynı olup olmadığını döner. */
+function slotsEqual(slotsA, slotsB) {
+  const key = (s) => `${s.day_of_week}-${String(s.start_time || '').trim()}-${s.staff_id}`;
+  if (!slotsA && !slotsB) return true;
+  if (!slotsA || !slotsB || slotsA.length !== slotsB.length) return false;
+  const setA = new Set(slotsA.map(key));
+  const setB = new Set(slotsB.map(key));
+  for (const k of setA) if (!setB.has(k)) return false;
+  return true;
+}
+
+/**
+ * Paket slot'larına göre start_date..end_date aralığında en fazla lesson_count (veya maxSessions) kadar seans oluşturur.
+ * Herhangi bir çakışma varsa hiçbir seans eklenmez (all-or-nothing).
+ * @param {number} [maxSessions] - En fazla bu kadar seans oluştur (güncellemede geçmiş seanslar korunuyorsa lesson_count - kept)
+ * @param {{ excludeMemberPackageId?: number }} [options]
+ * @returns {{ conflicts: Array<{ date: string, day_name: string, start_time: string, staff_id: number, message: string }> }}
+ */
+export async function generateSessionsForMemberPackage(db, mpId, memberId, startDate, endDate, slots, maxSessions = null, options = {}) {
+  const conflicts = [];
+  let sessionsCreated = 0;
+  if (!slots || slots.length === 0) return { conflicts, sessionsCreated };
+  const pkg = await db.query(
+    'SELECT p.lesson_count FROM member_packages mp JOIN packages p ON p.id = mp.package_id WHERE mp.id = $1',
+    [mpId]
+  );
+  const lessonCount = pkg.rows[0]?.lesson_count ?? 0;
+  if (lessonCount <= 0) return { conflicts, sessionsCreated };
+  const limit = maxSessions != null ? Math.max(0, Number(maxSessions)) : lessonCount;
+  if (limit <= 0) return { conflicts, sessionsCreated };
+
+  const inserts = buildPackageSessionInsertPlan(startDate, endDate, slots, limit, { memberId, mpId });
+  const validationConflicts = await validatePackageSessionInserts(db, inserts, {
+    excludeMemberPackageId: options.excludeMemberPackageId,
+  });
+  if (validationConflicts.length > 0) {
+    return { conflicts: validationConflicts, sessionsCreated: 0 };
+  }
+
+  const insertedSessionIds = [];
+  for (const row of inserts) {
+    const pushConflict = (message) => {
+      conflicts.push({
+        date: row.dateStr,
+        day_name: DAY_NAMES[row.day_of_week],
+        start_time: row.start_time,
+        staff_id: row.staff_id,
+        message,
+      });
+    };
+    const placed = await placeSessionWithRebalance(db, {
+      staffId: row.staff_id,
+      startTs: row.start_ts,
+      endTs: row.end_ts,
+      memberId: row.member_id,
+      memberPackageId: row.member_package_id,
+    });
+    if (!placed.ok) {
+      pushConflict(placed.error || 'Bu saatte oda müsait değil');
+      break;
+    }
+    insertedSessionIds.push(placed.sessionId);
+    sessionsCreated += 1;
+  }
+  if (conflicts.length > 0 && insertedSessionIds.length > 0) {
+    await db.query('DELETE FROM sessions WHERE id = ANY($1::int[])', [insertedSessionIds]).catch(() => {});
+    sessionsCreated = 0;
+  }
+  return { conflicts, sessionsCreated };
 }
 
 // Üyeye ait paket atamalarını listele
@@ -248,18 +401,9 @@ router.post('/check-availability', [
     const conflicts = [];
     const dayNames = ['Pazar', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
 
-    const hasRoomAvailable = async (startTs, endTs) => {
-      const rooms = await db.query('SELECT id, devices FROM rooms');
-      for (const room of rooms.rows) {
-        const r = await db.query(
-          `SELECT COUNT(*)::int AS cnt FROM sessions
-           WHERE room_id = $1 AND start_ts < $3 AND end_ts > $2`,
-          [room.id, startTs, endTs]
-        );
-        const cnt = r.rows[0]?.cnt ?? 0;
-        if (cnt < (room.devices ?? 1)) return true;
-      }
-      return false;
+    const hasRoomAvailable = async (startTs, endTs, staffId) => {
+      const validation = await validateAndPickRoom(db, { staffId, startTs, endTs });
+      return validation.ok;
     };
 
     for (const slot of slots) {
@@ -274,7 +418,7 @@ router.post('/check-availability', [
           const startTs = slotStart.getTime();
           const endTs = slotEnd.getTime();
 
-          const roomOk = await hasRoomAvailable(startTs, endTs);
+          const roomOk = await hasRoomAvailable(startTs, endTs, staff_id);
           if (!roomOk) {
             conflicts.push({
               date: d.toISOString().slice(0, 10),
@@ -351,6 +495,12 @@ router.post('/', [
 
     const validSlots = (slots || []).filter((s) => s.day_of_week != null && s.start_time && s.staff_id != null);
 
+    if (!skip_day_distribution && validSlots.length === 0) {
+      return res.status(400).json({
+        error: 'Seçili günler için saat ve personel seçiniz.',
+      });
+    }
+
     if (!skip_day_distribution && validSlots.length > 0) {
       const pkgRow = await db.query('SELECT lesson_count FROM packages WHERE id = $1', [package_id]);
       const lessonCount = pkgRow.rows[0]?.lesson_count ?? 0;
@@ -360,6 +510,13 @@ router.post('/', [
           return res.status(400).json({
             error: `Seçilen tarih aralığı ve haftalık günlere göre en fazla ${maxPossible} randevu oluşturulabilir. Bu paket ${lessonCount} ders içeriyor. Lütfen bitiş tarihini uzatın veya haftalık gün sayısını artırın.`,
           });
+        }
+        const plan = buildPackageSessionInsertPlan(start_date, end_date, validSlots, lessonCount, {
+          memberId: member_id,
+        });
+        const preConflicts = await validatePackageSessionInserts(db, plan);
+        if (preConflicts.length > 0) {
+          return respondPackageSessionConflicts(res, db, preConflicts);
         }
       }
     }
@@ -381,9 +538,15 @@ router.post('/', [
     }
 
     let sessionConflicts = [];
+    let sessionsCreated = 0;
     if (!skip_day_distribution && validSlots.length > 0) {
       const gen = await generateSessionsForMemberPackage(db, mp.id, member_id, start_date, end_date, validSlots);
       sessionConflicts = gen.conflicts || [];
+      sessionsCreated = gen.sessionsCreated || 0;
+      if (sessionConflicts.length > 0) {
+        await db.query('DELETE FROM member_packages WHERE id = $1', [mp.id]);
+        return respondPackageSessionConflicts(res, db, sessionConflicts);
+      }
     }
 
     const full = await db.query(
@@ -398,11 +561,17 @@ router.post('/', [
     const row = full.rows[0];
     row.slots = slotsRes.rows;
     row.sessionConflicts = sessionConflicts;
+    row.sessions_created = sessionsCreated;
+    await fulfillPendingPackageRequestsForMember(db, member_id, mp.id, req.user.userId);
     await activityLog(req, {
       action: 'member_package.create',
       entityType: 'member_package',
       entityId: mp.id,
-      details: { package_name: row.package_name || '', skip_day_distribution: !!skip_day_distribution }
+      details: {
+        member_id: row.member_id,
+        package_name: row.package_name || '',
+        skip_day_distribution: !!skip_day_distribution,
+      },
     }).catch(() => {});
     res.status(201).json(row);
   } catch (error) {
@@ -493,6 +662,94 @@ router.put('/:id', [
     );
     const oldSlots = oldSlotsRes.rows;
 
+    const finalPackageId = body_package_id !== undefined ? body_package_id : mp.package_id;
+    const finalStartDate = start_date !== undefined ? start_date : mp.start_date;
+    const finalEndDate = end_date !== undefined ? end_date : mp.end_date;
+    const finalSkip = skip_day_distribution !== undefined ? !!skip_day_distribution : !!mp.skip_day_distribution;
+
+    let validSlotsAfter;
+    if (slots && Array.isArray(slots)) {
+      validSlotsAfter = slots.filter((s) => s.day_of_week != null && s.start_time && s.staff_id != null);
+      if (!finalSkip && validSlotsAfter.length === 0) {
+        return res.status(400).json({
+          error: 'Seçili günler için saat ve personel seçiniz.',
+        });
+      }
+    } else {
+      validSlotsAfter = oldSlots;
+    }
+    const slotsUnchanged = slotsEqual(oldSlots, validSlotsAfter);
+
+    if (!finalSkip && validSlotsAfter.length > 0) {
+      const pkgRow = await db.query('SELECT lesson_count FROM packages WHERE id = $1', [finalPackageId]);
+      const lessonCount = pkgRow.rows[0]?.lesson_count ?? 0;
+      if (lessonCount > 0) {
+        let genStart = null;
+        let genEnd = String(finalEndDate).slice(0, 10);
+        let genLimit = 0;
+
+        if (slotsUnchanged) {
+          const existingRes = await db.query(
+            'SELECT COUNT(*)::int AS cnt FROM sessions WHERE member_package_id = $1 AND (deleted_at IS NULL)',
+            [id]
+          );
+          const existingCount = existingRes.rows[0]?.cnt ?? 0;
+          const maxToCreate = Math.max(0, lessonCount - existingCount);
+          if (maxToCreate > 0) {
+            const neededEnd = computeEndDateForLessonCount(finalStartDate, validSlotsAfter, lessonCount);
+            if (neededEnd > genEnd) genEnd = neededEnd;
+            const lastRes = await db.query(
+              `SELECT start_ts FROM sessions WHERE member_package_id = $1 AND (deleted_at IS NULL)
+               ORDER BY start_ts DESC LIMIT 1`,
+              [id]
+            );
+            genStart = String(finalStartDate).slice(0, 10);
+            if (lastRes.rows[0]?.start_ts) {
+              const lastDate = new Date(Number(lastRes.rows[0].start_ts));
+              lastDate.setDate(lastDate.getDate() + 1);
+              genStart = lastDate.toISOString().slice(0, 10);
+            }
+            if (genStart <= genEnd) {
+              const possible = countPossibleSessionsInRange(genStart, genEnd, validSlotsAfter);
+              genLimit = Math.min(maxToCreate, possible);
+            }
+          }
+        } else {
+          const effectiveDateStr = effective_date && /^\d{4}-\d{2}-\d{2}$/.test(String(effective_date).trim())
+            ? String(effective_date).trim()
+            : new Date().toISOString().slice(0, 10);
+          const effectiveDateStart = new Date(effectiveDateStr + 'T00:00:00').getTime();
+          const keptRes = await db.query(
+            'SELECT COUNT(*)::int AS cnt FROM sessions WHERE member_package_id = $1 AND start_ts < $2 AND (deleted_at IS NULL)',
+            [id, effectiveDateStart]
+          );
+          const keptCount = keptRes.rows[0]?.cnt ?? 0;
+          const maxToCreate = Math.max(0, lessonCount - keptCount);
+          genStart = keptCount > 0 ? effectiveDateStr : String(finalStartDate).slice(0, 10);
+          const maxPossibleFromStart = countPossibleSessionsInRange(genStart, genEnd, validSlotsAfter);
+          if (maxToCreate > 0 && maxPossibleFromStart < maxToCreate) {
+            return res.status(400).json({
+              error: keptCount > 0
+                ? `Değişiklik tarihinden (${effectiveDateStr}) sonra seçilen günlere göre en fazla ${maxPossibleFromStart} randevu oluşturulabilir. Kalan hak: ${maxToCreate}. Bitiş tarihini uzatın veya haftalık gün sayısını artırın.`
+                : `Paket başlangıcından (${genStart}) itibaren seçilen günlere göre en fazla ${maxPossibleFromStart} randevu oluşturulabilir. Bu paket ${lessonCount} ders içeriyor. Bitiş tarihini uzatın veya haftalık gün sayısını artırın.`,
+            });
+          }
+          genLimit = maxToCreate;
+        }
+
+        if (genStart && genLimit > 0) {
+          const plan = buildPackageSessionInsertPlan(genStart, genEnd, validSlotsAfter, genLimit, {
+            memberId: mp.member_id,
+            mpId: id,
+          });
+          const preConflicts = await validatePackageSessionInserts(db, plan, { excludeMemberPackageId: id });
+          if (preConflicts.length > 0) {
+            return respondPackageSessionConflicts(res, db, preConflicts);
+          }
+        }
+      }
+    }
+
     const updateFields = [];
     const values = [];
     let pi = 1;
@@ -517,15 +774,16 @@ router.put('/:id', [
       await db.query(`UPDATE member_packages SET ${updateFields.join(', ')} WHERE id = $${pi}`, values);
     }
 
-    const finalPackageId = body_package_id !== undefined ? body_package_id : mp.package_id;
-    const finalStartDate = start_date !== undefined ? start_date : mp.start_date;
-    const finalEndDate = end_date !== undefined ? end_date : mp.end_date;
-    const finalSkip = skip_day_distribution !== undefined ? !!skip_day_distribution : !!mp.skip_day_distribution;
-
     if (slots && Array.isArray(slots)) {
+      const willSkip = skip_day_distribution !== undefined ? !!skip_day_distribution : !!mp.skip_day_distribution;
+      const validSlotsInput = slots.filter((s) => s.day_of_week != null && s.start_time && s.staff_id != null);
+      if (!willSkip && validSlotsInput.length === 0) {
+        return res.status(400).json({
+          error: 'Seçili günler için saat ve personel seçiniz.',
+        });
+      }
       await db.query('DELETE FROM member_package_slots WHERE member_package_id = $1', [id]);
-      const validSlots = slots.filter((s) => s.day_of_week != null && s.start_time && s.staff_id != null);
-      for (const s of validSlots) {
+      for (const s of validSlotsInput) {
         await db.query(
           `INSERT INTO member_package_slots (member_package_id, day_of_week, start_time, staff_id)
            VALUES ($1, $2, $3, $4)`,
@@ -538,9 +796,10 @@ router.put('/:id', [
       'SELECT day_of_week, start_time, staff_id FROM member_package_slots WHERE member_package_id = $1',
       [id]
     );
-    const validSlotsAfter = slotsResAfter.rows;
-    const slotsUnchanged = slotsEqual(oldSlots, validSlotsAfter);
+    validSlotsAfter = slotsResAfter.rows;
     let sessionConflicts = [];
+    let sessionsCreated = 0;
+    let futureSessionIdsToRestore = [];
 
     // "Gün dağılımı yapmak istemiyorum" seçildiyse: geçmiş seanslara dokunma, sadece gelecek seansları iptal et (soft-delete).
     if (finalSkip) {
@@ -557,7 +816,11 @@ router.put('/:id', [
       if (lessonCount > 0) {
         // Gün/saat/personel değişmediyse sadece başlangıç/bitiş tarihleri güncellendi → seanslara dokunma, sadece member_packages tarihleri güncellendi (zaten yukarıda).
         if (slotsUnchanged) {
-          // Hiçbir seans silme/yeniden oluşturma
+          const fill = await backfillMissingPackageSessions(
+            db, id, mp.member_id, finalStartDate, finalEndDate, validSlotsAfter, lessonCount
+          );
+          sessionConflicts = fill.conflicts || [];
+          sessionsCreated = fill.sessionsCreated || 0;
         } else {
           // Gün/saat/personel değişti: geçmişe dokunma, gelecek seansları yeni dağılıma göre düzenle
           const effectiveDateStr = effective_date && /^\d{4}-\d{2}-\d{2}$/.test(String(effective_date).trim())
@@ -582,14 +845,29 @@ router.put('/:id', [
                 : `Paket başlangıcından (${generationStartStr}) itibaren seçilen günlere göre en fazla ${maxPossibleFromStart} randevu oluşturulabilir. Bu paket ${lessonCount} ders içeriyor. Bitiş tarihini uzatın veya haftalık gün sayısını artırın.`,
             });
           }
+          const deleteFromTs = keptCount > 0 ? effectiveDateStart : new Date(generationStartStr + 'T00:00:00').getTime();
+          const futureRes = await db.query(
+            'SELECT id FROM sessions WHERE member_package_id = $1 AND start_ts >= $2 AND (deleted_at IS NULL)',
+            [id, deleteFromTs]
+          );
+          futureSessionIdsToRestore = futureRes.rows.map((r) => r.id);
           await db.query(
             'UPDATE sessions SET deleted_at = CURRENT_TIMESTAMP WHERE member_package_id = $1 AND start_ts >= $2 AND (deleted_at IS NULL)',
-            [id, keptCount > 0 ? effectiveDateStart : new Date(generationStartStr + 'T00:00:00').getTime()]
+            [id, deleteFromTs]
           );
-          const gen = await generateSessionsForMemberPackage(db, id, mp.member_id, generationStartStr, finalEndDate, validSlotsAfter, maxToCreate);
+          const gen = await generateSessionsForMemberPackage(
+            db, id, mp.member_id, generationStartStr, finalEndDate, validSlotsAfter, maxToCreate,
+            { excludeMemberPackageId: id }
+          );
           sessionConflicts = gen.conflicts || [];
+          sessionsCreated = gen.sessionsCreated || 0;
         }
       }
+    }
+
+    if (sessionConflicts.length > 0) {
+      await restoreMemberPackageAfterFailedGeneration(db, id, oldSlots, futureSessionIdsToRestore, !slotsUnchanged);
+      return respondPackageSessionConflicts(res, db, sessionConflicts);
     }
 
     const full = await db.query(
@@ -604,6 +882,7 @@ router.put('/:id', [
     const row = full.rows[0];
     row.slots = slotsRes.rows;
     row.sessionConflicts = sessionConflicts;
+    row.sessions_created = sessionsCreated;
     await activityLog(req, { action: 'member_package.update', entityType: 'member_package', entityId: id, details: { member_id: mp.member_id, package_id: mp.package_id } }).catch(() => {});
     res.json(row);
   } catch (error) {
@@ -645,27 +924,39 @@ router.post('/:id/end', async (req, res) => {
   }
 });
 
-// Bu paket atamasına bağlı seansları listele (geçmiş)
+// Bu paket atamasına bağlı seansları listele (MP-01: ortak sessionToDto)
 router.get('/:id/sessions', async (req, res) => {
   try {
     const { id } = req.params;
-    const mpCheck = await db.query('SELECT id FROM member_packages WHERE id = $1', [id]);
-    if (mpCheck.rows.length === 0) {
+    const mpRes = await db.query(
+      `SELECT mp.*, p.package_type
+       FROM member_packages mp
+       JOIN packages p ON p.id = mp.package_id
+       WHERE mp.id = $1`,
+      [id]
+    );
+    if (mpRes.rows.length === 0) {
       return res.status(404).json({ error: 'Üye paketi bulunamadı' });
     }
+    const mp = mpRes.rows[0];
 
     const result = await db.query(
-      `SELECT s.id, s.start_ts, s.end_ts, s.note,
-              st.first_name || ' ' || st.last_name as staff_name,
-              r.name as room_name
+      `SELECT s.*, r.name AS room_name, cu.role AS confirmer_role
        FROM sessions s
-       LEFT JOIN staff st ON st.id = s.staff_id
        LEFT JOIN rooms r ON r.id = s.room_id
-       WHERE s.member_package_id = $1 AND (s.deleted_at IS NULL)
+       ${ATTENDANCE_JOIN_SQL}
+       WHERE s.member_package_id = $1
        ORDER BY s.start_ts ASC`,
       [id]
     );
-    res.json(result.rows);
+
+    const staffMap = await loadStaffMap();
+    const packageType = mp.package_type || 'fixed';
+    const sessions = result.rows.map((row) =>
+      sessionToDto(row, staffMap, packageType, mp.status, { forAdmin: true })
+    );
+
+    res.json(sessions);
   } catch (error) {
     console.error('Member package sessions error:', error);
     res.status(500).json({ error: 'Seanslar listelenirken hata oluştu' });
