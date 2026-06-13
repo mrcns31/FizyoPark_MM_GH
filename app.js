@@ -9218,7 +9218,8 @@ async function saveGroupSession() {
 
   const firstSession = currentGroupSessions[0];
   const room = firstSession ? getRoomById(firstSession.roomId) : null;
-  if (room && currentGroupSessions.length > room.devices) {
+  const groupOverCapacity = room && currentGroupSessions.length > room.devices;
+  if (groupOverCapacity && !currentGroupSessions.some((s) => s.needsServerRebalance)) {
     els.groupSessionError.textContent = `"${room.name}" bu saatte en fazla ${room.devices} seans alabilir (alet sayısı). Şu an ${currentGroupSessions.length} seans var.`;
     els.groupSessionError.classList.remove("hidden");
     return;
@@ -9233,10 +9234,11 @@ async function saveGroupSession() {
     }
     // Yeni grup: tüm seansları state'e ekle ve API'ye gönder
     for (const session of currentGroupSessions) {
-      state.sessions.push(session);
+      const { needsServerRebalance: _unused, ...sessionToSend } = session;
+      state.sessions.push(sessionToSend);
       if (window.API && window.API.getToken()) {
         try {
-          const created = await window.API.createSession(session);
+          const created = await window.API.createSession(sessionToSend);
           const idx = state.sessions.findIndex(s => s.id === session.id);
           if (idx >= 0) state.sessions[idx] = created;
         } catch (e) {
@@ -9248,6 +9250,9 @@ async function saveGroupSession() {
     }
     state.sessions.sort((a, b) => a.startTs - b.startTs);
     saveState();
+    if (groupOverCapacity && window.API && window.API.getToken()) {
+      await syncSessionsFromServer({ silent: true });
+    }
     render();
     closeGroupSessionModal();
     return;
@@ -9264,7 +9269,7 @@ async function saveGroupSession() {
   let newRoomId = firstSession.roomId;
   const durationMs = firstSession.endTs - firstSession.startTs;
   const ignoreGroupIds = new Set(currentGroupSessions.map((s) => normId(s.id)));
-  let needsServerRebalance = false;
+  let needsServerRebalance = groupOverCapacity;
 
   if (dateStr && timeStr && newStaffId) {
     const start = makeLocalDate(dateStr, timeStr);
@@ -9317,9 +9322,8 @@ async function saveGroupSession() {
         newRoomId = roomChoice;
         const chosenRoom = getRoomById(newRoomId);
         if (chosenRoom && currentGroupSessions.length > (chosenRoom.devices || 1)) {
-          els.groupSessionError.textContent = `"${chosenRoom.name}" bu saatte en fazla ${chosenRoom.devices} seans alabilir. Grup ${currentGroupSessions.length} üye.`;
-          els.groupSessionError.classList.remove("hidden");
-          return;
+          // Oda dolu; sunucu kaydederken oda dengeleme ile yeniden dağıtmayı deneyecek.
+          needsServerRebalance = true;
         }
       }
 
@@ -9353,9 +9357,8 @@ async function saveGroupSession() {
       newEndTs = firstSession.endTs;
       const roomForCapacity = getRoomById(newRoomId);
       if (roomForCapacity && currentGroupSessions.length > (roomForCapacity.devices || 1)) {
-        els.groupSessionError.textContent = `"${roomForCapacity.name}" bu saatte en fazla ${roomForCapacity.devices} seans alabilir. Grup ${currentGroupSessions.length} üye.`;
-        els.groupSessionError.classList.remove("hidden");
-        return;
+        // Oda dolu; sunucu kaydederken oda dengeleme ile yeniden dağıtmayı deneyecek.
+        needsServerRebalance = true;
       }
     }
   } else {
