@@ -191,7 +191,7 @@ export async function rebalanceSlotRooms(db, { startTs, endTs }) {
     return { ok: true };
   }
 
-  const roomsRes = await db.query('SELECT id, devices FROM rooms');
+  const roomsRes = await db.query('SELECT id, devices FROM rooms ORDER BY id');
   const rooms = roomsRes.rows.map((r) => ({ id: r.id, devices: Math.max(1, parseInt(r.devices, 10) || 0) }));
 
   const match = matchStaffToRooms(demandByStaff, rooms);
