@@ -9442,7 +9442,9 @@ async function saveGroupSession() {
         }
       }
     } else {
-      const newSession = { ...session, staffId: newStaffId, roomId: newRoomId, startTs: newStartTs, endTs: newEndTs };
+      const { needsServerRebalance: sessionNeedsRebalance, ...sessionRest } = session;
+      if (sessionNeedsRebalance) needsServerRebalance = true;
+      const newSession = { ...sessionRest, staffId: newStaffId, roomId: newRoomId, startTs: newStartTs, endTs: newEndTs };
       state.sessions.push(newSession);
       if (window.API && window.API.getToken()) {
         try {
@@ -11359,14 +11361,11 @@ function bindEvents() {
       endTs = firstSession.endTs;
       staffId = firstSession.staffId;
       roomId = firstSession.roomId;
-      const room = getRoomById(roomId);
-      const maxInSlot = room ? room.devices : 1;
-      if (currentGroupSessions.length + 1 > maxInSlot) {
-        els.groupSessionError.textContent = `Bu oda bu saatte en fazla ${maxInSlot} seans alabilir (alet: ${maxInSlot}).`;
-        els.groupSessionError.classList.remove("hidden");
-        return;
-      }
     }
+
+    const room = getRoomById(roomId);
+    const maxInSlot = room ? room.devices : 1;
+    const overCapacity = currentGroupSessions.length + 1 > maxInSlot;
 
     const newSession = {
       id: uid("sess"),
@@ -11376,13 +11375,27 @@ function bindEvents() {
       staffId,
       roomId,
       note: "",
+      needsServerRebalance: overCapacity,
     };
 
-    const conflicts = checkConflicts(newSession, { ignoreSessionId: null });
-    if (conflicts.length > 0) {
-      els.groupSessionError.textContent = conflicts.join(" ");
-      els.groupSessionError.classList.remove("hidden");
-      return;
+    if (overCapacity) {
+      // Oda bu saatte dolu; sunucu kaydederken oda dengeleme ile yeniden dağıtmayı deneyecek.
+      const memberConflict = state.sessions.some((s) =>
+        overlaps(s.startTs, s.endTs, newSession.startTs, newSession.endTs) &&
+        normId(s.memberId) === normId(newSession.memberId),
+      );
+      if (memberConflict) {
+        els.groupSessionError.textContent = "Seçilen üye bu saat aralığında zaten planlı.";
+        els.groupSessionError.classList.remove("hidden");
+        return;
+      }
+    } else {
+      const conflicts = checkConflicts(newSession, { ignoreSessionId: null });
+      if (conflicts.length > 0) {
+        els.groupSessionError.textContent = conflicts.join(" ");
+        els.groupSessionError.classList.remove("hidden");
+        return;
+      }
     }
 
     currentGroupSessions.push(newSession);

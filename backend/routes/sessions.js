@@ -224,17 +224,7 @@ router.post('/', [
         await client.query('ROLLBACK');
         return res.status(400).json({ error: 'Oda bulunamadı' });
       }
-      const devices = Math.max(1, parseInt(roomRow.rows[0].devices, 10) || 0);
-      const countResult = await client.query(
-        `SELECT COUNT(*)::int as cnt FROM sessions s
-         WHERE s.room_id = $1 AND s.start_ts < $3 AND s.end_ts > $2 AND (s.deleted_at IS NULL)`,
-        [roomId, startTs, endTs]
-      );
-      const currentSessions = parseInt(countResult.rows[0]?.cnt, 10) || 0;
-      if (currentSessions >= devices) {
-        await client.query('ROLLBACK');
-        return res.status(409).json({ error: 'Oda kapasitesi dolu' });
-      }
+
       const roomValidation = await validateRoomForSession(client, {
         roomId,
         staffId,
@@ -242,9 +232,30 @@ router.post('/', [
         endTs,
       });
       if (!roomValidation.ok) {
-        await client.query('ROLLBACK');
-        return res.status(409).json({ error: roomValidation.error || 'Oda ataması geçersiz' });
+        // Direkt atama uygun değil; seansı ekleyip hedef saat dilimini dengeleyerek tekrar dene.
+        await client.query('SELECT id FROM rooms ORDER BY id FOR UPDATE');
+        const insertResult = await client.query(
+          `INSERT INTO sessions (staff_id, member_id, room_id, start_ts, end_ts, note, member_package_id)
+           VALUES ($1, $2, $3, $4, $5, $6, $7)
+           RETURNING id`,
+          [staffId, memberId, roomId, startTs, endTs, note || null, memberPackageId ?? null]
+        );
+        const sessionId = insertResult.rows[0]?.id;
+
+        const rebalanceResult = await rebalanceSlotRooms(client, { startTs, endTs });
+        if (!rebalanceResult.ok) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: rebalanceResult.error || roomValidation.error || 'Oda ataması geçersiz' });
+        }
+
+        const created = await client.query('SELECT * FROM sessions WHERE id = $1', [sessionId]);
+        await client.query('COMMIT');
+        const createdRow = created.rows[0];
+        if (memberPackageId) await trimPackageSessionsIfOver(db, memberPackageId, createdRow?.id);
+        if (createdRow) await activityLog(req, { action: 'session.create', entityType: 'session', entityId: createdRow.id, details: { staffId, memberId, roomId: createdRow.room_id, startTs, endTs } }).catch(() => {});
+        return res.status(201).json(createdRow);
       }
+
       const result = await client.query(
         `INSERT INTO sessions (staff_id, member_id, room_id, start_ts, end_ts, note, member_package_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
