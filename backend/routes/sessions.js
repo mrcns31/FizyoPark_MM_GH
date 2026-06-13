@@ -1,53 +1,45 @@
 import express from 'express';
 import { body, validationResult, query } from 'express-validator';
+import bcrypt from 'bcrypt';
 import db from '../config/database.js';
 import { verifyToken } from './auth.js';
-import { validateAndPickRoom } from '../utils/sessionSlot.js';
-import { addNextSessionAfterLastForPackage } from '../utils/packageSessions.js';
+import { validateRoomForSession, placeSessionWithRebalance, rebalanceSlotRooms } from '../utils/sessionSlot.js';
+import { cancelPackageSessionsAtSlot, resolveMemberPackageId } from '../utils/packageSessions.js';
 import { log as activityLog } from '../utils/activityLogger.js';
+import { isSessionAttendanceConfirmed } from '../utils/sessionAttendance.js';
 
 const router = express.Router();
+
+async function verifyAdminPassword(adminPassword) {
+  if (!adminPassword || String(adminPassword).trim() === '') {
+    return { ok: false, status: 400, error: 'Admin şifresi gerekli.' };
+  }
+  const adminResult = await db.query(
+    "SELECT password_hash FROM users WHERE role = 'admin' AND is_active = true LIMIT 1"
+  );
+  if (adminResult.rows.length === 0) {
+    return { ok: false, status: 403, error: 'Admin hesabı bulunamadı.' };
+  }
+  const valid = await bcrypt.compare(String(adminPassword), adminResult.rows[0].password_hash);
+  if (!valid) {
+    return { ok: false, status: 401, error: 'Admin şifresi hatalı.' };
+  }
+  return { ok: true };
+}
+
+async function requireAdminPasswordIfSessionConfirmed(sessionRow, adminPassword) {
+  if (!isSessionAttendanceConfirmed(sessionRow)) return null;
+  const pw = await verifyAdminPassword(adminPassword);
+  if (!pw.ok) return pw;
+  return null;
+}
 
 // Tüm route'lar için authentication gerekli
 router.use(verifyToken);
 
 /**
- * Üyenin seans tarihi için uygun aktif paket bulur (kullanım süresi içinde, kalan hak var).
- * Önce bitişi yakın olan paket kullanılır (end_date ASC).
- * @returns {Promise<number|null>} member_package_id veya null
+ * Pakette lesson_count aşıldıysa en son tarihli seans(lar)ı siler. excludeSessionId verilirse o seans hariç tutulur (yeni eklenen silinmesin).
  */
-/** Seans zamanı için yerel tarih string (YYYY-MM-DD). */
-function localDateStr(ts) {
-  const d = new Date(Number(ts));
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${y}-${m}-${day}`;
-}
-
-/**
- * Seans tarihi için uygun aktif paket bulur (tarih paket aralığında).
- * Paket dolu olsa bile bu seansta pakete bağlanır; trimPackageSessionsIfOver fazlayı sondan siler.
- * Böylece iptal edilen bir tarihe tekrar randevu eklendiğinde paket seansları listesinde görünür.
- */
-async function resolveMemberPackageId(db, memberId, startTs) {
-  const dateStr = localDateStr(startTs);
-  const packages = await db.query(
-    `SELECT mp.id, mp.package_id, p.lesson_count
-     FROM member_packages mp
-     JOIN packages p ON p.id = mp.package_id
-     WHERE mp.member_id = $1 AND mp.status = 'active'
-       AND mp.start_date <= $2 AND mp.end_date >= $2
-     ORDER BY mp.end_date ASC`,
-    [memberId, dateStr]
-  );
-  if (packages.rows.length > 0) return packages.rows[0].id;
-  return null;
-}
-
-const SLOT_DURATION_MS = 60 * 60 * 1000;
-
-/** Pakette lesson_count aşıldıysa en son tarihli seans(lar)ı siler. excludeSessionId verilirse o seans hariç tutulur (yeni eklenen silinmesin). */
 async function trimPackageSessionsIfOver(db, memberPackageId, excludeSessionId = null) {
   const pkg = await db.query(
     'SELECT p.lesson_count FROM member_packages mp JOIN packages p ON p.id = mp.package_id WHERE mp.id = $1',
@@ -91,12 +83,17 @@ router.get('/', [
     let query = `
       SELECT s.*, 
              st.first_name || ' ' || st.last_name as staff_name,
-             m.name as member_name,
-             r.name as room_name
+             COALESCE(NULLIF(TRIM(m.first_name || ' ' || m.last_name), ''), NULLIF(TRIM(m.name), '')) as member_name,
+             r.name as room_name,
+             cs.first_name AS confirmer_first_name,
+             cs.last_name AS confirmer_last_name,
+             cu.role AS confirmer_role
       FROM sessions s
       LEFT JOIN staff st ON s.staff_id = st.id
       LEFT JOIN members m ON s.member_id = m.id
       LEFT JOIN rooms r ON s.room_id = r.id
+      LEFT JOIN users cu ON cu.id = s.attendance_confirmed_by
+      LEFT JOIN staff cs ON cs.user_id = cu.id
       WHERE (s.deleted_at IS NULL)
     `;
     const params = [];
@@ -155,8 +152,18 @@ router.get('/', [
       result = await db.query(query, params);
     } catch (colErr) {
       if (colErr.code === '42703') {
-        const fallback = query.replace('WHERE (s.deleted_at IS NULL)', 'WHERE 1=1');
-        result = await db.query(fallback, params);
+        const fallback = `
+      SELECT s.*, 
+             st.first_name || ' ' || st.last_name as staff_name,
+             COALESCE(NULLIF(TRIM(m.first_name || ' ' || m.last_name), ''), NULLIF(TRIM(m.name), '')) as member_name,
+             r.name as room_name
+      FROM sessions s
+      LEFT JOIN staff st ON s.staff_id = st.id
+      LEFT JOIN members m ON s.member_id = m.id
+      LEFT JOIN rooms r ON s.room_id = r.id
+      WHERE (s.deleted_at IS NULL)
+    ` + query.split('WHERE (s.deleted_at IS NULL)')[1];
+        result = await db.query(fallback.replace('WHERE (s.deleted_at IS NULL)', 'WHERE 1=1'), params);
       } else throw colErr;
     }
     res.json(result.rows);
@@ -194,59 +201,67 @@ router.post('/', [
       return res.status(400).json({ error: 'Bu üyenin bu tarihte aktif paketi yok. Sadece aktif paketi olan üyelere seans oluşturulabilir.' });
     }
 
-    // Oda gönderilmediyse kapasitesi uygun bir oda seç; yoksa ekleme (4. kişi engeli).
+    // Oda gönderilmediyse: çalışma saati kontrolü + gerekirse oda dengeleme ile yerleştir.
     if (roomId == null || roomId === '') {
-      const validation = await validateAndPickRoom(db, { staffId, startTs, endTs });
-      if (!validation.ok) {
-        return res.status(409).json({ error: 'Bu saatte uygun oda yok (kapasite dolu veya çalışma saati dışında)' });
+      const placed = await placeSessionWithRebalance(db, { staffId, startTs, endTs, memberId, memberPackageId });
+      if (!placed.ok) {
+        return res.status(409).json({ error: placed.error || 'Bu saatte uygun oda yok (kapasite dolu veya çalışma saati dışında)' });
       }
-      roomId = validation.roomId;
+      const created = await db.query('SELECT * FROM sessions WHERE id = $1', [placed.sessionId]);
+      const createdRow = created.rows[0];
+      if (memberPackageId) await trimPackageSessionsIfOver(db, memberPackageId, createdRow?.id);
+      if (createdRow) await activityLog(req, { action: 'session.create', entityType: 'session', entityId: createdRow.id, details: { staffId, memberId, roomId: createdRow.room_id, startTs, endTs } }).catch(() => {});
+      return res.status(201).json(createdRow);
     }
 
-    // Oda kapasitesi: odadaki alet sayısı kadar seans. Transaction + oda kilidi ile race condition önlenir.
-    // roomId 0 dahil tüm geçerli oda id'leri için kontrol (if (roomId) 0'da atlıyordu)
-    if (roomId != null && roomId !== '') {
-      let client;
-      try {
-        client = await db.pool.connect();
-        await client.query('BEGIN');
-        const roomRow = await client.query('SELECT id, devices FROM rooms WHERE id = $1 FOR UPDATE', [roomId]);
-        if (roomRow.rows.length === 0) {
-          await client.query('ROLLBACK');
-          return res.status(400).json({ error: 'Oda bulunamadı' });
-        }
-        const devices = Math.max(1, parseInt(roomRow.rows[0].devices, 10) || 0);
-        const countResult = await client.query(
-          `SELECT COUNT(*)::int as cnt FROM sessions s
-           WHERE s.room_id = $1 AND s.start_ts < $3 AND s.end_ts > $2 AND (s.deleted_at IS NULL)`,
-          [roomId, startTs, endTs]
-        );
-        const currentSessions = parseInt(countResult.rows[0]?.cnt, 10) || 0;
-        if (currentSessions >= devices) {
-          await client.query('ROLLBACK');
-          return res.status(409).json({ error: 'Oda kapasitesi dolu' });
-        }
-        const result = await client.query(
-          `INSERT INTO sessions (staff_id, member_id, room_id, start_ts, end_ts, note, member_package_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)
-           RETURNING *`,
-          [staffId, memberId, roomId, startTs, endTs, note || null, memberPackageId ?? null]
-        );
-        await client.query('COMMIT');
-        const created = result.rows[0];
-        if (memberPackageId) await trimPackageSessionsIfOver(db, memberPackageId, created?.id);
-        if (created) await activityLog(req, { action: 'session.create', entityType: 'session', entityId: created.id, details: { staffId, memberId, roomId, startTs, endTs } }).catch(() => {});
-        return res.status(201).json(created);
-      } catch (err) {
-        if (client) await client.query('ROLLBACK').catch(() => {});
-        throw err;
-      } finally {
-        if (client) client.release();
+    // Oda açıkça belirtildi: kapasite + tek personel kuralı. Transaction + oda kilidi ile race condition önlenir.
+    let client;
+    try {
+      client = await db.pool.connect();
+      await client.query('BEGIN');
+      const roomRow = await client.query('SELECT id, devices FROM rooms WHERE id = $1 FOR UPDATE', [roomId]);
+      if (roomRow.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ error: 'Oda bulunamadı' });
       }
+      const devices = Math.max(1, parseInt(roomRow.rows[0].devices, 10) || 0);
+      const countResult = await client.query(
+        `SELECT COUNT(*)::int as cnt FROM sessions s
+         WHERE s.room_id = $1 AND s.start_ts < $3 AND s.end_ts > $2 AND (s.deleted_at IS NULL)`,
+        [roomId, startTs, endTs]
+      );
+      const currentSessions = parseInt(countResult.rows[0]?.cnt, 10) || 0;
+      if (currentSessions >= devices) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'Oda kapasitesi dolu' });
+      }
+      const roomValidation = await validateRoomForSession(client, {
+        roomId,
+        staffId,
+        startTs,
+        endTs,
+      });
+      if (!roomValidation.ok) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: roomValidation.error || 'Oda ataması geçersiz' });
+      }
+      const result = await client.query(
+        `INSERT INTO sessions (staff_id, member_id, room_id, start_ts, end_ts, note, member_package_id)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING *`,
+        [staffId, memberId, roomId, startTs, endTs, note || null, memberPackageId ?? null]
+      );
+      await client.query('COMMIT');
+      const created = result.rows[0];
+      if (memberPackageId) await trimPackageSessionsIfOver(db, memberPackageId, created?.id);
+      if (created) await activityLog(req, { action: 'session.create', entityType: 'session', entityId: created.id, details: { staffId, memberId, roomId, startTs, endTs } }).catch(() => {});
+      return res.status(201).json(created);
+    } catch (err) {
+      if (client) await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      if (client) client.release();
     }
-
-    // Sadece roomId gerçekten yoksa (validateAndPickRoom sonrası da set edilir, buraya düşmemeli)
-    return res.status(400).json({ error: 'Oda seçilemedi. Bu saatte uygun oda yok (kapasite dolu veya çalışma saati dışında).' });
   } catch (error) {
     console.error('Session create error:', error);
     res.status(500).json({ error: 'Seans oluşturulurken bir hata oluştu' });
@@ -261,19 +276,27 @@ router.put('/:id', [
   body('startTs').optional().isInt(),
   body('endTs').optional().isInt(),
   body('note').optional().isString(),
-  body('memberPackageId').optional({ nullable: true }).isInt()
+  body('memberPackageId').optional({ nullable: true }).isInt(),
+  body('adminPassword').optional().isString()
 ], async (req, res) => {
   try {
     if (req.user.role === 'member') {
       return res.status(403).json({ error: 'Üyeler seans düzenleyemez' });
     }
     const { id } = req.params;
-    const updates = req.body;
+    const updates = { ...req.body };
+    const adminPassword = updates.adminPassword;
+    delete updates.adminPassword;
 
     // Seans var mı ve silinmemiş mi kontrol et
     const existing = await db.query('SELECT * FROM sessions WHERE id = $1', [id]);
     if (existing.rows.length === 0 || existing.rows[0].deleted_at != null) {
       return res.status(404).json({ error: 'Seans bulunamadı' });
+    }
+
+    const pwErr = await requireAdminPasswordIfSessionConfirmed(existing.rows[0], adminPassword);
+    if (pwErr) {
+      return res.status(pwErr.status).json({ error: pwErr.error });
     }
 
     // Yetki kontrolü (staff sadece kendi seanslarını düzenleyebilir)
@@ -290,7 +313,10 @@ router.put('/:id', [
 
     const current = existing.rows[0];
     const finalMemberId = updates.memberId !== undefined ? updates.memberId : current.member_id;
+    const finalStaffId = updates.staffId !== undefined ? updates.staffId : current.staff_id;
+    const finalRoomId = updates.roomId !== undefined ? updates.roomId : current.room_id;
     const finalStartTs = updates.startTs !== undefined ? updates.startTs : current.start_ts;
+    const finalEndTs = updates.endTs !== undefined ? updates.endTs : current.end_ts;
     if (updates.memberPackageId === undefined) {
       const resolved = await resolveMemberPackageId(db, finalMemberId, finalStartTs);
       // Yeni tarih paket aralığı dışındaysa (örn. paket başlangıcından önce) mevcut paketi koru;
@@ -321,11 +347,53 @@ router.put('/:id', [
       return res.status(400).json({ error: 'Güncellenecek alan yok' });
     }
 
+    const finalMpId = updates.memberPackageId !== undefined ? updates.memberPackageId : current.member_package_id;
+
+    if (finalRoomId != null && finalStaffId != null) {
+      const roomValidation = await validateRoomForSession(db, {
+        roomId: finalRoomId,
+        staffId: finalStaffId,
+        startTs: finalStartTs,
+        endTs: finalEndTs,
+        excludeSessionId: id,
+      });
+      if (!roomValidation.ok) {
+        // Direkt atama uygun değil; hedef saat dilimini dengeleyerek tekrar dene.
+        const client = await db.pool.connect();
+        try {
+          await client.query('BEGIN');
+          await client.query('SELECT id FROM rooms ORDER BY id FOR UPDATE');
+
+          values.push(id);
+          const query = `UPDATE sessions SET ${updateFields.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
+          await client.query(query, values);
+
+          const rebalanceResult = await rebalanceSlotRooms(client, { startTs: finalStartTs, endTs: finalEndTs });
+          if (!rebalanceResult.ok) {
+            await client.query('ROLLBACK');
+            return res.status(409).json({ error: rebalanceResult.error || roomValidation.error || 'Oda ataması geçersiz' });
+          }
+
+          const result = await client.query('SELECT * FROM sessions WHERE id = $1', [id]);
+          await client.query('COMMIT');
+
+          if (finalMpId) await trimPackageSessionsIfOver(db, finalMpId);
+          const updated = result.rows[0];
+          if (updated) await activityLog(req, { action: 'session.update', entityType: 'session', entityId: id, details: { staffId: updated.staff_id, memberId: updated.member_id } }).catch(() => {});
+          return res.json({ message: 'Seans güncellendi', session: updated });
+        } catch (err) {
+          await client.query('ROLLBACK').catch(() => {});
+          throw err;
+        } finally {
+          client.release();
+        }
+      }
+    }
+
     values.push(id);
     const query = `UPDATE sessions SET ${updateFields.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
-    
+
     const result = await db.query(query, values);
-    const finalMpId = updates.memberPackageId !== undefined ? updates.memberPackageId : current.member_package_id;
     if (finalMpId) await trimPackageSessionsIfOver(db, finalMpId);
     const updated = result.rows[0];
     if (updated) await activityLog(req, { action: 'session.update', entityType: 'session', entityId: id, details: { staffId: updated.staff_id, memberId: updated.member_id } }).catch(() => {});
@@ -337,17 +405,25 @@ router.put('/:id', [
 });
 
 // Seans sil (soft delete: veritabanında kalır, deleted_at işaretlenir; ileride log için)
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', [
+  body('adminPassword').optional().isString()
+], async (req, res) => {
   try {
     if (req.user.role === 'member') {
       return res.status(403).json({ error: 'Üyeler bu yolla seans silemez. İptal için üye portalını kullanın.' });
     }
     const { id } = req.params;
+    const adminPassword = req.body?.adminPassword;
 
     // Seans var mı ve silinmemiş mi kontrol et
     const existing = await db.query('SELECT * FROM sessions WHERE id = $1', [id]);
     if (existing.rows.length === 0 || existing.rows[0].deleted_at != null) {
       return res.status(404).json({ error: 'Seans bulunamadı' });
+    }
+
+    const pwErr = await requireAdminPasswordIfSessionConfirmed(existing.rows[0], adminPassword);
+    if (pwErr) {
+      return res.status(pwErr.status).json({ error: pwErr.error });
     }
 
     // Yetki kontrolü
@@ -362,24 +438,16 @@ router.delete('/:id', async (req, res) => {
       }
     }
 
-    let memberPackageId = existing.rows[0].member_package_id;
-    const memberId = existing.rows[0].member_id;
-    const startTs = existing.rows[0].start_ts;
-    await db.query(
-      `UPDATE sessions SET deleted_at = CURRENT_TIMESTAMP, deleted_by = $3
-       WHERE member_id = $1 AND start_ts = $2 AND deleted_at IS NULL`,
-      [memberId, startTs, req.user.userId ?? null]
-    );
-    if (memberPackageId == null && memberId != null && startTs != null) {
-      memberPackageId = await resolveMemberPackageId(db, memberId, startTs);
-    }
-    if (memberPackageId != null) {
-      await addNextSessionAfterLastForPackage(db, memberPackageId, {
-        afterCancelTs: startTs,
-        skipStartTs: startTs,
-      });
-    }
     const row = existing.rows[0];
+    const { cancelledIds, replenished } = await cancelPackageSessionsAtSlot(db, {
+      memberId: row.member_id,
+      startTs: row.start_ts,
+      memberPackageId: row.member_package_id,
+      deletedBy: req.user.userId ?? null,
+    });
+    if (cancelledIds.length === 0) {
+      return res.status(404).json({ error: 'Seans bulunamadı' });
+    }
     await activityLog(req, {
       action: 'session.delete',
       entityType: 'session',
@@ -389,10 +457,17 @@ router.delete('/:id', async (req, res) => {
         memberId: row.member_id,
         roomId: row.room_id,
         startTs: row.start_ts,
-        endTs: row.end_ts
-      }
+        endTs: row.end_ts,
+        cancelledIds,
+        replenished: replenished.added,
+        replenishedReason: replenished.added ? null : (replenished.reason || null),
+      },
     }).catch(() => {});
-    res.json({ message: 'Seans silindi' });
+    res.json({
+      message: replenished.added ? 'Seans silindi, paket sonuna yeni seans eklendi' : 'Seans silindi',
+      replenished: replenished.added,
+      replenishedReason: replenished.added ? null : (replenished.reason || null),
+    });
   } catch (error) {
     console.error('Session delete error:', error);
     res.status(500).json({ error: 'Seans silinirken bir hata oluştu' });
