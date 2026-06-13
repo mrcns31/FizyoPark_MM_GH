@@ -1,11 +1,118 @@
 /**
  * Otomatik seans atamasında kullanılır: çalışma saati, personel saati ve oda kapasitesi kontrolü yapar,
  * uygunsa bir room_id önerir.
+ * Kural: Aynı oda/saat diliminde yalnızca bir personel olabilir; o personel odadaki alet sayısı kadar seans alabilir.
  * @param {object} db - database pool/query
  * @param {object} params - { staffId, startTs, endTs }
  * @returns {Promise<{ ok: boolean, roomId?: number }>}
  */
-export async function validateAndPickRoom(db, { staffId, startTs, endTs }) {
+
+async function countSessionsInRoom(db, roomId, startTs, endTs, excludeSessionId = null) {
+  const params = [roomId, startTs, endTs];
+  let sql = `SELECT COUNT(*)::int AS cnt FROM sessions
+    WHERE room_id = $1 AND start_ts < $3 AND end_ts > $2 AND deleted_at IS NULL`;
+  if (excludeSessionId != null) {
+    sql += ' AND id != $4';
+    params.push(excludeSessionId);
+  }
+  const r = await db.query(sql, params);
+  return r.rows[0]?.cnt ?? 0;
+}
+
+async function roomHasOtherStaff(db, roomId, staffId, startTs, endTs, excludeSessionId = null) {
+  const params = [roomId, startTs, endTs, staffId];
+  let sql = `SELECT id FROM sessions
+    WHERE room_id = $1 AND start_ts < $3 AND end_ts > $2
+      AND staff_id IS NOT NULL AND staff_id != $4
+      AND deleted_at IS NULL`;
+  if (excludeSessionId != null) {
+    sql += ' AND id != $5';
+    params.push(excludeSessionId);
+  }
+  sql += ' LIMIT 1';
+  const r = await db.query(sql, params);
+  return r.rows.length > 0;
+}
+
+/**
+ * Verilen talep haritası (staffId -> demand) ve oda listesine ([{id, devices}])
+ * göre sıralı greedy eşleştirme yapar.
+ * Personeller talebe göre azalan, odalar devices'a göre azalan sıralanır,
+ * i. personel i. odaya eşlenir.
+ * @returns {{ feasible: boolean, assignments?: Array<{ staffId: number, roomId: number, demand: number }> }}
+ */
+function matchStaffToRooms(demandByStaff, rooms) {
+  const staffEntries = Object.entries(demandByStaff)
+    .map(([staffId, demand]) => ({ staffId: Number(staffId), demand }))
+    .sort((a, b) => b.demand - a.demand);
+  const sortedRooms = [...rooms].sort((a, b) => b.devices - a.devices);
+
+  if (staffEntries.length > sortedRooms.length) {
+    return { feasible: false };
+  }
+
+  const assignments = [];
+  for (let i = 0; i < staffEntries.length; i++) {
+    const staff = staffEntries[i];
+    const room = sortedRooms[i];
+    if (staff.demand > room.devices) {
+      return { feasible: false };
+    }
+    assignments.push({ staffId: staff.staffId, roomId: room.id, demand: staff.demand });
+  }
+  return { feasible: true, assignments };
+}
+
+/**
+ * [startTs, endTs) anındaki silinmemiş seansları staff_id'ye göre gruplar,
+ * her personelin talebini (seans sayısı) döner.
+ * @returns {Promise<Record<number, number>>}
+ */
+async function getDemandByStaff(db, startTs, endTs) {
+  const r = await db.query(
+    `SELECT staff_id, COUNT(*)::int AS cnt FROM sessions
+     WHERE start_ts < $2 AND end_ts > $1 AND staff_id IS NOT NULL AND deleted_at IS NULL
+     GROUP BY staff_id`,
+    [startTs, endTs]
+  );
+  const demand = {};
+  for (const row of r.rows) {
+    demand[row.staff_id] = row.cnt;
+  }
+  return demand;
+}
+
+/**
+ * Belirli oda/personel/saat için kapasite + tek personel kuralını doğrular.
+ * @returns {Promise<{ ok: boolean, error?: string }>}
+ */
+export async function validateRoomForSession(db, { roomId, staffId, startTs, endTs, excludeSessionId = null }) {
+  const roomRow = await db.query('SELECT id, name, devices FROM rooms WHERE id = $1', [roomId]);
+  if (roomRow.rows.length === 0) {
+    return { ok: false, error: 'Oda bulunamadı' };
+  }
+  const room = roomRow.rows[0];
+  const devices = Math.max(1, parseInt(room.devices, 10) || 0);
+  const cnt = await countSessionsInRoom(db, roomId, startTs, endTs, excludeSessionId);
+  if (cnt >= devices) {
+    return { ok: false, error: `"${room.name}" için bu saat aralığında kapasite dolu (alet: ${devices}).` };
+  }
+  const otherStaff = await roomHasOtherStaff(db, roomId, staffId, startTs, endTs, excludeSessionId);
+  if (otherStaff) {
+    return { ok: false, error: `"${room.name}" odasında bu saat aralığında başka bir personel var.` };
+  }
+  return { ok: true };
+}
+
+async function isRoomAvailableForStaff(db, room, staffId, startTs, endTs, excludeSessionId = null) {
+  const devices = Math.max(1, parseInt(room.devices, 10) || 0);
+  const cnt = await countSessionsInRoom(db, room.id, startTs, endTs, excludeSessionId);
+  if (cnt >= devices) return false;
+  const otherStaff = await roomHasOtherStaff(db, room.id, staffId, startTs, endTs, excludeSessionId);
+  return !otherStaff;
+}
+
+export async function validateAndPickRoom(db, { staffId, startTs, endTs, excludeSessionId = null }) {
   const startDate = new Date(Number(startTs));
   const dayOfWeek = startDate.getDay();
   const startMin = startDate.getHours() * 60 + startDate.getMinutes();
@@ -42,7 +149,7 @@ export async function validateAndPickRoom(db, { staffId, startTs, endTs }) {
     if (startMin < sMin || endMin > eMin) return { ok: false };
   }
 
-  // 3) Oda: aynı saatte bu personelin seansı varsa o odası tercih; yoksa kapasitesi uygun bir oda seç
+  // 3) Oda: aynı saatte bu personelin seansı varsa o odası tercih; yoksa uygun oda seç
   const rooms = await db.query('SELECT id, name, devices FROM rooms ORDER BY id');
   if (rooms.rows.length === 0) return { ok: false };
 
@@ -55,28 +162,51 @@ export async function validateAndPickRoom(db, { staffId, startTs, endTs }) {
   );
   const preferredRoomId = staffSessionRoom.rows[0]?.room_id || null;
 
-  const countInRoom = async (roomId) => {
-    const r = await db.query(
-      `SELECT COUNT(*)::int AS cnt FROM sessions
-       WHERE room_id = $1 AND start_ts < $3 AND end_ts > $2 AND (deleted_at IS NULL)`,
-      [roomId, startTs, endTs]
-    );
-    return r.rows[0]?.cnt ?? 0;
-  };
-
-  const cap = (room) => Math.max(1, parseInt(room.devices, 10) || 0);
-
   if (preferredRoomId != null) {
     const room = rooms.rows.find((r) => r.id === preferredRoomId);
     if (room) {
-      const cnt = await countInRoom(room.id);
-      if (cnt < cap(room)) return { ok: true, roomId: room.id };
+      const ok = await isRoomAvailableForStaff(db, room, staffId, startTs, endTs, excludeSessionId);
+      if (ok) return { ok: true, roomId: room.id };
     }
   }
 
   for (const room of rooms.rows) {
-    const cnt = await countInRoom(room.id);
-    if (cnt < cap(room)) return { ok: true, roomId: room.id };
+    const ok = await isRoomAvailableForStaff(db, room, staffId, startTs, endTs, excludeSessionId);
+    if (ok) return { ok: true, roomId: room.id };
   }
   return { ok: false };
+}
+
+/**
+ * [startTs, endTs) anındaki tüm personel-oda atamalarını, talebe göre azalan
+ * personel ↔ kapasiteye göre azalan oda eşleştirmesiyle yeniden dağıtır.
+ * Infeasible ise hiçbir değişiklik yapmaz.
+ * @param {object} db - database pool/query (transaction client veya pool)
+ * @param {object} params - { startTs, endTs }
+ * @returns {Promise<{ ok: boolean, error?: string }>}
+ */
+export async function rebalanceSlotRooms(db, { startTs, endTs }) {
+  const demandByStaff = await getDemandByStaff(db, startTs, endTs);
+  if (Object.keys(demandByStaff).length === 0) {
+    return { ok: true };
+  }
+
+  const roomsRes = await db.query('SELECT id, devices FROM rooms');
+  const rooms = roomsRes.rows.map((r) => ({ id: r.id, devices: Math.max(1, parseInt(r.devices, 10) || 0) }));
+
+  const match = matchStaffToRooms(demandByStaff, rooms);
+  if (!match.feasible) {
+    return { ok: false, error: 'Bu saatte toplam oda kapasitesi yetersiz.' };
+  }
+
+  for (const { staffId, roomId } of match.assignments) {
+    await db.query(
+      `UPDATE sessions SET room_id = $1
+       WHERE staff_id = $2 AND start_ts < $4 AND end_ts > $3
+         AND deleted_at IS NULL AND room_id IS DISTINCT FROM $1`,
+      [roomId, staffId, startTs, endTs]
+    );
+  }
+
+  return { ok: true };
 }
