@@ -1,6 +1,5 @@
 /* Seans Planlayıcı - kurulum gerektirmeyen statik uygulama */
 
-const STORAGE_KEY = "seans_planner_v1";
 const STORAGE_UI_KEY = "seans_planner_ui";
 // Saat satırı yüksekliği (px) - görünüm ferahlığı
 const CELL_HEIGHT_PX = 64;
@@ -138,34 +137,11 @@ function deepClone(obj) {
   return JSON.parse(JSON.stringify(obj));
 }
 
-function loadState() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) return deepClone(DEFAULT_STATE);
-  try {
-    const parsed = JSON.parse(raw);
-    return {
-      ...deepClone(DEFAULT_STATE),
-      ...parsed,
-      settings: { ...deepClone(DEFAULT_STATE.settings), ...(parsed.settings || {}) },
-      workingHours: { ...deepClone(DEFAULT_STATE.workingHours), ...(parsed.workingHours || {}) },
-      packages: Array.isArray(parsed.packages) ? parsed.packages : deepClone(DEFAULT_STATE.packages),
-      memberPackages: Array.isArray(parsed.memberPackages) ? parsed.memberPackages : deepClone(DEFAULT_STATE.memberPackages),
-    };
-  } catch {
-    return deepClone(DEFAULT_STATE);
-  }
-}
-
-function saveState() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-}
-
-/** API'den gelen veriyi state'e yazar ve localStorage ile eşitler */
+/** API'den gelen veriyi state'e yazar */
 function applyStateFromApi(loaded, sessionRange) {
   state = { ...deepClone(DEFAULT_STATE), ...(loaded || {}) };
   if (!Array.isArray(state.packages)) state.packages = [];
   if (!Array.isArray(state.memberPackages)) state.memberPackages = [];
-  saveState();
   if (sessionRange && sessionRange.startDate && sessionRange.endDate) {
     resetSessionsLoadedRange();
     setSessionsLoadedRange(sessionRange.startDate, sessionRange.endDate);
@@ -468,7 +444,6 @@ async function goToToday() {
   saveUi();
   render();
   if (!isMemberUser() && await ensurePlannerSessionsLoaded()) {
-    saveState();
   render();
   }
   if (isAdminMainViewActive("entry-list")) {
@@ -888,10 +863,11 @@ function updateTopbarFilterPlaceholder() {
 
 function syncPlannerFilterInputs() {
   const val = ui.plannerFilter || "";
-  if (els.plannerFilterInput && els.plannerFilterInput.value !== val) {
+  const active = document.activeElement;
+  if (els.plannerFilterInput && els.plannerFilterInput !== active && els.plannerFilterInput.value !== val) {
     els.plannerFilterInput.value = val;
   }
-  if (els.topbarMobileFilterInput && els.topbarMobileFilterInput.value !== val) {
+  if (els.topbarMobileFilterInput && els.topbarMobileFilterInput !== active && els.topbarMobileFilterInput.value !== val) {
     els.topbarMobileFilterInput.value = val;
   }
 }
@@ -1167,7 +1143,6 @@ function cacheEls() {
     "sessionTime",
     "sessionMember",
     "sessionStaff",
-    "sessionRoom",
     "sessionNote",
     "sessionPackageHint",
     "sessionError",
@@ -1256,11 +1231,9 @@ function cacheEls() {
     "groupSessionNewDate",
     "groupSessionNewTime",
     "groupSessionNewStaff",
-    "groupSessionNewRoom",
     "groupSessionDate",
     "groupSessionTime",
     "groupSessionStaff",
-    "groupSessionRoom",
     "groupSessionMembers",
     "groupSessionNewMemberSelect",
     "groupSessionAddMemberBtn",
@@ -1418,7 +1391,6 @@ async function setWeekStart(d) {
   saveUi();
   render();
   if (!isMemberUser() && await ensurePlannerSessionsLoaded()) {
-    saveState();
   render();
   }
   await refreshEntryListIfActive();
@@ -1430,7 +1402,6 @@ async function setCurrentDay(d) {
   saveUi();
   render();
   if (!isMemberUser() && await ensurePlannerSessionsLoaded()) {
-    saveState();
   render();
   }
   await refreshEntryListIfActive();
@@ -1464,7 +1435,6 @@ async function setViewMode(mode) {
   saveUi();
   render();
   if (!isMemberUser() && await ensurePlannerSessionsLoaded()) {
-    saveState();
   render();
   }
   await refreshEntryListIfActive();
@@ -3870,7 +3840,6 @@ function renderEvents({ startMin, slotMin, slotsCount }) {
             if (window.API.getSessions) {
               try {
                 await refreshSessionsInLoadedRange();
-                saveState();
               } catch (_) {}
             }
             render();
@@ -3879,7 +3848,6 @@ function renderEvents({ startMin, slotMin, slotsCount }) {
         } else {
           state.sessions = state.sessions.filter(x => normId(x.id) !== normId(id));
         }
-        saveState();
         render();
       });
     }
@@ -4061,7 +4029,6 @@ function renderRooms() {
     input.addEventListener("change", () => {
       const v = clamp(Number(input.value || 1), 1, 999);
       r.devices = v;
-      saveState();
       updateRoomsSummary();
       render(); // kapasite değişti
     });
@@ -4073,7 +4040,6 @@ function renderRooms() {
         if (!(await showAppConfirm(`"${r.name}" odasına bağlı seanslar var. Yine de silmek istiyor musunuz?`))) return;
       }
       state.rooms = state.rooms.filter((x) => x.id !== r.id);
-      saveState();
       updateRoomsSummary();
       renderRooms(); // Modal içindeki listeyi yenile
       render(); // Ana görünümü yenile
@@ -4243,7 +4209,6 @@ async function confirmAndDeleteStaffSessionGroup(group) {
       if (window.API.getSessions) {
         try {
           await refreshSessionsInLoadedRange();
-          saveState();
         } catch (_) {}
       }
       render();
@@ -4253,7 +4218,6 @@ async function confirmAndDeleteStaffSessionGroup(group) {
     const idsToRemove = new Set(toRemove.map(function (s) { return normId(s.id); }));
     state.sessions = state.sessions.filter(function (x) { return !idsToRemove.has(normId(x.id)); });
   }
-  saveState();
   render();
   return true;
 }
@@ -4426,7 +4390,6 @@ async function syncSessionsFromServer(opts) {
       }
       replaceSessionsInDateRange(syncRange.startDate, syncRange.endDate, fresh);
       if (changed) {
-      saveState();
         render();
       }
       if (!opts.silent && changed && prevIds.size > 0) {
@@ -4600,7 +4563,6 @@ function applyMemberPortalState(loaded) {
   state.sessions = loaded.sessions || [];
   state.packages = [];
   state.memberPackages = [];
-  saveState();
   if (isMemberUser()) renderMemberPortalPackageSummaries();
 }
 
@@ -4749,7 +4711,15 @@ async function rejectMemberDeletionRequest(memberId) {
     var fetchRange = getPlannerFetchRange();
     var loaded = await window.API.loadFullState(fetchRange);
     applyStateFromApi(loaded, fetchRange);
-    openMemberCard(memberId);
+    var cardOpenForMember = els.memberCardModal &&
+      !els.memberCardModal.classList.contains("hidden") &&
+      normId(ui.editingMemberId) === normId(memberId);
+    if (cardOpenForMember) {
+      openMemberCard(memberId);
+    } else {
+      closeRequestsSubPanel();
+      if (isAdminMembersListViewActive()) await openListMembersModal();
+    }
     render();
     await refreshAdminDeletionRequests();
     await showAppAlert("Üyelik iptal talebi reddedildi.");
@@ -5878,6 +5848,16 @@ function showAdminCalendarView() {
   updateAdminMainViewUI();
 }
 
+function clearPlannerFilters() {
+  ui.plannerFilter = "";
+  ui.filterStaffId = "";
+  ui.filterRoomId = "";
+  if (els.plannerFilterInput) els.plannerFilterInput.value = "";
+  if (els.topbarMobileFilterInput) els.topbarMobileFilterInput.value = "";
+  updatePlannerFiltersToggleState();
+  saveUi();
+}
+
 function showAdminMainView(view) {
   if (!isAdminUser()) return;
   ui.adminMainView = view;
@@ -6035,7 +6015,6 @@ async function openPackageSessionEditorFromPackageList(sessionId) {
         var startD = new Date(Number(firstTs)).toISOString().slice(0, 10);
         var endD = new Date(Number(lastTs)).toISOString().slice(0, 10);
         await fetchAndMergeSessions(startD, endD);
-        saveState();
         s = state.sessions.find(function (x) {
           return normId(x.id) === normId(sessionId);
         });
@@ -6654,6 +6633,7 @@ async function performLogout() {
   } else if (window.API) {
     window.API.removeToken();
   }
+  try { localStorage.removeItem("seans_planner_v1"); } catch (_) {}
   location.reload();
 }
 
@@ -7192,7 +7172,6 @@ async function savePackageFromForm() {
 
   if (els.packagesFormError) els.packagesFormError.classList.add("hidden");
   clearPackageForm();
-  saveState();
   updatePackagesSummary();
   renderPackages();
 }
@@ -7212,7 +7191,6 @@ async function deletePackage(id) {
 
   state.packages = (state.packages || []).filter((x) => x.id !== id);
   if (editingPackageId === id) clearPackageForm();
-  saveState();
   updatePackagesSummary();
   renderPackages();
 }
@@ -7509,7 +7487,6 @@ function saveStaffEdit(staffId) {
     staff.lastName = updated.lastName ?? lastName;
     staff.phone = updated.phone ?? (phone || "");
     staff.email = updated.email ?? email;
-    saveState();
     closeStaffEditModal();
     updateStaffSummary();
     renderStaff();
@@ -7547,7 +7524,6 @@ function saveStaffHours(staffId) {
 
   const applyUpdate = function (updated) {
     staff.workingHours = updated.workingHours ?? newWorkingHours;
-    saveState();
     closeStaffHoursModal();
     updateStaffSummary();
     renderStaff();
@@ -7580,7 +7556,6 @@ async function deleteStaff(staffId) {
   }
 
   state.staff = state.staff.filter((x) => x.id !== staffId);
-  saveState();
   closeStaffEditModal();
   updateStaffSummary();
   renderStaff();
@@ -7957,7 +7932,6 @@ function loadPackageSessionsForModal(mp) {
           var startD = new Date(Number(firstTs)).toISOString().slice(0, 10);
           var endD = new Date(Number(lastTs)).toISOString().slice(0, 10);
           await fetchAndMergeSessions(startD, endD);
-          saveState();
           render();
         }
       } catch (_) {}
@@ -8188,7 +8162,6 @@ async function saveMemberPackageFromForm() {
         state.members.push(created);
         ui.editingMemberId = created.id;
         ui.pendingNewMember = null;
-        saveState();
       } catch (e) {
         if (els.mpFormError) {
           const msg = (e.data && e.data.error) || e.message || "Üye kaydedilemedi.";
@@ -8203,7 +8176,6 @@ async function saveMemberPackageFromForm() {
       state.members.push(newMember);
       ui.editingMemberId = newMember.id;
       ui.pendingNewMember = null;
-      saveState();
     }
   }
 
@@ -8433,7 +8405,6 @@ async function doActualMemberPackageSave(endAfterSaveWithLastSessionDate) {
   window._pendingMemberPackageSave = null;
   if (els.packageInconsistencyModal) els.packageInconsistencyModal.classList.add("hidden");
   closeMemberPackageModal();
-  saveState();
   render();
   if (isAdminUser() && window.API && window.API.getPackageRequests) {
     refreshAdminPackageRequests(false);
@@ -8462,7 +8433,6 @@ async function endMemberPackageFromModal() {
   const idx = (state.memberPackages || []).findIndex((x) => x.id === editingMemberPackageId);
   if (idx !== -1) state.memberPackages[idx] = { ...state.memberPackages[idx], status: "completed", endDate: endDateStr };
   closeMemberPackageModal();
-  saveState();
   render();
   if (ui.editingMemberId) renderMemberPackageHistory(normId(ui.editingMemberId));
 }
@@ -8598,7 +8568,6 @@ async function saveMemberCard() {
       return;
     }
   }
-  saveState();
   closeMemberCardModal();
   render();
 }
@@ -8648,7 +8617,6 @@ async function confirmDeleteMember() {
   state.members = state.members.filter((x) => x.id !== normId(id));
   if (state.memberPackages) state.memberPackages = state.memberPackages.filter((mp) => normId(mp.memberId) !== normId(id));
   if (state.sessions) state.sessions = state.sessions.filter((s) => normId(s.memberId) !== normId(id));
-  saveState();
   closeDeleteMemberModal();
   if (els.memberCardModal && !els.memberCardModal.classList.contains("hidden")) closeMemberCardModal();
   render();
@@ -8662,7 +8630,6 @@ async function deleteMemberFromList(memberId) {
   }
   if (!(await showAppConfirm("Bu üyeyi silmek istiyor musunuz?"))) return;
   state.members = state.members.filter((x) => x.id !== normId(memberId));
-  saveState();
   render();
   if (isAdminMembersListViewActive()) openListMembersModal();
 }
@@ -8675,7 +8642,6 @@ async function deleteMemberCardFromModal() {
   }
   if (!(await showAppConfirm("Bu üyeyi silmek istiyor musunuz?"))) return;
   state.members = state.members.filter((x) => x.id !== normId(ui.editingMemberId));
-  saveState();
   closeMemberCardModal();
   render();
 }
@@ -8746,19 +8712,6 @@ function refreshSessionFormOptions({ dateStr = null, timeStr = null } = {}) {
     els.sessionStaff.appendChild(o);
   }
 
-  // Rooms
-  els.sessionRoom.innerHTML = "";
-  const auto = document.createElement("option");
-  auto.value = "AUTO";
-  auto.textContent = "AUTO (Uygun oda seç)";
-  els.sessionRoom.appendChild(auto);
-  for (const r of state.rooms) {
-    const o = document.createElement("option");
-    o.value = String(Number(r.id));
-    o.textContent = `${r.name} (alet: ${r.devices})`;
-    els.sessionRoom.appendChild(o);
-  }
-
   updateSessionPackageHint();
 }
 
@@ -8811,9 +8764,6 @@ function onSessionFormSlotChange() {
       }
     }
   }
-  if (ui.editingSessionId && els.sessionRoom) {
-    els.sessionRoom.value = "AUTO";
-  }
 }
 
 function bindSessionFormSlotListeners() {
@@ -8826,28 +8776,6 @@ function bindSessionFormSlotListeners() {
   els.sessionTime.addEventListener("change", onSessionFormSlotChange);
   els.sessionDate.addEventListener("input", onSessionFormSlotChange);
   els.sessionTime.addEventListener("input", onSessionFormSlotChange);
-}
-
-function onGroupSessionEditSlotChange() {
-  if (isNewGroupSession) return;
-  if (els.groupSessionRoom) els.groupSessionRoom.value = "AUTO";
-}
-
-function bindGroupSessionEditSlotListeners() {
-  if (!els.groupSessionDate || !els.groupSessionTime) return;
-  unbindGroupSessionEditSlotListeners();
-  els.groupSessionDate.addEventListener("change", onGroupSessionEditSlotChange);
-  els.groupSessionTime.addEventListener("change", onGroupSessionEditSlotChange);
-  els.groupSessionDate.addEventListener("input", onGroupSessionEditSlotChange);
-  els.groupSessionTime.addEventListener("input", onGroupSessionEditSlotChange);
-}
-
-function unbindGroupSessionEditSlotListeners() {
-  if (!els.groupSessionDate || !els.groupSessionTime) return;
-  els.groupSessionDate.removeEventListener("change", onGroupSessionEditSlotChange);
-  els.groupSessionTime.removeEventListener("change", onGroupSessionEditSlotChange);
-  els.groupSessionDate.removeEventListener("input", onGroupSessionEditSlotChange);
-  els.groupSessionTime.removeEventListener("input", onGroupSessionEditSlotChange);
 }
 
 async function openSessionModal({ mode, date, time, sessionId }) {
@@ -8874,7 +8802,6 @@ async function openSessionModal({ mode, date, time, sessionId }) {
     if (els.sessionStaff.options.length > 0) {
       els.sessionStaff.value = els.sessionStaff.options[0].value;
     }
-    els.sessionRoom.value = "AUTO";
   } else {
     const s = state.sessions.find((x) => normId(x.id) === normId(sessionId));
     if (!s) {
@@ -8898,7 +8825,6 @@ async function openSessionModal({ mode, date, time, sessionId }) {
     const memberVal = String(Number(s.memberId));
     if (els.sessionMember.querySelector(`option[value="${memberVal}"]`)) els.sessionMember.value = memberVal;
     els.sessionMember.disabled = true;
-    els.sessionRoom.value = s.roomId || "AUTO";
     els.sessionNote.value = s.note || "";
 
     els.sessionStaff.value = String(Number(s.staffId)); // Seçili personeli koru (option ile eşleşsin)
@@ -8993,20 +8919,6 @@ async function openGroupSessionModal(group, options = {}) {
     }
     if (state.staff.length > 0) els.groupSessionNewStaff.value = String(Number(state.staff[0].id));
 
-    els.groupSessionNewRoom.innerHTML = "";
-    const autoO = document.createElement("option");
-    autoO.value = "AUTO";
-    autoO.textContent = "AUTO (Uygun oda seç)";
-    els.groupSessionNewRoom.appendChild(autoO);
-    for (const r of state.rooms) {
-      const o = document.createElement("option");
-      o.value = String(Number(r.id));
-      o.textContent = `${r.name} (${r.devices} alet)`;
-      els.groupSessionNewRoom.appendChild(o);
-    }
-    els.groupSessionNewRoom.value = "AUTO";
-
-    unbindGroupSessionEditSlotListeners();
     renderGroupSessionMembers();
     els.groupSessionModal.classList.remove("hidden");
     return;
@@ -9025,7 +8937,6 @@ async function openGroupSessionModal(group, options = {}) {
   const dateStr = dateToInputValue(d);
   const timeStr = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
   const staff = getStaffById(firstSession.staffId);
-  const room = getRoomById(firstSession.roomId);
 
   els.groupSessionModalTitle.textContent = `Grup Seans (${currentGroupSessions.length} seans)`;
   els.groupSessionDate.value = dateStr;
@@ -9040,43 +8951,54 @@ async function openGroupSessionModal(group, options = {}) {
   }
   if (firstSession.staffId != null) els.groupSessionStaff.value = String(Number(firstSession.staffId));
 
-  els.groupSessionRoom.innerHTML = "";
-  const autoO = document.createElement("option");
-  autoO.value = "AUTO";
-  autoO.textContent = "AUTO (Uygun oda seç)";
-  els.groupSessionRoom.appendChild(autoO);
-  for (const r of state.rooms) {
-    const o = document.createElement("option");
-    o.value = String(Number(r.id));
-    o.textContent = `${r.name} (${r.devices} alet)`;
-    els.groupSessionRoom.appendChild(o);
-  }
-  if (firstSession.roomId != null) {
-    const roomVal = String(Number(firstSession.roomId));
-    if (els.groupSessionRoom.querySelector(`option[value="${roomVal}"]`)) els.groupSessionRoom.value = roomVal;
-    else els.groupSessionRoom.value = "AUTO";
-  } else els.groupSessionRoom.value = "AUTO";
-
   groupSessionEditOriginal = {
     dateStr: dateStr,
     timeStr: timeStr,
     staffId: firstSession.staffId != null ? String(Number(firstSession.staffId)) : "",
-    roomChoice: els.groupSessionRoom.value,
     startTs: firstSession.startTs,
     endTs: firstSession.endTs,
   };
 
   renderGroupSessionMembers();
-  bindGroupSessionEditSlotListeners();
   els.groupSessionModal.classList.remove("hidden");
 }
 
 function closeGroupSessionModal() {
   els.groupSessionModal.classList.add("hidden");
-  unbindGroupSessionEditSlotListeners();
   currentGroupSessions = [];
   isNewGroupSession = false;
   groupSessionEditOriginal = null;
+}
+
+// Yeni grup seansı oluşturulurken tarih/saat/personel alanları değiştiğinde,
+// zaten listeye eklenmiş üyelerin seans bilgilerini de güncelle.
+function syncNewGroupSessionFieldsChange() {
+  if (!isNewGroupSession || currentGroupSessions.length === 0) return;
+
+  const dateStr = els.groupSessionNewDate?.value;
+  const timeStr = els.groupSessionNewTime?.value;
+  const staffId = els.groupSessionNewStaff?.value;
+  if (!dateStr || !timeStr || !staffId) return;
+
+  const start = makeLocalDate(dateStr, timeStr);
+  const durationMs = currentGroupSessions[0].endTs - currentGroupSessions[0].startTs;
+  const startTs = start.getTime();
+  const endTs = startTs + durationMs;
+
+  const ignoreSessionIds = new Set(currentGroupSessions.map((s) => normId(s.id)));
+  for (const session of currentGroupSessions) {
+    session.startTs = startTs;
+    session.endTs = endTs;
+    session.staffId = staffId;
+  }
+
+  const candidate = { staffId, memberId: currentGroupSessions[0].memberId, roomId: "", startTs, endTs };
+  const roomId = autoAssignRoom(candidate, { ignoreSessionIds });
+  for (const session of currentGroupSessions) {
+    session.roomId = roomId;
+  }
+
+  els.groupSessionError.classList.add("hidden");
 }
 
 function refreshGroupSessionNewMemberSelect() {
@@ -9180,7 +9102,6 @@ async function saveGroupSession() {
       }
     }
     state.sessions.sort((a, b) => a.startTs - b.startTs);
-    saveState();
     if (window.API && window.API.getToken()) {
       await syncSessionsFromServer({ silent: true });
     }
@@ -9189,11 +9110,10 @@ async function saveGroupSession() {
     return;
   }
 
-  // Mevcut grup düzenleme: Tarih/Saat/Personel/Oda güncellemesi + üye listesi senkronu
+  // Mevcut grup düzenleme: Tarih/Saat/Personel güncellemesi + üye listesi senkronu
   const dateStr = els.groupSessionDate && els.groupSessionDate.value ? els.groupSessionDate.value : null;
   const timeStr = els.groupSessionTime && els.groupSessionTime.value ? els.groupSessionTime.value : null;
   let newStaffId = els.groupSessionStaff && els.groupSessionStaff.value ? els.groupSessionStaff.value : null;
-  const roomChoice = els.groupSessionRoom && els.groupSessionRoom.value ? els.groupSessionRoom.value : "AUTO";
 
   let newStartTs = firstSession.startTs;
   let newEndTs = firstSession.endTs;
@@ -9208,8 +9128,7 @@ async function saveGroupSession() {
     const slotChanged = !groupSessionEditOriginal ||
       dateStr !== groupSessionEditOriginal.dateStr ||
       timeStr !== groupSessionEditOriginal.timeStr ||
-      normId(newStaffId) !== normId(groupSessionEditOriginal.staffId) ||
-      roomChoice !== groupSessionEditOriginal.roomChoice;
+      normId(newStaffId) !== normId(groupSessionEditOriginal.staffId);
 
     if (slotChanged) {
       if (window.API && window.API.getToken()) {
@@ -9240,12 +9159,8 @@ async function saveGroupSession() {
         }
       }
 
-      if (roomChoice === "AUTO") {
-        const candidate = { staffId: newStaffId, memberId: firstSession.memberId, roomId: "", startTs: newStartTs, endTs: newEndTs };
-        newRoomId = autoAssignRoom(candidate, { ignoreSessionIds: ignoreGroupIds });
-      } else {
-        newRoomId = roomChoice;
-      }
+      const candidate = { staffId: newStaffId, memberId: firstSession.memberId, roomId: "", startTs: newStartTs, endTs: newEndTs };
+      newRoomId = autoAssignRoom(candidate, { ignoreSessionIds: ignoreGroupIds });
 
       for (const session of currentGroupSessions) {
         const candidate = { memberId: session.memberId, staffId: newStaffId, roomId: newRoomId, startTs: newStartTs, endTs: newEndTs };
@@ -9258,13 +9173,13 @@ async function saveGroupSession() {
       }
     } else {
       newStaffId = newStaffId || String(Number(firstSession.staffId));
-      newRoomId = roomChoice !== "AUTO" ? roomChoice : firstSession.roomId;
+      newRoomId = firstSession.roomId;
       newStartTs = firstSession.startTs;
       newEndTs = firstSession.endTs;
     }
   } else {
     newStaffId = newStaffId || String(Number(firstSession.staffId));
-    newRoomId = roomChoice !== "AUTO" ? roomChoice : firstSession.roomId;
+    newRoomId = firstSession.roomId;
   }
 
   els.groupSessionError.classList.add("hidden");
@@ -9363,7 +9278,6 @@ async function saveGroupSession() {
   }
 
   state.sessions.sort((a, b) => a.startTs - b.startTs);
-  saveState();
   if (window.API && window.API.getToken()) {
     await syncSessionsFromServer({ silent: true });
   }
@@ -9395,7 +9309,6 @@ async function saveSessionFromModal() {
     return;
   }
   const staffId = els.sessionStaff.value;
-  const roomChoice = els.sessionRoom.value;
   const note = els.sessionNote.value || "";
 
   if (!dateStr || !timeStr) {
@@ -9463,18 +9376,15 @@ async function saveSessionFromModal() {
     : null;
   const slotChanged = !existingSession ||
     candidateBase.startTs !== existingSession.startTs ||
-    normId(staffId) !== normId(existingSession.staffId) ||
-    (roomChoice !== "AUTO" && normId(roomChoice) !== normId(existingSession.roomId));
+    normId(staffId) !== normId(existingSession.staffId);
 
   if (slotChanged && window.API && window.API.getToken()) {
     await ensureDaySessionsLoaded(dateStr);
   }
 
-  let roomId = roomChoice;
-  if (slotChanged && roomChoice === "AUTO") {
+  let roomId;
+  if (slotChanged) {
     roomId = autoAssignRoom(candidateBase, { ignoreSessionId });
-  } else if (slotChanged && roomChoice !== "AUTO") {
-    roomId = roomChoice;
   } else if (existingSession) {
     roomId = existingSession.roomId;
   }
@@ -9536,7 +9446,6 @@ async function saveSessionFromModal() {
   }
 
   state.sessions.sort((a, b) => a.startTs - b.startTs);
-  saveState();
   if (window.API && window.API.getToken()) {
     await syncSessionsFromServer({ silent: true });
   }
@@ -9575,7 +9484,6 @@ async function deleteSessionFromModal() {
       if (window.API.getSessions) {
         try {
           await refreshSessionsInLoadedRange();
-          saveState();
         } catch (_) {}
       }
       render();
@@ -9584,7 +9492,6 @@ async function deleteSessionFromModal() {
   } else {
     state.sessions = state.sessions.filter((s) => s.id !== ui.editingSessionId);
   }
-  saveState();
   closeSessionModal();
   render();
 }
@@ -10594,7 +10501,6 @@ async function importJsonFile(file) {
   }
 
   state = next;
-  saveState();
   render();
 }
 
@@ -10602,7 +10508,6 @@ async function resetAll() {
   const ok = await showAppConfirm("Tüm veriler silinecek. Emin misiniz?");
   if (!ok) return;
   state = deepClone(DEFAULT_STATE);
-  saveState();
   setWeekStart(new Date());
   render();
 }
@@ -10633,41 +10538,52 @@ function bindEvents() {
   if (els.plannerFiltersToggle) {
     els.plannerFiltersToggle.addEventListener("click", togglePlannerFiltersPanel);
   }
-  if (els.plannerFilterInput) {
-    els.plannerFilterInput.addEventListener("input", () => {
-      ui.plannerFilter = (els.plannerFilterInput.value || "").trim();
-      syncPlannerFilterInputs();
-      updatePlannerFiltersToggleState();
+  var plannerFilterDebounceTimer = null;
+  function applyPlannerFilterNow(extra) {
+    clearTimeout(plannerFilterDebounceTimer);
+    plannerFilterDebounceTimer = null;
+    if (extra) extra();
+    refreshAdminListPanels();
+    render();
+  }
+  function applyPlannerFilterDebounced() {
+    clearTimeout(plannerFilterDebounceTimer);
+    plannerFilterDebounceTimer = setTimeout(function () {
+      plannerFilterDebounceTimer = null;
       refreshAdminListPanels();
       render();
+    }, 200);
+  }
+  if (els.plannerFilterInput) {
+    els.plannerFilterInput.addEventListener("input", () => {
+      ui.plannerFilter = els.plannerFilterInput.value || "";
+      syncPlannerFilterInputs();
+      updatePlannerFiltersToggleState();
+      applyPlannerFilterDebounced();
     });
     els.plannerFilterInput.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
         ui.plannerFilter = "";
         syncPlannerFilterInputs();
         updatePlannerFiltersToggleState();
-        refreshAdminListPanels();
-        render();
+        applyPlannerFilterNow();
       }
     });
   }
   if (els.topbarMobileFilterInput) {
     els.topbarMobileFilterInput.addEventListener("input", () => {
-      ui.plannerFilter = (els.topbarMobileFilterInput.value || "").trim();
+      ui.plannerFilter = els.topbarMobileFilterInput.value || "";
       syncPlannerFilterInputs();
       updatePlannerFiltersToggleState();
       saveUi();
-      refreshAdminListPanels();
-      render();
+      applyPlannerFilterDebounced();
     });
     els.topbarMobileFilterInput.addEventListener("keydown", (e) => {
       if (e.key === "Escape") {
         ui.plannerFilter = "";
         syncPlannerFilterInputs();
         updatePlannerFiltersToggleState();
-        saveUi();
-        refreshAdminListPanels();
-        render();
+        applyPlannerFilterNow(saveUi);
       }
     });
   }
@@ -10695,7 +10611,6 @@ function bindEvents() {
       saveUi();
       render();
       if (!isMemberUser() && await ensurePlannerSessionsLoaded()) {
-        saveState();
         render();
       }
       await refreshEntryListIfActive();
@@ -10711,7 +10626,6 @@ function bindEvents() {
       saveUi();
       render();
       if (!isMemberUser() && await ensurePlannerSessionsLoaded()) {
-        saveState();
         render();
       }
       await refreshEntryListIfActive();
@@ -10870,7 +10784,6 @@ function bindEvents() {
     els.newRoomName.value = "";
     els.newRoomDevices.value = "1";
     els.roomsError.classList.add("hidden");
-    saveState();
     updateRoomsSummary();
     renderRooms();
     render();
@@ -10954,7 +10867,6 @@ function bindEvents() {
     els.newStaffPhone.value = "";
     if (els.newStaffEmail) els.newStaffEmail.value = "";
     els.staffError.classList.add("hidden");
-    saveState();
     updateStaffSummary();
     renderStaff();
     render();
@@ -11169,7 +11081,6 @@ function bindEvents() {
       const dateStr = els.groupSessionNewDate?.value;
       const timeStr = els.groupSessionNewTime?.value;
       staffId = els.groupSessionNewStaff?.value;
-      const roomChoice = els.groupSessionNewRoom?.value;
       if (!dateStr || !timeStr || !staffId) {
         els.groupSessionError.textContent = "Tarih, saat ve personel seçin.";
         els.groupSessionError.classList.remove("hidden");
@@ -11206,12 +11117,8 @@ function bindEvents() {
           return;
         }
       }
-      if (roomChoice === "AUTO") {
-        const candidateBase = { startTs, endTs, staffId, memberId: availableMember.id, roomId: "", note: "" };
-        roomId = autoAssignRoom(candidateBase, { ignoreSessionId: null });
-      } else {
-        roomId = roomChoice;
-      }
+      const candidateBase = { startTs, endTs, staffId, memberId: availableMember.id, roomId: "", note: "" };
+      roomId = autoAssignRoom(candidateBase, { ignoreSessionId: null });
     } else {
       const firstSession = currentGroupSessions[0];
       if (!firstSession) return;
@@ -11242,6 +11149,10 @@ function bindEvents() {
     renderGroupSessionMembers();
     els.groupSessionError.classList.add("hidden");
   });
+  if (els.groupSessionNewDate) els.groupSessionNewDate.addEventListener("change", syncNewGroupSessionFieldsChange);
+  if (els.groupSessionNewTime) els.groupSessionNewTime.addEventListener("change", syncNewGroupSessionFieldsChange);
+  if (els.groupSessionNewStaff) els.groupSessionNewStaff.addEventListener("change", syncNewGroupSessionFieldsChange);
+
   els.saveGroupSessionBtn.addEventListener("click", saveGroupSession);
   
   window.addEventListener("keydown", (e) => {
@@ -11252,7 +11163,11 @@ function bindEvents() {
       if (els.staffEditModal && !els.staffEditModal.classList.contains("hidden")) closeStaffEditModal();
       if (els.staffHoursModal && !els.staffHoursModal.classList.contains("hidden")) closeStaffHoursModal();
       if (!els.taskDistributionModal.classList.contains("hidden")) closeTaskDistributionModal();
-      if (isAdminPanelViewActive()) showAdminCalendarView();
+      if (isAdminPanelViewActive()) {
+        clearPlannerFilters();
+        showAdminCalendarView();
+        render();
+      }
       if (!els.groupSessionModal.classList.contains("hidden")) closeGroupSessionModal();
       if (els.memberPortalSessionsModal && !els.memberPortalSessionsModal.classList.contains("hidden")) closeMemberPortalSessionsModal();
       if (els.memberSessionCancelModal && !els.memberSessionCancelModal.classList.contains("hidden")) closeMemberSessionCancelModal();
@@ -11399,7 +11314,6 @@ async function saveWorkingHours() {
       console.error("Çalışma saatleri kaydedilemedi:", e);
     }
   }
-  saveState();
   updateWorkingHoursSummary();
   render();
 }
@@ -11600,24 +11514,6 @@ function ensureAppInit() {
   appDidInit = true;
 }
 
-/** Giriş yapılmışsa rol iskeletini hazırlar; tam init/render API verisi gelene kadar ertelenir (PERF-06) */
-function showCachedAppShell() {
-  if (!window.API || !window.API.getToken()) return false;
-  applyOptimisticRoleFromSession();
-  return true;
-}
-
-function applyOptimisticRoleFromSession() {
-  var lastRole = null;
-  try {
-    lastRole = sessionStorage.getItem(LAST_ROLE_KEY);
-  } catch (_) {}
-  if (lastRole === "member" || lastRole === "admin" || lastRole === "staff") {
-    ui.currentUser = { role: lastRole };
-    updateSidebarForRole();
-  }
-}
-
 function prefetchStateForRole(role) {
   if (!window.API) return null;
   if (role === "member" && window.API.loadMemberPortalState) {
@@ -11652,21 +11548,14 @@ function init() {
 
 document.addEventListener("DOMContentLoaded", async function () {
   cacheEls();
-  state = loadState();
+  try { localStorage.removeItem("seans_planner_v1"); } catch (_) {}
 
   if (!window.API || !window.API.getToken()) {
     queueAfterSplash(showLoginOverlay);
     return;
   }
 
-  var hadCache = !!localStorage.getItem(STORAGE_KEY);
-  if (!hadCache) {
-    applyOptimisticRoleFromSession();
-  }
   setAppBooting(true);
-  if (hadCache) {
-    showCachedAppShell();
-  }
 
   try {
     var lastRole = sessionStorage.getItem(LAST_ROLE_KEY);
@@ -11713,10 +11602,10 @@ document.addEventListener("DOMContentLoaded", async function () {
       return;
     }
     if (!appDidInit) {
-      state = loadState();
       ensureAppInit();
     }
     updateSidebarForRole();
+    showAppAlert("Veriler yüklenemedi. Lütfen sayfayı yenileyin.");
   }
   setAppBooting(false);
   markSplashAppReady();
