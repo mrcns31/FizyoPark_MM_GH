@@ -760,6 +760,7 @@ let ui = {
   pendingNewMember: null, // Yeni üye: paket kaydedilene kadar DB'ye yazılmaz; Vazgeç = iptal
   currentUser: null, // { role, username, ... } – giriş yapan kullanıcı
   legalLinks: null, // KVKK / yasal sayfa URL'leri (GET /auth/legal-links sonucu)
+  adminAccountLegalLinksLoaded: false, // hesap ekranı: yasal link alanları başarıyla yüklendi mi (kaydetmede kullanılır)
   memberPortal: null, // üye girişi: dashboard verisi
   packageRequests: [], // admin: bekleyen paket talepleri
   deletionRequests: [], // admin: bekleyen üyelik iptal talepleri
@@ -6282,6 +6283,7 @@ async function openAdminAccountScreen() {
   var legalLinksWrap = document.getElementById("adminAccountLegalLinksWrap");
   var showLegalLinks = canManageInstitutionWhatsapp();
   if (legalLinksWrap) legalLinksWrap.classList.toggle("hidden", !showLegalLinks);
+  ui.adminAccountLegalLinksLoaded = false;
   if (showLegalLinks && window.API && window.API.getLegalLinks) {
     try {
       var legalLinks = await window.API.getLegalLinks();
@@ -6295,8 +6297,9 @@ async function openAdminAccountScreen() {
         var input = document.getElementById(inputId);
         if (input) input.value = (legalLinks && legalLinks[legalFieldMap[inputId]]) || "";
       });
+      ui.adminAccountLegalLinksLoaded = true;
     } catch (e) {
-      /* yüklenemezse alanlar boş kalır, kaydetmede mevcut değerler korunur */
+      /* yüklenemezse alanlar boş kalır; kaydetmede legalLinks gönderilmez, mevcut değerler korunur */
     }
   }
 
@@ -6385,7 +6388,7 @@ function bindAdminAccountScreen() {
     if (canManageInstitutionWhatsapp() && whatsappEl) {
       payload.whatsapp = whatsappEl.value.trim();
     }
-    if (canManageInstitutionWhatsapp()) {
+    if (canManageInstitutionWhatsapp() && ui.adminAccountLegalLinksLoaded) {
       payload.legalLinks = {
         privacyPolicyUrl: (document.getElementById("adminAccountPrivacyPolicyUrl") || {}).value || "",
         explicitConsentUrl: (document.getElementById("adminAccountExplicitConsentUrl") || {}).value || "",
