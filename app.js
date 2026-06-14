@@ -759,6 +759,7 @@ let ui = {
   deleteMemberId: null,  // Üye silme modalında silinecek üye id
   pendingNewMember: null, // Yeni üye: paket kaydedilene kadar DB'ye yazılmaz; Vazgeç = iptal
   currentUser: null, // { role, username, ... } – giriş yapan kullanıcı
+  legalLinks: null, // KVKK / yasal sayfa URL'leri (GET /auth/legal-links sonucu)
   memberPortal: null, // üye girişi: dashboard verisi
   packageRequests: [], // admin: bekleyen paket talepleri
   deletionRequests: [], // admin: bekleyen üyelik iptal talepleri
@@ -6616,6 +6617,112 @@ function bindPasswordChangeScreen() {
       if (btn) btn.disabled = false;
     }
   });
+}
+
+function openLegalConsentScreen(onAccepted) {
+  var screen = document.getElementById("legalConsentScreen");
+  if (!screen) {
+    if (typeof onAccepted === "function") onAccepted();
+    return;
+  }
+
+  bindLegalConsentScreen(onAccepted);
+  applyLegalLinksToDom();
+
+  var form = document.getElementById("legalConsentForm");
+  var checkbox = document.getElementById("legalConsentCheckbox");
+  var errEl = document.getElementById("legalConsentError");
+  if (form) form.reset();
+  if (checkbox) checkbox.checked = false;
+  if (errEl) {
+    errEl.classList.add("hidden");
+    errEl.textContent = "";
+  }
+
+  screen.classList.remove("hidden");
+  screen.setAttribute("aria-hidden", "false");
+
+  var main = document.getElementById("mainApp");
+  if (main) main.style.visibility = "hidden";
+}
+
+function closeLegalConsentScreen() {
+  var screen = document.getElementById("legalConsentScreen");
+  if (screen) {
+    screen.classList.add("hidden");
+    screen.setAttribute("aria-hidden", "true");
+  }
+  var main = document.getElementById("mainApp");
+  if (main) main.style.visibility = "";
+}
+
+function bindLegalConsentScreen(onAccepted) {
+  var form = document.getElementById("legalConsentForm");
+  var errEl = document.getElementById("legalConsentError");
+  var checkbox = document.getElementById("legalConsentCheckbox");
+  var submitBtn = document.getElementById("legalConsentSubmitBtn");
+  if (!form || !window.API) return;
+
+  form.onsubmit = async function (ev) {
+    ev.preventDefault();
+    if (errEl) {
+      errEl.classList.add("hidden");
+      errEl.textContent = "";
+    }
+    if (!checkbox || !checkbox.checked) {
+      if (errEl) {
+        errEl.textContent = "Devam etmek için onay kutusunu işaretleyin.";
+        errEl.classList.remove("hidden");
+      }
+      return;
+    }
+    if (submitBtn) submitBtn.disabled = true;
+    try {
+      await window.API.acceptConsent();
+      closeLegalConsentScreen();
+      if (typeof onAccepted === "function") onAccepted();
+    } catch (e) {
+      if (errEl) {
+        errEl.textContent = "Onayınız kaydedilemedi. Lütfen internet bağlantınızı kontrol edip tekrar deneyin.";
+        errEl.classList.remove("hidden");
+      }
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
+    }
+  };
+}
+
+function applyLegalLinksToDom() {
+  var links = ui.legalLinks || {};
+  var map = {
+    legalConsentLinkPrivacy: links.privacyPolicyUrl,
+    legalConsentLinkExplicitConsent: links.explicitConsentUrl,
+    legalConsentLinkTerms: links.termsOfUseUrl,
+    legalConsentLinkCookie: links.cookiePolicyUrl,
+    loginFooterLinkPrivacy: links.privacyPolicyUrl,
+    loginFooterLinkExplicitConsent: links.explicitConsentUrl,
+    loginFooterLinkTerms: links.termsOfUseUrl,
+    loginFooterLinkCookie: links.cookiePolicyUrl,
+  };
+  Object.keys(map).forEach(function (id) {
+    var url = map[id];
+    if (!url) return;
+    var el = document.getElementById(id);
+    if (el) el.setAttribute("href", url);
+  });
+}
+
+async function loadLegalLinks() {
+  if (!window.API || !window.API.getLegalLinks) return;
+  try {
+    var links = await window.API.getLegalLinks();
+    if (links) {
+      ui.legalLinks = links;
+      applyLegalLinksToDom();
+    }
+  } catch (e) {
+    /* ağ hatası: varsayılan href'ler (HTML'deki) kullanılır */
+  }
 }
 
 async function performLogout() {
