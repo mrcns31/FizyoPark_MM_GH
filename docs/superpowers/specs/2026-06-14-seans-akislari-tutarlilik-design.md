@@ -27,23 +27,48 @@ hem gereksiz hem de tutarsız:
 - `needsServerRebalance` / `needsServerRebalanceSingle` flag'leri karmaşık,
   birbirinden bağımsız üç yerde set ediliyor ve `syncSessionsFromServer`
   çağrısını koşullu yapıyor.
+- "Seçilen personel bu saat aralığında 'X' odada seanslı, aynı anda farklı
+  oda olmaz" (`__MULTI__`) uyarısı, personelin **hangi odada** olduğunu
+  önemli sayıyor — ama gerçek kural personel/oda eşleşmesiyle ilgili değil,
+  sadece merkezdeki toplam alet sayısıyla ilgili (bkz. aşağıdaki "Asıl İş
+  Kuralı").
+
+### Asıl İş Kuralı
+
+Merkezdeki tüm randevular tek bir kavram (ayrı bir "grup seansı" yok).
+Kısıtlar:
+
+- Merkezde N oda var, her odanın `devices` (alet) kapasitesi var
+  (örnek: 3 oda, kapasiteler 3 + 3 + 2 = toplam 8 alet).
+- Aynı anda bir odada yalnızca bir personel çalışabilir.
+- Bir personel, aynı saatte, **kendisine atanan odanın kapasitesi kadar**
+  üye alabilir.
+- Hangi personelin hangi odada olduğu **önemsizdir** — backend bunu
+  `rebalanceSlotRooms` ile optimize eder/değiştirebilir.
+- O saatteki toplam randevu sayısı, merkezdeki toplam alet sayısını (8)
+  aşamaz; aşarsa (ve rebalance ile çözülemiyorsa) backend 409 ile
+  "Bu saatte toplam oda kapasitesi yetersiz." döner.
+
+Bu kural zaten `backend/utils/sessionSlot.js`'teki `matchStaffToRooms` +
+`rebalanceSlotRooms` + `placeSessionWithRebalance` tarafından doğru
+şekilde uygulanıyor (bkz. [[2026-06-14-oda-dengeleme-design]]) — backend'de
+değişiklik gerekmiyor. Sorun sadece frontend'in bu kuralı kendi başına
+(yanlış ve daha kısıtlayıcı şekilde, personel-oda eşleşmesi üzerinden)
+tekrar uygulamaya çalışması.
 
 ## Çözüm: Kapasite Kontrolünü Backend'e Devret
 
 ### Yeni ortak prensip
 
-Frontend artık **oda kapasitesi** ve **odada başka personel var mı**
-kontrollerini yapmaz/engellemez. Bunlar backend'in `validateRoomForSession`
-+ `rebalanceSlotRooms` mekanizmasına bırakılır. Frontend sadece backend'in
-kontrol etmediği/edemediği iki şeyi kontrol eder:
+Frontend artık **oda kapasitesi**, **odada başka personel var mı** ve
+**personel hangi odada seanslı** kontrollerini yapmaz/engellemez. Bunların
+hepsi backend'in `validateRoomForSession` + `rebalanceSlotRooms`
+mekanizmasına bırakılır — personel/oda eşleşmesi tamamen backend'in
+optimize edebileceği bir detaydır. Frontend sadece backend'in
+kontrol etmediği/edemediği tek şeyi kontrol eder:
 
 1. **Üye çift kaydı (member-conflict):** seçilen üye bu saat aralığında
    zaten başka bir seansta mı?
-2. **Personel farklı odada seanslı uyarısı:** personel aynı saat aralığında
-   zaten başka (farklı) bir odada seanslıysa, kullanıcıya bilgi verilir
-   (`__MULTI__` durumu hariç — bu hâlâ engelleyici bir uyarı, çünkü tek
-   personel/oda kuralının istemci tarafından tutarsız bir önceki duruma
-   işaret eder).
 
 Çalışma saati kontrolleri (genel + personel) değişmeden kalır — bunlar
 backend'de de var ama frontend'de anlık geri bildirim için tutulur.
@@ -54,19 +79,23 @@ backend'de de var ama frontend'de anlık geri bildirim için tutulur.
 
 - Kapasite kontrolü (`count >= room.devices`) → **kaldırılır**.
 - "Odada başka personel var" kontrolü → **kaldırılır**.
-- Member-conflict kontrolü → **korunur**.
-- `getStaffBusyRoomId` ile `__MULTI__` / farklı-oda uyarısı → **korunur**.
+- `getStaffBusyRoomId` ile `__MULTI__` / farklı-oda uyarısı → **kaldırılır**
+  (personelin hangi odada olduğu önemsiz; bu artık ne bir uyarı ne bir
+  engel).
+- Member-conflict kontrolü → **korunur** (tek kalan kontrol).
 
 ### `autoAssignRoom` sadeleştirmesi
 
 `autoAssignRoom(candidate, opts)` yeni davranışı:
 
-1. `getStaffBusyRoomId` ile personelin bu saatte zaten kullandığı bir oda
-   varsa (`__MULTI__` değilse) onu döndür.
-2. Yoksa `state.rooms[0]?.id` döndür (ilk oda — kapasite kontrolü yapılmaz,
-   backend zaten gerçek atamayı/rebalance'ı yapacak).
-3. `state.rooms` boşsa `null` döndürür (oda hiç tanımlı değilse — bu durumda
+1. `state.rooms[0]?.id` döndür (ilk oda — hangi oda olduğu önemsiz, backend
+   zaten gerçek atamayı/rebalance'ı yapacak).
+2. `state.rooms` boşsa `null` döndürür (oda hiç tanımlı değilse — bu durumda
    zaten backend de hata döner).
+
+`getStaffBusyRoomId` çağrısı kaldırılır — personelin "meşgul olduğu oda"
+artık anlamsız bir kavram, backend rebalance ile personeli farklı bir
+odaya da taşıyabilir.
 
 Bu fonksiyon artık `null` döndürmez (rooms boş olmadığı sürece), dolayısıyla
 "hiçbir oda uymuyor" fallback dallarına ihtiyaç kalmaz.
@@ -81,10 +110,11 @@ izler:
 3. Oda seçimi:
    - Manuel seçildiyse → o `roomId` kullanılır.
    - AUTO ise → `autoAssignRoom` çağrılır (her zaman bir roomId döner).
-4. `checkConflicts` (sadece member-conflict + personel-farklı-oda uyarısı).
-   Herhangi bir conflict varsa → engelle, hata göster.
+4. `checkConflicts` (sadece member-conflict). Conflict varsa → engelle,
+   hata göster.
 5. API'ye gönder (`createSession` / `updateSession`). Backend 409 ile
-   kapasite/rebalance hatası dönerse, o mesaj kullanıcıya gösterilir.
+   kapasite/rebalance hatası dönerse, o mesaj kullanıcıya gösterilir
+   (örn. "Bu saatte toplam oda kapasitesi yetersiz.").
 6. Başarılı kayıt sonrası → **her zaman** `syncSessionsFromServer({ silent: true })`
    çağrılır (rebalance backend'de başka seansların `room_id`'sini
    değiştirmiş olabilir; state güncel tutulmalı).
@@ -106,9 +136,8 @@ izler:
 
 ### 1. Tekli Seans Ekle/Düzenle (`saveSessionFromModal`, ~9475-9684)
 
-- `getStaffBusyRoomId` + `autoAssignRoom` çağrıları `autoAssignRoom`'un yeni
-  haliyle birleştirilir (busy-room mantığı zaten `autoAssignRoom` içine
-  taşındı, ayrı çağrıya gerek yok).
+- `getStaffBusyRoomId` çağrısı kaldırılır; AUTO modda doğrudan
+  `autoAssignRoom`'un yeni (sadeleşmiş) hali kullanılır.
 - `needsServerRebalanceSingle` kaldırılır; `checkConflicts` her zaman
   çağrılır (adım 4).
 - Kayıt sonrası her zaman `syncSessionsFromServer({ silent: true })`
@@ -131,10 +160,11 @@ izler:
 ### 3. Grup Seansına Üye Ekle (handler, ~11291-11407)
 
 - `autoAssignRoom` çağrısı yeni haliyle her zaman bir roomId döner; `picked
-  || state.rooms[0]` fallback'ine gerek kalmaz.
+  || state.rooms[0]` fallback'ine gerek kalmaz (zaten az önce eklenen
+  fallback bu yeni davranışla gereksiz hale gelir, kaldırılır).
 - `overCapacity` hesaplaması ve `needsServerRebalance: overCapacity` alanı
   kaldırılır.
-- Direkt `checkConflicts` çağrılır (member-conflict + personel-farklı-oda).
+- Direkt `checkConflicts` çağrılır (sadece member-conflict).
 - Not: Bu handler `currentGroupSessions`'a ekleme yapıyor, API çağrısı
   `saveGroupSession`'da gerçekleşiyor — bu adımda API çağrısı/sync yok,
   sadece local state.
@@ -162,8 +192,13 @@ izler:
   `saveGroupSession` sırasında backend her seans için rebalance dener.
 - **Aynı üye aynı saate ikinci kez eklenmeye çalışılırsa:** `checkConflicts`
   member-conflict ile engeller (değişmedi).
-- **Personel aynı saatte farklı odada seanslıysa (`__MULTI__`):** uyarı
-  gösterilir (değişmedi).
+- **Personel aynı saatte farklı odada seanslı (eski `__MULTI__` durumu):**
+  artık ne uyarı ne engel — backend rebalance personeli gerekirse farklı
+  bir odaya taşır, sonuç `syncSessionsFromServer` ile state'e yansır.
 - **Grup düzenleme — slot değişmedi, oda artık dolu:** Eskiden sessizce
   `needsServerRebalance=true` olurdu; yeni davranışta kayıt backend'e
   gönderilir, backend rebalance dener veya 409 döner.
+- **Toplam talep > toplam alet sayısı (örn. 9. randevu, 8 alet varken):**
+  `placeSessionWithRebalance` / `rebalanceSlotRooms` infeasible döner,
+  backend 409 + "Bu saatte toplam oda kapasitesi yetersiz." döner; frontend
+  bu mesajı kullanıcıya gösterir.
