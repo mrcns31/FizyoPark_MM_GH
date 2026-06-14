@@ -147,6 +147,37 @@ router.get('/me', verifyToken, async (req, res) => {
   }
 });
 
+// KVKK onayını kaydet
+router.post('/consent', verifyToken, async (req, res) => {
+  try {
+    const ip = req.ip || (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || null;
+    await recordConsent(req.user.userId, ip);
+    await activityLog(req, {
+      action: 'auth.consent_accept',
+      entityType: 'user',
+      entityId: req.user.userId,
+      actorId: req.user.userId,
+      actorType: 'user',
+      details: { consentVersion: CONSENT_VERSION },
+    }).catch(() => {});
+    res.json({ consentRequired: false, consentVersion: CONSENT_VERSION });
+  } catch (error) {
+    console.error('Consent accept error:', error);
+    res.status(500).json({ error: 'Onayınız kaydedilemedi' });
+  }
+});
+
+// Yasal sayfa bağlantıları (herkese açık — onay ekranı ve giriş sayfası için)
+router.get('/legal-links', async (req, res) => {
+  try {
+    const links = await getLegalLinks();
+    res.json(links);
+  } catch (error) {
+    console.error('Legal links get error:', error);
+    res.status(500).json({ error: 'Bağlantılar alınırken hata oluştu' });
+  }
+});
+
 // İlk girişte şifre belirleme (must_change_password=true iken)
 router.post('/set-password', verifyToken, [
   body('newPassword').isLength({ min: 4 }).withMessage('Şifre en az 4 karakter olmalı'),
