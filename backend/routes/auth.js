@@ -4,6 +4,7 @@ import bcrypt from 'bcrypt';
 import { body, validationResult } from 'express-validator';
 import db from '../config/database.js';
 import { log as activityLog } from '../utils/activityLogger.js';
+import { CONSENT_VERSION, getConsentStatus, getLegalLinks, setLegalLinks, recordConsent } from '../utils/legalConsent.js';
 
 const router = express.Router();
 
@@ -108,7 +109,10 @@ router.post('/login', [
 
     res.json({
       token,
-      user: buildUserProfile(user)
+      user: {
+        ...buildUserProfile(user),
+        ...(await getConsentStatus(user.id)),
+      },
     });
   } catch (error) {
     console.error('Login error:', error);
@@ -133,7 +137,10 @@ router.get('/me', verifyToken, async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
     }
-    res.json(buildUserProfile(result.rows[0]));
+    res.json({
+      ...buildUserProfile(result.rows[0]),
+      ...(await getConsentStatus(req.user.userId)),
+    });
   } catch (error) {
     console.error('Auth me error:', error);
     res.status(500).json({ error: 'Kullanıcı bilgisi alınırken hata oluştu' });
