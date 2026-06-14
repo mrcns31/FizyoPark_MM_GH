@@ -6279,6 +6279,27 @@ async function openAdminAccountScreen() {
     }
   }
 
+  var legalLinksWrap = document.getElementById("adminAccountLegalLinksWrap");
+  var showLegalLinks = canManageInstitutionWhatsapp();
+  if (legalLinksWrap) legalLinksWrap.classList.toggle("hidden", !showLegalLinks);
+  if (showLegalLinks && window.API && window.API.getLegalLinks) {
+    try {
+      var legalLinks = await window.API.getLegalLinks();
+      var legalFieldMap = {
+        adminAccountPrivacyPolicyUrl: "privacyPolicyUrl",
+        adminAccountExplicitConsentUrl: "explicitConsentUrl",
+        adminAccountTermsUrl: "termsOfUseUrl",
+        adminAccountCookiePolicyUrl: "cookiePolicyUrl",
+      };
+      Object.keys(legalFieldMap).forEach(function (inputId) {
+        var input = document.getElementById(inputId);
+        if (input) input.value = (legalLinks && legalLinks[legalFieldMap[inputId]]) || "";
+      });
+    } catch (e) {
+      /* yüklenemezse alanlar boş kalır, kaydetmede mevcut değerler korunur */
+    }
+  }
+
   screen.classList.remove("hidden");
   screen.setAttribute("aria-hidden", "false");
   bindPasswordVisibilityToggles(screen);
@@ -6364,6 +6385,14 @@ function bindAdminAccountScreen() {
     if (canManageInstitutionWhatsapp() && whatsappEl) {
       payload.whatsapp = whatsappEl.value.trim();
     }
+    if (canManageInstitutionWhatsapp()) {
+      payload.legalLinks = {
+        privacyPolicyUrl: (document.getElementById("adminAccountPrivacyPolicyUrl") || {}).value || "",
+        explicitConsentUrl: (document.getElementById("adminAccountExplicitConsentUrl") || {}).value || "",
+        termsOfUseUrl: (document.getElementById("adminAccountTermsUrl") || {}).value || "",
+        cookiePolicyUrl: (document.getElementById("adminAccountCookiePolicyUrl") || {}).value || "",
+      };
+    }
     if (newPw) {
       payload.currentPassword = current;
       payload.newPassword = newPw;
@@ -6376,6 +6405,10 @@ function bindAdminAccountScreen() {
       if (result && result.user) {
         ui.currentUser = result.user;
         syncCurrentUserProfile();
+      }
+      if (result && result.legalLinks) {
+        ui.legalLinks = result.legalLinks;
+        applyLegalLinksToDom();
       }
       closeAdminAccountScreen();
       fillAdminProfileModal();
