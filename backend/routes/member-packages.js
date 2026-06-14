@@ -7,6 +7,7 @@ import { log as activityLog } from '../utils/activityLogger.js';
 import { ATTENDANCE_JOIN_SQL } from '../utils/sessionAttendance.js';
 import { loadStaffMap, sessionToDto } from '../utils/memberPackageDto.js';
 import { fulfillPendingPackageRequestsForMember } from './package-requests.js';
+import { localDateStrFromTs } from '../utils/staffWorkingHours.js';
 
 const router = express.Router();
 router.use(verifyToken);
@@ -56,7 +57,7 @@ export function computeEndDateForLessonCount(startDate, slots, lessonCount) {
     for (const slot of slots) {
       if (Number(slot.day_of_week) !== dayOfWeek) continue;
       count += 1;
-      lastDateStr = d.toISOString().slice(0, 10);
+      lastDateStr = localDateStrFromTs(d.getTime());
       break;
     }
   }
@@ -88,7 +89,7 @@ async function backfillMissingPackageSessions(db, mpId, memberId, startDate, end
   if (lastRes.rows[0]?.start_ts) {
     const lastDate = new Date(Number(lastRes.rows[0].start_ts));
     lastDate.setDate(lastDate.getDate() + 1);
-    genStart = lastDate.toISOString().slice(0, 10);
+    genStart = localDateStrFromTs(lastDate.getTime());
   }
   if (genStart > effectiveEndDate) return { conflicts: [], sessionsCreated: 0 };
 
@@ -127,7 +128,7 @@ function buildPackageSessionInsertPlan(startDate, endDate, slots, limit, { membe
         end_ts: startTs + SLOT_DURATION_MS,
         member_package_id: mpId,
         start_time: slot.start_time,
-        dateStr: d.toISOString().slice(0, 10),
+        dateStr: localDateStrFromTs(startTs),
         day_of_week: dayOfWeek,
       });
     }
@@ -707,7 +708,7 @@ router.put('/:id', [
             if (lastRes.rows[0]?.start_ts) {
               const lastDate = new Date(Number(lastRes.rows[0].start_ts));
               lastDate.setDate(lastDate.getDate() + 1);
-              genStart = lastDate.toISOString().slice(0, 10);
+              genStart = localDateStrFromTs(lastDate.getTime());
             }
             if (genStart <= genEnd) {
               const possible = countPossibleSessionsInRange(genStart, genEnd, validSlotsAfter);
