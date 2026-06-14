@@ -75,6 +75,15 @@ async function run() {
     closurePeriodId = result.closurePeriod.id;
     console.log('applyClosurePeriod sonucu:', JSON.stringify(result, null, 2));
 
+    if (result.closurePeriod.startDate !== startDate) {
+      console.error(`HATA: closurePeriod.startDate beklenen ${startDate}, dönen ${result.closurePeriod.startDate}`);
+      failed = true;
+    }
+    if (result.closurePeriod.endDate !== endDate) {
+      console.error(`HATA: closurePeriod.endDate beklenen ${endDate}, dönen ${result.closurePeriod.endDate}`);
+      failed = true;
+    }
+
     if (result.summary.dayCount !== dayCount) {
       console.error(`HATA: dayCount beklenen ${dayCount}, dönen ${result.summary.dayCount}`);
       failed = true;

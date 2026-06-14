@@ -1,6 +1,5 @@
 import { cancelPackageSessionsAtSlot } from './packageSessions.js';
 import { dayStartMs, dayEndMs } from './staffWorkingHours.js';
-import { toDateOnlyString } from './memberPackageDto.js';
 
 const MAX_RESCHEDULE_ITERATIONS = 500;
 
@@ -14,8 +13,8 @@ export function dayCountInclusive(startDate, endDate) {
 function closurePeriodToDto(row) {
   return {
     id: row.id,
-    startDate: toDateOnlyString(row.start_date),
-    endDate: toDateOnlyString(row.end_date),
+    startDate: String(row.start_date).slice(0, 10),
+    endDate: String(row.end_date).slice(0, 10),
     description: row.description,
     createdBy: row.created_by,
     createdAt: row.created_at,
@@ -31,7 +30,7 @@ export async function applyClosurePeriod(db, { startDate, endDate, description, 
   const inserted = await db.query(
     `INSERT INTO closure_periods (start_date, end_date, description, created_by)
      VALUES ($1, $2, $3, $4)
-     RETURNING id, start_date, end_date, description, created_by, created_at`,
+     RETURNING id, start_date::text, end_date::text, description, created_by, created_at`,
     [startDate, endDate, description, createdBy]
   );
   const closurePeriod = inserted.rows[0];
@@ -97,7 +96,7 @@ export async function applyClosurePeriod(db, { startDate, endDate, description, 
 /** Tüm kapanış dönemlerini en yeniden eskiye listeler. */
 export async function listClosurePeriods(db) {
   const res = await db.query(
-    `SELECT id, start_date, end_date, description, created_by, created_at
+    `SELECT id, start_date::text, end_date::text, description, created_by, created_at
      FROM closure_periods ORDER BY created_at DESC`
   );
   return res.rows.map(closurePeriodToDto);
