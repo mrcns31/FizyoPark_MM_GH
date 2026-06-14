@@ -708,37 +708,12 @@ function getSessionsInRange(startTs, endTs) {
   return state.sessions.filter((s) => overlaps(s.startTs, s.endTs, startTs, endTs));
 }
 
-function getStaffBusyRoomId(candidate, { ignoreSessionId = null, ignoreSessionIds = null } = {}) {
-  const ignoreSet = ignoreSessionIds && ignoreSessionIds.size ? ignoreSessionIds : (ignoreSessionId != null ? new Set([normId(ignoreSessionId)]) : null);
-  const relevant = ignoreSet ? state.sessions.filter((s) => !ignoreSet.has(normId(s.id))) : state.sessions;
-  const overlap = relevant.filter(
-    (s) => normId(s.staffId) === normId(candidate.staffId) && overlaps(s.startTs, s.endTs, candidate.startTs, candidate.endTs),
-  );
-  const roomIds = [...new Set(overlap.map((s) => normId(s.roomId)).filter((id) => id != null && id !== ""))];
-  if (roomIds.length === 0) return null;
-  if (roomIds.length === 1) return roomIds[0];
-  return "__MULTI__";
-}
-
 function checkConflicts(candidate, { ignoreSessionId = null, ignoreSessionIds = null } = {}) {
   const conflicts = [];
   const ignoreSet = ignoreSessionIds && ignoreSessionIds.size ? ignoreSessionIds : (ignoreSessionId != null ? new Set([normId(ignoreSessionId)]) : null);
   const relevant = ignoreSet
     ? state.sessions.filter((s) => !ignoreSet.has(normId(s.id)))
     : state.sessions;
-
-  // Personel kuralı:
-  // - Aynı saat aralığında birden fazla seans ALABİLİR
-  // - Ama sadece aynı oda içinde (tek personel/oda kuralı ile uyumlu)
-  const busyRoomId = getStaffBusyRoomId(candidate, { ignoreSessionId, ignoreSessionIds: ignoreSet });
-  if (busyRoomId === "__MULTI__") {
-    conflicts.push("Seçilen personel bu saat aralığında farklı odalarda seanslı görünüyor (uygunsuz durum).");
-  } else if (busyRoomId && candidate.roomId && normId(candidate.roomId) !== normId(busyRoomId)) {
-    const busyRoom = getRoomById(busyRoomId);
-    conflicts.push(
-      `Seçilen personel bu saat aralığında ${busyRoom?.name ? `"${busyRoom.name}"` : "başka bir odada"} seanslı. Aynı anda farklı oda olmaz.`,
-    );
-  }
 
   for (const s of relevant) {
     if (!overlaps(s.startTs, s.endTs, candidate.startTs, candidate.endTs)) continue;
@@ -748,46 +723,11 @@ function checkConflicts(candidate, { ignoreSessionId = null, ignoreSessionIds = 
     }
   }
 
-  const room = getRoomById(candidate.roomId);
-  if (room) {
-    const overlapInRoom = relevant.filter(
-      (s) => normId(s.roomId) === normId(candidate.roomId) && overlaps(s.startTs, s.endTs, candidate.startTs, candidate.endTs),
-    );
-    const count = overlapInRoom.length;
-    if (count >= room.devices) {
-      conflicts.push(`"${room.name}" için bu saat aralığında kapasite dolu (alet: ${room.devices}).`);
-    }
-
-    // KURAL: Aynı anda aynı odada sadece 1 personel olabilir.
-    const otherStaff = overlapInRoom.find((s) => s.staffId != null && normId(s.staffId) !== normId(candidate.staffId));
-    if (otherStaff) {
-      const other = getStaffById(otherStaff.staffId);
-      conflicts.push(
-        `"${room.name}" odasında bu saat aralığında başka bir personel var${other?.name ? ` (${other.name})` : ""}.`,
-      );
-    }
-  }
-
   return conflicts;
 }
 
-function autoAssignRoom(candidate, { ignoreSessionId = null, ignoreSessionIds = null } = {}) {
-  const ignoreSet = ignoreSessionIds && ignoreSessionIds.size ? ignoreSessionIds : (ignoreSessionId != null ? new Set([normId(ignoreSessionId)]) : null);
-  const relevant = ignoreSet ? state.sessions.filter((s) => !ignoreSet.has(normId(s.id))) : state.sessions;
-  const rooms = [...state.rooms];
-  for (const room of rooms) {
-    const overlapInRoom = relevant.filter(
-      (s) => normId(s.roomId) === normId(room.id) && overlaps(s.startTs, s.endTs, candidate.startTs, candidate.endTs),
-    );
-
-    if (overlapInRoom.length >= room.devices) continue;
-
-    const hasOtherStaff = overlapInRoom.some((s) => s.staffId != null && normId(s.staffId) !== normId(candidate.staffId));
-    if (hasOtherStaff) continue;
-
-    return room.id;
-  }
-  return null;
+function autoAssignRoom(candidate, opts = {}) {
+  return state.rooms.length ? state.rooms[0].id : null;
 }
 
 let state = deepClone(DEFAULT_STATE);
@@ -9217,14 +9157,6 @@ async function saveGroupSession() {
   }
 
   const firstSession = currentGroupSessions[0];
-  const room = firstSession ? getRoomById(firstSession.roomId) : null;
-  const groupOverCapacity = room && currentGroupSessions.length > room.devices;
-  if (groupOverCapacity && !currentGroupSessions.some((s) => s.needsServerRebalance)) {
-    els.groupSessionError.textContent = `"${room.name}" bu saatte en fazla ${room.devices} seans alabilir (alet sayısı). Şu an ${currentGroupSessions.length} seans var.`;
-    els.groupSessionError.classList.remove("hidden");
-    return;
-  }
-
   els.groupSessionError.classList.add("hidden");
 
   if (isNewGroupSession) {
@@ -9234,11 +9166,10 @@ async function saveGroupSession() {
     }
     // Yeni grup: tüm seansları state'e ekle ve API'ye gönder
     for (const session of currentGroupSessions) {
-      const { needsServerRebalance: _unused, ...sessionToSend } = session;
-      state.sessions.push(sessionToSend);
+      state.sessions.push(session);
       if (window.API && window.API.getToken()) {
         try {
-          const created = await window.API.createSession(sessionToSend);
+          const created = await window.API.createSession(session);
           const idx = state.sessions.findIndex(s => s.id === session.id);
           if (idx >= 0) state.sessions[idx] = created;
         } catch (e) {
@@ -9250,7 +9181,7 @@ async function saveGroupSession() {
     }
     state.sessions.sort((a, b) => a.startTs - b.startTs);
     saveState();
-    if (groupOverCapacity && window.API && window.API.getToken()) {
+    if (window.API && window.API.getToken()) {
       await syncSessionsFromServer({ silent: true });
     }
     render();
@@ -9269,7 +9200,6 @@ async function saveGroupSession() {
   let newRoomId = firstSession.roomId;
   const durationMs = firstSession.endTs - firstSession.startTs;
   const ignoreGroupIds = new Set(currentGroupSessions.map((s) => normId(s.id)));
-  let needsServerRebalance = groupOverCapacity;
 
   if (dateStr && timeStr && newStaffId) {
     const start = makeLocalDate(dateStr, timeStr);
@@ -9313,36 +9243,12 @@ async function saveGroupSession() {
       if (roomChoice === "AUTO") {
         const candidate = { staffId: newStaffId, memberId: firstSession.memberId, roomId: "", startTs: newStartTs, endTs: newEndTs };
         newRoomId = autoAssignRoom(candidate, { ignoreSessionIds: ignoreGroupIds });
-        if (!newRoomId) {
-          // Tek oda doğrudan uymuyor; sunucu oda dengeleme ile yeniden dağıtmayı deneyecek.
-          newRoomId = firstSession.roomId;
-          needsServerRebalance = true;
-        }
       } else {
         newRoomId = roomChoice;
-        const chosenRoom = getRoomById(newRoomId);
-        if (chosenRoom && currentGroupSessions.length > (chosenRoom.devices || 1)) {
-          // Oda dolu; sunucu kaydederken oda dengeleme ile yeniden dağıtmayı deneyecek.
-          needsServerRebalance = true;
-        }
       }
 
       for (const session of currentGroupSessions) {
         const candidate = { memberId: session.memberId, staffId: newStaffId, roomId: newRoomId, startTs: newStartTs, endTs: newEndTs };
-        if (needsServerRebalance) {
-          // Oda/kapasite kontrolleri sunucuda dengeleme ile yapılacak; sadece üye çakışmasını kontrol et.
-          const memberConflict = state.sessions.some((s) =>
-            !ignoreGroupIds.has(normId(s.id)) &&
-            overlaps(s.startTs, s.endTs, candidate.startTs, candidate.endTs) &&
-            normId(s.memberId) === normId(candidate.memberId),
-          );
-          if (memberConflict) {
-            els.groupSessionError.textContent = "Seçilen üye bu saat aralığında zaten planlı.";
-            els.groupSessionError.classList.remove("hidden");
-            return;
-          }
-          continue;
-        }
         const conflicts = checkConflicts(candidate, { ignoreSessionIds: ignoreGroupIds });
         if (conflicts.length > 0) {
           els.groupSessionError.textContent = conflicts[0];
@@ -9355,11 +9261,6 @@ async function saveGroupSession() {
       newRoomId = roomChoice !== "AUTO" ? roomChoice : firstSession.roomId;
       newStartTs = firstSession.startTs;
       newEndTs = firstSession.endTs;
-      const roomForCapacity = getRoomById(newRoomId);
-      if (roomForCapacity && currentGroupSessions.length > (roomForCapacity.devices || 1)) {
-        // Oda dolu; sunucu kaydederken oda dengeleme ile yeniden dağıtmayı deneyecek.
-        needsServerRebalance = true;
-      }
     }
   } else {
     newStaffId = newStaffId || String(Number(firstSession.staffId));
@@ -9445,9 +9346,7 @@ async function saveGroupSession() {
         }
       }
     } else {
-      const { needsServerRebalance: sessionNeedsRebalance, ...sessionRest } = session;
-      if (sessionNeedsRebalance) needsServerRebalance = true;
-      const newSession = { ...sessionRest, staffId: newStaffId, roomId: newRoomId, startTs: newStartTs, endTs: newEndTs };
+      const newSession = { ...session, staffId: newStaffId, roomId: newRoomId, startTs: newStartTs, endTs: newEndTs };
       state.sessions.push(newSession);
       if (window.API && window.API.getToken()) {
         try {
@@ -9465,7 +9364,7 @@ async function saveGroupSession() {
 
   state.sessions.sort((a, b) => a.startTs - b.startTs);
   saveState();
-  if (needsServerRebalance) {
+  if (window.API && window.API.getToken()) {
     await syncSessionsFromServer({ silent: true });
   }
   render();
@@ -9572,36 +9471,8 @@ async function saveSessionFromModal() {
   }
 
   let roomId = roomChoice;
-  let needsServerRebalanceSingle = false;
   if (slotChanged && roomChoice === "AUTO") {
-    // Personel bu saat aralığında seanslıysa, aynı odasına öncelik ver.
-    const busyRoomId = getStaffBusyRoomId(candidateBase, { ignoreSessionId });
-    if (busyRoomId === "__MULTI__") {
-      showError("Seçilen personel bu saat aralığında birden fazla odada seanslı görünüyor (uygunsuz durum).");
-      return;
-    }
-
-    if (busyRoomId) {
-      // Aynı odada yer var mı kontrol et (kapasite + odada tek personel kuralı)
-      const candidateTry = { ...candidateBase, roomId: busyRoomId };
-      const conflicts = checkConflicts(candidateTry, { ignoreSessionId });
-      if (conflicts.length) {
-        // Aynı oda doğrudan uymuyor; sunucu oda dengeleme ile yeniden dağıtmayı deneyecek.
-        roomId = busyRoomId;
-        needsServerRebalanceSingle = true;
-      } else {
-        roomId = busyRoomId;
-      }
-    } else {
-      const picked = autoAssignRoom(candidateBase, { ignoreSessionId });
-      if (!picked) {
-        // Tek oda doğrudan uymuyor; sunucu oda dengeleme ile yeniden dağıtmayı deneyecek.
-        roomId = (existingSession && existingSession.roomId != null) ? existingSession.roomId : (state.rooms[0] && state.rooms[0].id);
-        needsServerRebalanceSingle = true;
-      } else {
-        roomId = picked;
-      }
-    }
+    roomId = autoAssignRoom(candidateBase, { ignoreSessionId });
   } else if (slotChanged && roomChoice !== "AUTO") {
     roomId = roomChoice;
   } else if (existingSession) {
@@ -9610,20 +9481,10 @@ async function saveSessionFromModal() {
 
   const candidate = { ...candidateBase, roomId };
 
-  if (slotChanged && !needsServerRebalanceSingle) {
+  if (slotChanged) {
     const conflicts = checkConflicts(candidate, { ignoreSessionId });
     if (conflicts.length) {
       showError(conflicts.join(" "));
-      return;
-    }
-  } else if (slotChanged && needsServerRebalanceSingle) {
-    const memberConflict = state.sessions.some((s) =>
-      normId(s.id) !== normId(ignoreSessionId) &&
-      overlaps(s.startTs, s.endTs, candidate.startTs, candidate.endTs) &&
-      normId(s.memberId) === normId(candidate.memberId),
-    );
-    if (memberConflict) {
-      showError("Seçilen üye bu saat aralığında zaten planlı.");
       return;
     }
   }
@@ -9676,7 +9537,7 @@ async function saveSessionFromModal() {
 
   state.sessions.sort((a, b) => a.startTs - b.startTs);
   saveState();
-  if (needsServerRebalanceSingle && window.API && window.API.getToken()) {
+  if (window.API && window.API.getToken()) {
     await syncSessionsFromServer({ silent: true });
   }
   closeSessionModal();
@@ -11347,13 +11208,7 @@ function bindEvents() {
       }
       if (roomChoice === "AUTO") {
         const candidateBase = { startTs, endTs, staffId, memberId: availableMember.id, roomId: "", note: "" };
-        const picked = autoAssignRoom(candidateBase, { ignoreSessionId: null });
-        if (!picked) {
-          els.groupSessionError.textContent = "Bu saatte hiçbir odada boş alet yok (kapasite dolu).";
-          els.groupSessionError.classList.remove("hidden");
-          return;
-        }
-        roomId = picked;
+        roomId = autoAssignRoom(candidateBase, { ignoreSessionId: null });
       } else {
         roomId = roomChoice;
       }
@@ -11366,10 +11221,6 @@ function bindEvents() {
       roomId = firstSession.roomId;
     }
 
-    const room = getRoomById(roomId);
-    const maxInSlot = room ? room.devices : 1;
-    const overCapacity = currentGroupSessions.length + 1 > maxInSlot;
-
     const newSession = {
       id: uid("sess"),
       startTs,
@@ -11378,27 +11229,13 @@ function bindEvents() {
       staffId,
       roomId,
       note: "",
-      needsServerRebalance: overCapacity,
     };
 
-    if (overCapacity) {
-      // Oda bu saatte dolu; sunucu kaydederken oda dengeleme ile yeniden dağıtmayı deneyecek.
-      const memberConflict = state.sessions.some((s) =>
-        overlaps(s.startTs, s.endTs, newSession.startTs, newSession.endTs) &&
-        normId(s.memberId) === normId(newSession.memberId),
-      );
-      if (memberConflict) {
-        els.groupSessionError.textContent = "Seçilen üye bu saat aralığında zaten planlı.";
-        els.groupSessionError.classList.remove("hidden");
-        return;
-      }
-    } else {
-      const conflicts = checkConflicts(newSession, { ignoreSessionId: null });
-      if (conflicts.length > 0) {
-        els.groupSessionError.textContent = conflicts.join(" ");
-        els.groupSessionError.classList.remove("hidden");
-        return;
-      }
+    const conflicts = checkConflicts(newSession, { ignoreSessionId: null });
+    if (conflicts.length > 0) {
+      els.groupSessionError.textContent = conflicts.join(" ");
+      els.groupSessionError.classList.remove("hidden");
+      return;
     }
 
     currentGroupSessions.push(newSession);
