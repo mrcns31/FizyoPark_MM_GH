@@ -220,16 +220,36 @@
           <p class="pw-change__info-text">FizyoPark olarak kişisel verilerinizi (ad soyad, iletişim bilgileri, üyelik/seans kayıtları, QR kod ile tesis giriş kayıtları, cihaz ve IP bilgileri) yalnızca hizmetlerimizin yürütülmesi, seans planlaması, tesis güvenliği ve yasal yükümlülüklerimiz kapsamında işliyoruz. Devam etmeden önce lütfen aşağıdaki metinleri inceleyin.</p>
         </div>
         <form id="legalConsentForm" class="pw-change__form-card" novalidate>
-          <ul class="pw-change__link-list">
-            <li><a id="legalConsentLinkPrivacy" href="https://fizyopark.com.tr/privacy-policy" target="_blank" rel="noopener">Gizlilik Politikası</a></li>
-            <li><a id="legalConsentLinkExplicitConsent" href="https://fizyopark.com.tr/explicit-consent-text" target="_blank" rel="noopener">Açık Rıza Metni</a></li>
-            <li><a id="legalConsentLinkTerms" href="https://fizyopark.com.tr/membership-and-terms-of-use" target="_blank" rel="noopener">Üyelik ve Kullanım Koşulları</a></li>
-            <li><a id="legalConsentLinkCookie" href="https://fizyopark.com.tr/cookie-policy" target="_blank" rel="noopener">Çerez Politikası</a></li>
-          </ul>
-          <label class="pw-change__checkbox-field" for="legalConsentCheckbox">
-            <input type="checkbox" id="legalConsentCheckbox" required />
-            <span>Yukarıdaki Gizlilik Politikası, Açık Rıza Metni, Üyelik ve Kullanım Koşulları ve Çerez Politikası'nı okudum, anladım ve kişisel verilerimin belirtilen amaçlarla işlenmesine açık rıza veriyorum.</span>
-          </label>
+          <div class="pw-change__consent-list">
+            <div class="pw-change__consent-item">
+              <a id="legalConsentLinkPrivacy" href="https://fizyopark.com.tr/privacy-policy" target="_blank" rel="noopener">Gizlilik Politikası</a>
+              <label class="pw-change__checkbox-field" for="legalConsentCheckboxPrivacy">
+                <input type="checkbox" id="legalConsentCheckboxPrivacy" required />
+                <span>Okudum ve kabul ediyorum.</span>
+              </label>
+            </div>
+            <div class="pw-change__consent-item">
+              <a id="legalConsentLinkTerms" href="https://fizyopark.com.tr/membership-and-terms-of-use" target="_blank" rel="noopener">Üyelik ve Kullanım Koşulları</a>
+              <label class="pw-change__checkbox-field" for="legalConsentCheckboxTerms">
+                <input type="checkbox" id="legalConsentCheckboxTerms" required />
+                <span>Okudum ve kabul ediyorum.</span>
+              </label>
+            </div>
+            <div class="pw-change__consent-item">
+              <a id="legalConsentLinkExplicitConsent" href="https://fizyopark.com.tr/explicit-consent-text" target="_blank" rel="noopener">Kişisel Verilerin İşlenmesine İlişkin Açık Rıza Metni</a>
+              <label class="pw-change__checkbox-field" for="legalConsentCheckboxExplicitConsent">
+                <input type="checkbox" id="legalConsentCheckboxExplicitConsent" required />
+                <span>Okudum ve kabul ediyorum.</span>
+              </label>
+            </div>
+            <div class="pw-change__consent-item">
+              <a id="legalConsentLinkCookie" href="https://fizyopark.com.tr/cookie-policy" target="_blank" rel="noopener">Çerez Politikası</a>
+              <label class="pw-change__checkbox-field" for="legalConsentCheckboxCookie">
+                <input type="checkbox" id="legalConsentCheckboxCookie" required />
+                <span>Okudum ve kabul ediyorum.</span>
+              </label>
+            </div>
+          </div>
           <p id="legalConsentError" class="pw-change__error error hidden"></p>
           <button id="legalConsentSubmitBtn" class="pw-change__submit" type="submit">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>

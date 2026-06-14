@@ -5247,15 +5247,22 @@ select option:checked{
   color:#8ec5ff;
   text-decoration:underline;
 }
-.pw-change__link-list{
-  list-style:none;
+.pw-change__consent-list{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
   margin:0 0 16px;
-  padding:0;
+}
+.pw-change__consent-item{
   display:flex;
   flex-direction:column;
   gap:8px;
+  padding:10px 12px;
+  border:1px solid var(--border);
+  border-radius:10px;
+  background:rgba(255,255,255,.03);
 }
-.pw-change__link-list a{
+.pw-change__consent-item > a{
   font-size:14px;
   font-weight:700;
   color:#6b9fff;

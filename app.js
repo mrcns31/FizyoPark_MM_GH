@@ -6666,10 +6666,8 @@ function openLegalConsentScreen(onAccepted) {
   applyLegalLinksToDom();
 
   var form = document.getElementById("legalConsentForm");
-  var checkbox = document.getElementById("legalConsentCheckbox");
   var errEl = document.getElementById("legalConsentError");
   if (form) form.reset();
-  if (checkbox) checkbox.checked = false;
   if (errEl) {
     errEl.classList.add("hidden");
     errEl.textContent = "";
@@ -6695,7 +6693,12 @@ function closeLegalConsentScreen() {
 function bindLegalConsentScreen(onAccepted) {
   var form = document.getElementById("legalConsentForm");
   var errEl = document.getElementById("legalConsentError");
-  var checkbox = document.getElementById("legalConsentCheckbox");
+  var checkboxIds = [
+    "legalConsentCheckboxPrivacy",
+    "legalConsentCheckboxTerms",
+    "legalConsentCheckboxExplicitConsent",
+    "legalConsentCheckboxCookie",
+  ];
   var submitBtn = document.getElementById("legalConsentSubmitBtn");
   if (!form || !window.API) return;
 
@@ -6705,9 +6708,13 @@ function bindLegalConsentScreen(onAccepted) {
       errEl.classList.add("hidden");
       errEl.textContent = "";
     }
-    if (!checkbox || !checkbox.checked) {
+    var allChecked = checkboxIds.every(function (id) {
+      var el = document.getElementById(id);
+      return el && el.checked;
+    });
+    if (!allChecked) {
       if (errEl) {
-        errEl.textContent = "Devam etmek için onay kutusunu işaretleyin.";
+        errEl.textContent = "Devam etmek için tüm onay kutularını işaretleyin.";
         errEl.classList.remove("hidden");
       }
       return;
