@@ -4,13 +4,17 @@ import bcrypt from 'bcrypt';
 import { body, validationResult } from 'express-validator';
 import db from '../config/database.js';
 import { log as activityLog } from '../utils/activityLogger.js';
+import { getInstitutionWhatsApp, setInstitutionWhatsApp } from '../utils/appSettings.js';
 import { CONSENT_VERSION, getConsentStatus, getLegalLinks, setLegalLinks, recordConsent } from '../utils/legalConsent.js';
+import { toPhoneFormat } from '../utils/phone.js';
 
 const router = express.Router();
 
 function buildUserProfile(row) {
   let fullName = row.username;
-  if (row.role === 'admin') {
+  if (row.display_name && String(row.display_name).trim()) {
+    fullName = String(row.display_name).trim();
+  } else if (row.role === 'admin') {
     fullName = 'Admin';
   } else if (row.member_first_name || row.member_last_name) {
     fullName = `${row.member_first_name || ''} ${row.member_last_name || ''}`.trim();
@@ -26,7 +30,7 @@ function buildUserProfile(row) {
     memberId: row.member_id ?? null,
     mustChangePassword: !!row.must_change_password,
     fullName,
-    phone: row.phone || row.member_phone || null
+    phone: row.user_phone || row.phone || row.member_phone || null,
   };
 }
 
@@ -73,7 +77,7 @@ router.post('/login', [
     const result = await db.query(
       `SELECT u.*, s.id AS staff_id, s.first_name, s.last_name, s.phone,
               m.id AS member_id, m.first_name AS member_first_name, m.last_name AS member_last_name,
-              m.phone AS member_phone
+              m.phone AS member_phone, u.phone AS user_phone
        FROM users u
        LEFT JOIN staff s ON u.id = s.user_id
        LEFT JOIN members m ON m.user_id = u.id AND (m.deleted_at IS NULL)
@@ -94,6 +98,11 @@ router.post('/login', [
       return res.status(401).json({ error: 'E-posta veya şifre hatalı' });
     }
 
+    if (user.role === 'member' && !user.member_id) {
+      await activityLog(req, { action: 'auth.login_failed', details: { email: loginEmail, reason: 'member_record_missing' } }).catch(() => {});
+      return res.status(401).json({ error: 'Üyelik kaydı bulunamadı. Yönetici ile iletişime geçin.' });
+    }
+
     // Token oluştur
     const token = generateToken(user.id, user.role);
 
@@ -104,7 +113,7 @@ router.post('/login', [
       details: { role: user.role },
       actorId: user.id,
       actorType: 'user',
-      actorName: user.username
+      actorName: buildUserProfile(user).fullName,
     }).catch(() => {});
 
     res.json({
@@ -124,10 +133,10 @@ router.post('/login', [
 router.get('/me', verifyToken, async (req, res) => {
   try {
     const result = await db.query(
-      `SELECT u.id, u.username, u.email, u.role, u.must_change_password,
+      `SELECT u.id, u.username, u.email, u.role, u.must_change_password, u.display_name,
               s.id AS staff_id, s.first_name, s.last_name, s.phone,
               m.id AS member_id, m.first_name AS member_first_name, m.last_name AS member_last_name,
-              m.phone AS member_phone
+              m.phone AS member_phone, u.phone AS user_phone
        FROM users u
        LEFT JOIN staff s ON s.user_id = u.id
        LEFT JOIN members m ON m.user_id = u.id AND (m.deleted_at IS NULL)
@@ -272,6 +281,160 @@ router.post('/change-password', verifyToken, [
   } catch (error) {
     console.error('Change password error:', error);
     res.status(500).json({ error: 'Şifre güncellenirken hata oluştu' });
+  }
+});
+
+// Hesap bilgilerini güncelle (admin panel – profil + isteğe bağlı şifre + kurum WhatsApp)
+router.put('/account', verifyToken, [
+  body('fullName').optional().trim().isLength({ min: 1, max: 100 }).withMessage('Ad soyad gerekli'),
+  body('email').optional().trim().isEmail().withMessage('Geçerli e-posta girin'),
+  body('phone').optional({ nullable: true }).isString(),
+  body('whatsapp').optional({ nullable: true }).isString(),
+  body('currentPassword').optional().isString(),
+  body('newPassword').optional().isLength({ min: 4 }).withMessage('Yeni şifre en az 4 karakter olmalı'),
+  body('confirmPassword').optional().isString(),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      const msg = errors.array()[0]?.msg || 'Geçersiz veri';
+      return res.status(400).json({ error: msg });
+    }
+
+    const {
+      fullName,
+      email,
+      phone,
+      whatsapp,
+      currentPassword,
+      newPassword,
+      confirmPassword,
+    } = req.body || {};
+
+    const userRes = await db.query(
+      'SELECT id, email, username, password_hash, role FROM users WHERE id = $1 AND is_active = true',
+      [req.user.userId]
+    );
+    if (userRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
+    }
+    const user = userRes.rows[0];
+
+    if (newPassword != null && String(newPassword).trim()) {
+      if (newPassword !== confirmPassword) {
+        return res.status(400).json({ error: 'Şifreler eşleşmiyor' });
+      }
+      if (!currentPassword) {
+        return res.status(400).json({ error: 'Mevcut şifrenizi girin' });
+      }
+      const valid = await bcrypt.compare(currentPassword, user.password_hash);
+      if (!valid) {
+        return res.status(401).json({ error: 'Mevcut şifre hatalı' });
+      }
+      const passwordHash = await bcrypt.hash(newPassword, 10);
+      await db.query(
+        'UPDATE users SET password_hash = $1, must_change_password = false, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+        [passwordHash, user.id]
+      );
+    }
+
+    if (fullName != null) {
+      const name = String(fullName).trim();
+      if (!name) return res.status(400).json({ error: 'Ad soyad boş olamaz' });
+      await db.query(
+        'UPDATE users SET display_name = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+        [name, user.id]
+      );
+    }
+
+    if (email != null) {
+      const emailTrim = String(email).trim().toLowerCase();
+      const dup = await db.query(
+        'SELECT id FROM users WHERE LOWER(email) = $1 AND id != $2',
+        [emailTrim, user.id]
+      );
+      if (dup.rows.length > 0) {
+        return res.status(409).json({ error: 'Bu e-posta başka bir hesapta kayıtlı' });
+      }
+      await db.query(
+        'UPDATE users SET email = $1, username = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+        [emailTrim, user.id]
+      );
+    }
+
+    if (phone !== undefined) {
+      let phoneVal = null;
+      if (phone != null && String(phone).trim() !== '') {
+        phoneVal = toPhoneFormat(phone);
+        if (!phoneVal) {
+          return res.status(400).json({ error: 'Telefon (xxx)xxx-xx-xx formatında olmalı, 10 hane.' });
+        }
+      }
+      await db.query(
+        'UPDATE users SET phone = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+        [phoneVal, user.id]
+      );
+    }
+
+    if (whatsapp !== undefined && (user.role === 'admin' || user.role === 'manager')) {
+      if (whatsapp == null || String(whatsapp).trim() === '') {
+        await db.query(
+          `INSERT INTO app_settings (key, value, updated_at) VALUES ('institution_whatsapp', NULL, CURRENT_TIMESTAMP)
+           ON CONFLICT (key) DO UPDATE SET value = NULL, updated_at = CURRENT_TIMESTAMP`
+        );
+      } else {
+        try {
+          await setInstitutionWhatsApp(whatsapp);
+        } catch (err) {
+          if (err.code === 'INVALID_WHATSAPP') {
+            return res.status(400).json({
+              error: 'Geçerli bir WhatsApp numarası girin (ülke kodu ile, 10–15 hane).',
+            });
+          }
+          throw err;
+        }
+      }
+    }
+
+    const profileRes = await db.query(
+      `SELECT u.id, u.username, u.email, u.role, u.must_change_password, u.display_name,
+              s.id AS staff_id, s.first_name, s.last_name, s.phone,
+              m.id AS member_id, m.first_name AS member_first_name, m.last_name AS member_last_name,
+              m.phone AS member_phone, u.phone AS user_phone
+       FROM users u
+       LEFT JOIN staff s ON s.user_id = u.id
+       LEFT JOIN members m ON m.user_id = u.id AND (m.deleted_at IS NULL)
+       WHERE u.id = $1`,
+      [user.id]
+    );
+
+    const profile = buildUserProfile(profileRes.rows[0]);
+    let institutionWhatsapp = '';
+    if (user.role === 'admin' || user.role === 'manager') {
+      institutionWhatsapp = (await getInstitutionWhatsApp()) || '';
+    }
+
+    await activityLog(req, {
+      action: 'auth.account_update',
+      entityType: 'user',
+      entityId: user.id,
+      actorId: user.id,
+      actorType: 'user',
+      details: {
+        emailChanged: email != null,
+        passwordChanged: !!(newPassword && String(newPassword).trim()),
+        whatsappChanged: whatsapp !== undefined,
+      },
+    }).catch(() => {});
+
+    res.json({
+      message: 'Bilgileriniz güncellendi',
+      user: profile,
+      institutionWhatsapp,
+    });
+  } catch (error) {
+    console.error('Account update error:', error);
+    res.status(500).json({ error: 'Hesap bilgileri güncellenirken hata oluştu' });
   }
 });
 
