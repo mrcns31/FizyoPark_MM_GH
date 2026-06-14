@@ -11666,6 +11666,7 @@ document.addEventListener("DOMContentLoaded", async function () {
   try { localStorage.removeItem("seans_planner_v1"); } catch (_) {}
 
   if (!window.API || !window.API.getToken()) {
+    loadLegalLinks();
     queueAfterSplash(showLoginOverlay);
     return;
   }
