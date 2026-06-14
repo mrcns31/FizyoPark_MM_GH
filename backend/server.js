@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import compression from 'compression';
 import dotenv from 'dotenv';
 import rateLimit from 'express-rate-limit';
 import { fileURLToPath } from 'url';
@@ -19,6 +20,10 @@ import memberPackagesRoutes from './routes/member-packages.js';
 import activityLogsRoutes from './routes/activity-logs.js';
 import devResetRoutes from './routes/dev-reset.js';
 import memberPortalRoutes from './routes/member-portal.js';
+import sessionAttendanceRoutes from './routes/session-attendance.js';
+import bootstrapRoutes from './routes/bootstrap.js';
+import packageRequestsRoutes from './routes/package-requests.js';
+import closurePeriodsRoutes from './routes/closure-periods.js';
 
 dotenv.config();
 
@@ -29,6 +34,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Middleware
+app.use(compression());
 app.use(helmet()); // Güvenlik başlıkları
 app.use(cors({
   origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
@@ -71,6 +77,10 @@ app.use('/api/member-packages', memberPackagesRoutes);
 app.use('/api/activity-logs', activityLogsRoutes);
 app.use('/api/dev-reset', devResetRoutes);
 app.use('/api/member-portal', memberPortalRoutes);
+app.use('/api/sessions/attendance', sessionAttendanceRoutes);
+app.use('/api/bootstrap', bootstrapRoutes);
+app.use('/api/package-requests', packageRequestsRoutes);
+app.use('/api/closure-periods', closurePeriodsRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
