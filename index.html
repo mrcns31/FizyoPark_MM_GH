@@ -268,90 +268,87 @@
         <span class="pw-change__header-spacer" aria-hidden="true"></span>
       </header>
       <div class="pw-change__scroll">
-        <form id="adminAccountForm" class="pw-change__form-card admin-account-form" novalidate>
-          <div class="pw-change__field">
-            <label class="pw-change__label" for="adminAccountFullName">Ad Soyad</label>
-            <input id="adminAccountFullName" class="pw-change__input admin-account-form__plain" type="text" autocomplete="name" required />
-          </div>
-          <div class="pw-change__field">
-            <label class="pw-change__label" for="adminAccountEmail">E-posta</label>
-            <input id="adminAccountEmail" class="pw-change__input admin-account-form__plain" type="email" autocomplete="email" required />
-          </div>
-          <div class="pw-change__field">
-            <label class="pw-change__label" for="adminAccountPhone">Telefon</label>
-            <input id="adminAccountPhone" class="pw-change__input admin-account-form__plain" type="tel" autocomplete="tel" placeholder="(532)123-45-67" />
-          </div>
-          <div id="adminAccountWhatsappWrap" class="pw-change__field hidden">
-            <label class="pw-change__label" for="adminAccountWhatsapp">Kurum WhatsApp Numarası</label>
-            <input id="adminAccountWhatsapp" class="pw-change__input admin-account-form__plain" type="tel" inputmode="tel" autocomplete="off" placeholder="905551234567" />
-            <p class="hint admin-account-form__hint">Üye seans iptali sonrası yeni randevu talebinde açılır.</p>
+        <form id="adminAccountForm" class="admin-account-form" novalidate>
+          <div class="formGrid">
+            <div class="formRow">
+              <label class="label" for="adminAccountFullName">Ad Soyad</label>
+              <input id="adminAccountFullName" class="input" type="text" autocomplete="name" required />
+            </div>
+            <div class="formRow">
+              <label class="label" for="adminAccountEmail">E-posta</label>
+              <input id="adminAccountEmail" class="input" type="email" autocomplete="email" required />
+            </div>
+            <div class="formRow">
+              <label class="label" for="adminAccountPhone">Telefon</label>
+              <input id="adminAccountPhone" class="input" type="tel" autocomplete="tel" placeholder="(532)123-45-67" />
+            </div>
+            <div id="adminAccountWhatsappWrap" class="formRow formRow--full hidden">
+              <label class="label" for="adminAccountWhatsapp">Kurum WhatsApp Numarası</label>
+              <input id="adminAccountWhatsapp" class="input" type="tel" inputmode="tel" autocomplete="off" placeholder="905551234567" />
+              <p class="hint admin-account-form__hint">Üye seans iptali sonrası yeni randevu talebinde açılır.</p>
+            </div>
           </div>
           <div id="adminAccountLegalLinksWrap" class="hidden">
             <h2 class="admin-account-form__section-title">Yasal Sayfa Bağlantıları</h2>
-            <div class="pw-change__field">
-              <label class="pw-change__label" for="adminAccountPrivacyPolicyUrl">Gizlilik Politikası URL</label>
-              <input id="adminAccountPrivacyPolicyUrl" class="pw-change__input admin-account-form__plain" type="url" autocomplete="off" placeholder="https://fizyopark.com.tr/privacy-policy" />
-            </div>
-            <div class="pw-change__field">
-              <label class="pw-change__label" for="adminAccountExplicitConsentUrl">Açık Rıza Metni URL</label>
-              <input id="adminAccountExplicitConsentUrl" class="pw-change__input admin-account-form__plain" type="url" autocomplete="off" placeholder="https://fizyopark.com.tr/explicit-consent-text" />
-            </div>
-            <div class="pw-change__field">
-              <label class="pw-change__label" for="adminAccountTermsUrl">Üyelik ve Kullanım Koşulları URL</label>
-              <input id="adminAccountTermsUrl" class="pw-change__input admin-account-form__plain" type="url" autocomplete="off" placeholder="https://fizyopark.com.tr/membership-and-terms-of-use" />
-            </div>
-            <div class="pw-change__field">
-              <label class="pw-change__label" for="adminAccountCookiePolicyUrl">Çerez Politikası URL</label>
-              <input id="adminAccountCookiePolicyUrl" class="pw-change__input admin-account-form__plain" type="url" autocomplete="off" placeholder="https://fizyopark.com.tr/cookie-policy" />
-              <p class="hint admin-account-form__hint">Boş bırakılırsa varsayılan adres kullanılır.</p>
+            <div class="formGrid">
+              <div class="formRow formRow--full">
+                <label class="label" for="adminAccountPrivacyPolicyUrl">Gizlilik Politikası URL</label>
+                <input id="adminAccountPrivacyPolicyUrl" class="input" type="url" autocomplete="off" placeholder="https://fizyopark.com.tr/privacy-policy" />
+              </div>
+              <div class="formRow formRow--full">
+                <label class="label" for="adminAccountExplicitConsentUrl">Açık Rıza Metni URL</label>
+                <input id="adminAccountExplicitConsentUrl" class="input" type="url" autocomplete="off" placeholder="https://fizyopark.com.tr/explicit-consent-text" />
+              </div>
+              <div class="formRow formRow--full">
+                <label class="label" for="adminAccountTermsUrl">Üyelik ve Kullanım Koşulları URL</label>
+                <input id="adminAccountTermsUrl" class="input" type="url" autocomplete="off" placeholder="https://fizyopark.com.tr/membership-and-terms-of-use" />
+              </div>
+              <div class="formRow formRow--full">
+                <label class="label" for="adminAccountCookiePolicyUrl">Çerez Politikası URL</label>
+                <input id="adminAccountCookiePolicyUrl" class="input" type="url" autocomplete="off" placeholder="https://fizyopark.com.tr/cookie-policy" />
+                <p class="hint admin-account-form__hint">Boş bırakılırsa varsayılan adres kullanılır.</p>
+              </div>
             </div>
           </div>
           <h2 class="admin-account-form__section-title">Şifre (isteğe bağlı)</h2>
-          <div class="pw-change__field">
-            <label class="pw-change__label" for="adminAccountCurrentPassword">Mevcut Şifre</label>
-            <div class="pw-change__input-wrap">
-              <span class="pw-change__input-icon" aria-hidden="true">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
-              </span>
-              <input id="adminAccountCurrentPassword" class="pw-change__input" type="password" autocomplete="current-password" placeholder="Şifre değiştirmek için girin" />
-              <button type="button" class="pw-change__toggle" data-pw-toggle="adminAccountCurrentPassword" aria-label="Şifreyi göster">
-                <svg class="pw-change__toggle-off" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-                <svg class="pw-change__toggle-on hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-              </button>
+          <div class="formGrid">
+            <div class="formRow">
+              <label class="label" for="adminAccountCurrentPassword">Mevcut Şifre</label>
+              <div class="pw-change__input-wrap admin-account-form__input-wrap">
+                <input id="adminAccountCurrentPassword" class="pw-change__input" type="password" autocomplete="current-password" placeholder="Şifre değiştirmek için girin" />
+                <button type="button" class="pw-change__toggle" data-pw-toggle="adminAccountCurrentPassword" aria-label="Şifreyi göster">
+                  <svg class="pw-change__toggle-off" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                  <svg class="pw-change__toggle-on hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="formRow">
+              <label class="label" for="adminAccountNewPassword">Yeni Şifre</label>
+              <div class="pw-change__input-wrap admin-account-form__input-wrap">
+                <input id="adminAccountNewPassword" class="pw-change__input" type="password" autocomplete="new-password" minlength="6" placeholder="En az 6 karakter" />
+                <button type="button" class="pw-change__toggle" data-pw-toggle="adminAccountNewPassword" aria-label="Şifreyi göster">
+                  <svg class="pw-change__toggle-off" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                  <svg class="pw-change__toggle-on hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="formRow">
+              <label class="label" for="adminAccountConfirmPassword">Şifre Tekrarı</label>
+              <div class="pw-change__input-wrap admin-account-form__input-wrap">
+                <input id="adminAccountConfirmPassword" class="pw-change__input" type="password" autocomplete="new-password" minlength="6" placeholder="Yeni şifreyi tekrar girin" />
+                <button type="button" class="pw-change__toggle" data-pw-toggle="adminAccountConfirmPassword" aria-label="Şifreyi göster">
+                  <svg class="pw-change__toggle-off" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                  <svg class="pw-change__toggle-on hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                </button>
+              </div>
             </div>
           </div>
-          <div class="pw-change__field">
-            <label class="pw-change__label" for="adminAccountNewPassword">Yeni Şifre</label>
-            <div class="pw-change__input-wrap">
-              <span class="pw-change__input-icon" aria-hidden="true">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
-              </span>
-              <input id="adminAccountNewPassword" class="pw-change__input" type="password" autocomplete="new-password" minlength="6" placeholder="En az 6 karakter" />
-              <button type="button" class="pw-change__toggle" data-pw-toggle="adminAccountNewPassword" aria-label="Şifreyi göster">
-                <svg class="pw-change__toggle-off" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-                <svg class="pw-change__toggle-on hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-              </button>
-            </div>
-          </div>
-          <div class="pw-change__field">
-            <label class="pw-change__label" for="adminAccountConfirmPassword">Şifre Tekrarı</label>
-            <div class="pw-change__input-wrap">
-              <span class="pw-change__input-icon" aria-hidden="true">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
-              </span>
-              <input id="adminAccountConfirmPassword" class="pw-change__input" type="password" autocomplete="new-password" minlength="6" placeholder="Yeni şifreyi tekrar girin" />
-              <button type="button" class="pw-change__toggle" data-pw-toggle="adminAccountConfirmPassword" aria-label="Şifreyi göster">
-                <svg class="pw-change__toggle-off" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-                <svg class="pw-change__toggle-on hidden" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-              </button>
-            </div>
-          </div>
-          <p id="adminAccountError" class="pw-change__error error hidden"></p>
-          <button id="adminAccountSubmitBtn" class="pw-change__submit" type="submit">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-            <span>Kaydet</span>
-          </button>
+          <p id="adminAccountError" class="error hidden modal-form-error"></p>
         </form>
+      </div>
+      <div class="pw-change__footer">
+        <button type="button" id="adminAccountCancelBtn" class="btn btn--ghost">Vazgeç</button>
+        <button id="adminAccountSubmitBtn" class="btn btn--primary" type="submit" form="adminAccountForm">Kaydet</button>
       </div>
     </div>
 
@@ -751,13 +748,13 @@
                   </span>
                   <span class="member-settings-row__chev" aria-hidden="true">›</span>
                 </button>
-                <button type="button" id="memberInlineChangePasswordBtn" class="member-settings-row">
+                <button type="button" id="memberInlineUpdateInfoBtn" class="member-settings-row">
                   <span class="member-settings-row__icon member-settings-row__icon--primary" aria-hidden="true">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/><path d="M12 15v2"/></svg>
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
                   </span>
                   <span class="member-settings-row__text">
-                    <span class="member-settings-row__title">Şifre Değiştir</span>
-                    <span class="member-settings-row__desc">Hesap şifrenizi güncelleyin</span>
+                    <span class="member-settings-row__title">Bilgilerimi Güncelle</span>
+                    <span class="member-settings-row__desc">Ad, e-posta ve telefon bilgilerinizi güncelleyin</span>
                   </span>
                   <span class="member-settings-row__chev" aria-hidden="true">›</span>
                 </button>

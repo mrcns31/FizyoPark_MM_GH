@@ -1347,7 +1347,7 @@ function cacheEls() {
     "memberInlineProfileName",
     "memberInlineProfileEmail",
     "memberInlineProfilePhone",
-    "memberInlineChangePasswordBtn",
+    "memberInlineUpdateInfoBtn",
     "memberInlineDeleteAccountBtn",
     "memberInlineLogoutBtn",
     "memberDeletionRequestNotice",
@@ -6319,6 +6319,7 @@ function closeAdminAccountScreen() {
 function bindAdminAccountScreen() {
   var form = document.getElementById("adminAccountForm");
   var backBtn = document.getElementById("adminAccountBackBtn");
+  var cancelBtn = document.getElementById("adminAccountCancelBtn");
   var errEl = document.getElementById("adminAccountError");
   var submitBtn = document.getElementById("adminAccountSubmitBtn");
   if (!form || !window.API || form.dataset.bound === "1") return;
@@ -6326,6 +6327,9 @@ function bindAdminAccountScreen() {
 
   if (backBtn) {
     backBtn.addEventListener("click", closeAdminAccountScreen);
+  }
+  if (cancelBtn) {
+    cancelBtn.addEventListener("click", closeAdminAccountScreen);
   }
 
   form.addEventListener("submit", async function (ev) {
@@ -6412,6 +6416,13 @@ function bindAdminAccountScreen() {
       if (result && result.legalLinks) {
         ui.legalLinks = result.legalLinks;
         applyLegalLinksToDom();
+      }
+      if (isMemberUser() && ui.memberPortal && result && result.user) {
+        ui.memberPortal.profile = ui.memberPortal.profile || {};
+        ui.memberPortal.profile.fullName = result.user.fullName;
+        ui.memberPortal.profile.email = result.user.email;
+        ui.memberPortal.profile.phone = result.user.phone;
+        fillMemberProfileModal();
       }
       closeAdminAccountScreen();
       fillAdminProfileModal();
@@ -6882,9 +6893,9 @@ function bindMemberProfileActions() {
   if (els.memberSessionCancelConfirmBtn) {
     els.memberSessionCancelConfirmBtn.addEventListener("click", submitMemberSessionCancel);
   }
-  if (els.memberInlineChangePasswordBtn) {
-    els.memberInlineChangePasswordBtn.addEventListener("click", function () {
-      openAdminChangePasswordModal();
+  if (els.memberInlineUpdateInfoBtn) {
+    els.memberInlineUpdateInfoBtn.addEventListener("click", function () {
+      openAdminAccountScreen();
     });
   }
   if (els.memberInlineDeleteAccountBtn) {
