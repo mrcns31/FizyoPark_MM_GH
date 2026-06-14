@@ -170,6 +170,17 @@
     return apiFetch('/auth/me');
   }
 
+  async function acceptConsent() {
+    return apiFetch('/auth/consent', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  }
+
+  async function getLegalLinks() {
+    return apiFetch('/auth/legal-links');
+  }
+
   async function setPassword(newPassword, confirmPassword) {
     return apiFetch('/auth/set-password', {
       method: 'POST',
@@ -553,6 +564,8 @@
     removeToken,
     login,
     getMe,
+    acceptConsent,
+    getLegalLinks,
     setPassword,
     changePassword,
     logout,
