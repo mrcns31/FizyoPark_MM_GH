@@ -11520,10 +11520,18 @@ function bindLoginForm() {
         ui.currentUser = { role: data.user.role };
       }
       hideLoginOverlay();
-      if (data.user && data.user.mustChangePassword) {
-        showChangePasswordOverlay();
+      const proceedAfterConsent = function () {
+        if (data.user && data.user.mustChangePassword) {
+          showChangePasswordOverlay();
+        } else {
+          location.reload();
+        }
+      };
+      if (data.user && data.user.consentRequired) {
+        await loadLegalLinks();
+        openLegalConsentScreen(proceedAfterConsent);
       } else {
-        location.reload();
+        proceedAfterConsent();
       }
     } catch (e) {
       if (errEl) {
@@ -11671,6 +11679,21 @@ document.addEventListener("DOMContentLoaded", async function () {
     var me = await meP;
     ui.currentUser = me || null;
     updateSidebarForRole();
+
+    if (me && me.consentRequired) {
+      setAppBooting(false);
+      await loadLegalLinks();
+      queueAfterSplash(function () {
+        openLegalConsentScreen(function () {
+          if (me.mustChangePassword) {
+            showChangePasswordOverlay();
+          } else {
+            location.reload();
+          }
+        });
+      });
+      return;
+    }
 
     if (me && me.mustChangePassword) {
       setAppBooting(false);
