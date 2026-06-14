@@ -70,7 +70,9 @@
       systemicDiseases: row.systemic_diseases || '',
       clinicalConditions: row.clinical_conditions || '',
       pastOperations: row.past_operations || '',
-      notes: row.notes || ''
+      notes: row.notes || '',
+      deletionRequestedAt: row.deletion_requested_at || null,
+      deletedAt: row.deleted_at || null,
     };
   }
   function memberToApi(m) {
@@ -121,15 +123,30 @@
     };
   }
   function sessionFromApi(row) {
+    const confirmerStaffName = (
+      (row.confirmer_first_name || '') + ' ' + (row.confirmer_last_name || '')
+    ).trim();
+    const memberName = (
+      (row.member_name || '').trim() ||
+      ((row.member_first_name || '') + ' ' + (row.member_last_name || '')).trim()
+    );
     return {
       id: row.id,
       staffId: row.staff_id,
       memberId: row.member_id,
+      memberName: memberName,
       roomId: row.room_id || null,
       memberPackageId: row.member_package_id || null,
       startTs: Number(row.start_ts),
       endTs: Number(row.end_ts),
       note: row.note || '',
+      checkedInAt: row.checked_in_at || null,
+      checkInMethod: row.check_in_method || null,
+      attendanceOutcome: row.attendance_outcome || null,
+      attendanceConfirmedAt: row.attendance_confirmed_at || null,
+      attendanceConfirmedBy: row.attendance_confirmed_by || null,
+      confirmerStaffName: confirmerStaffName,
+      confirmerRole: row.confirmer_role || null,
     };
   }
   function memberPackageFromApi(row) {
@@ -147,6 +164,7 @@
         return { id: s.id, dayOfWeek: s.day_of_week, startTime: s.start_time, staffId: s.staff_id };
       }),
       sessionConflicts: row.sessionConflicts || [],
+      sessionsCreated: row.sessions_created != null ? Number(row.sessions_created) : (row.sessionsCreated != null ? Number(row.sessionsCreated) : null),
     };
   }
   function tryParse(s) {
@@ -194,6 +212,13 @@
     });
   }
 
+  async function updateAccountProfile(body) {
+    return apiFetch('/auth/account', {
+      method: 'PUT',
+      body: JSON.stringify(body || {}),
+    });
+  }
+
   async function logout() {
     try {
       if (getToken()) {
@@ -206,9 +231,49 @@
   }
 
   async function loadMemberPortalState() {
+    /** Dashboard paket seansları → planner state.sessions (PERF-03: ayrı /sessions isteği yok) */
+    function memberPortalSessionsFromDashboard(dashboard) {
+      var profile = dashboard.profile || {};
+      var memberId = profile.id;
+      var byId = new Map();
+
+      function addFromPackage(pkg) {
+        if (!pkg || !Array.isArray(pkg.sessions)) return;
+        var memberPackageId = pkg.id;
+        pkg.sessions.forEach(function (s) {
+          if (s.id == null) return;
+          byId.set(String(s.id), {
+            id: s.id,
+            staffId: s.staffId,
+            memberId: memberId,
+            roomId: s.roomId || null,
+            memberPackageId: memberPackageId,
+            startTs: Number(s.startTs),
+            endTs: Number(s.endTs),
+            note: s.note || '',
+            checkedIn: !!s.checkedIn,
+            checkedInAt: s.checkedInAt || null,
+            isCancelled: !!s.isCancelled,
+            isConsumed: !!s.isConsumed,
+            isPast: !!s.isPast,
+            canCancel: !!s.canCancel,
+            cancelReason: s.cancelReason || null,
+            cancelReasonDetail: s.cancelReasonDetail || null,
+            status: s.status,
+            statusLabel: s.statusLabel || null,
+          });
+        });
+      }
+
+      addFromPackage(dashboard.activePackage);
+      (dashboard.pastPackages || []).forEach(addFromPackage);
+      return Array.from(byId.values()).sort(function (a, b) {
+        return a.startTs - b.startTs;
+      });
+    }
+
     const settled = await Promise.allSettled([
       apiFetch('/member-portal/dashboard'),
-      apiFetch('/sessions?startDate=2000-01-01&endDate=2030-12-31'),
       apiFetch('/staff'),
       apiFetch('/settings/working-hours'),
       apiFetch('/rooms'),
@@ -222,10 +287,9 @@
     }
 
     const dashboard = unwrap(0, {});
-    const sessionsRes = unwrap(1, []);
-    const staff = unwrap(2, []);
-    const workingHours = unwrap(3, {});
-    const rooms = unwrap(4, []);
+    const staff = unwrap(1, []);
+    const workingHours = unwrap(2, {});
+    const rooms = unwrap(3, []);
 
     const whMap = workingHours || {};
     const defaultWh = { 0: { start: '08:00', end: '20:00', enabled: false }, 1: { start: '08:00', end: '20:00', enabled: true }, 2: { start: '08:00', end: '20:00', enabled: true }, 3: { start: '08:00', end: '20:00', enabled: true }, 4: { start: '08:00', end: '20:00', enabled: true }, 5: { start: '08:00', end: '20:00', enabled: true }, 6: { start: '08:00', end: '20:00', enabled: true } };
@@ -260,8 +324,9 @@
         clinical_conditions: profile.clinicalConditions,
         past_operations: profile.pastOperations,
         notes: profile.notes,
+        deletion_requested_at: profile.deletionRequestedAt,
       })] : [],
-      sessions: (sessionsRes || []).map(sessionFromApi),
+      sessions: memberPortalSessionsFromDashboard(dashboard),
     };
   }
 
@@ -269,15 +334,127 @@
     return apiFetch('/member-portal/dashboard');
   }
 
-  async function cancelMemberSession(sessionId) {
-    return apiFetch('/member-portal/sessions/' + sessionId + '/cancel', { method: 'POST', body: JSON.stringify({}) });
+  async function cancelMemberSession(sessionId, body) {
+    return apiFetch('/member-portal/sessions/' + sessionId + '/cancel', {
+      method: 'POST',
+      body: JSON.stringify(body || {}),
+    });
+  }
+
+  async function requestMemberAccountDeletion() {
+    return apiFetch('/member-portal/request-account-deletion', { method: 'POST', body: JSON.stringify({}) });
+  }
+
+  async function createMemberPackageRequest(packageId) {
+    return apiFetch('/member-portal/package-request', {
+      method: 'POST',
+      body: JSON.stringify({ package_id: packageId }),
+    });
+  }
+
+  async function getPackageRequests(status) {
+    var q = status ? '?status=' + encodeURIComponent(status) : '';
+    return apiFetch('/package-requests' + q);
+  }
+
+  async function getPackageRequestsUnseenCount() {
+    return apiFetch('/package-requests/unseen-count');
+  }
+
+  async function markPackageRequestsSeen(ids) {
+    var body = ids && ids.length ? { ids: ids } : {};
+    return apiFetch('/package-requests/mark-seen', { method: 'POST', body: JSON.stringify(body) });
+  }
+
+  async function dismissPackageRequest(id) {
+    return apiFetch('/package-requests/' + id + '/dismiss', { method: 'POST', body: JSON.stringify({}) });
+  }
+
+  async function getClosurePeriods() {
+    return apiFetch('/closure-periods');
+  }
+
+  async function createClosurePeriod(body) {
+    return apiFetch('/closure-periods', { method: 'POST', body: JSON.stringify(body) });
+  }
+
+  async function deleteClosurePeriod(id) {
+    return apiFetch('/closure-periods/' + id, { method: 'DELETE' });
+  }
+
+  async function getMemberAccessQr() {
+    return apiFetch('/member-portal/access-qr');
+  }
+
+  async function getDeletionRequests() {
+    var rows = await apiFetch('/members/deletion-requests');
+    return (rows || []).map(function (row) {
+      return {
+        id: row.id,
+        memberNo: row.memberNo || row.member_no || '',
+        memberName: row.memberName || row.member_name || '',
+        phone: row.phone || '',
+        email: row.email || '',
+        deletionRequestedAt: row.deletionRequestedAt || row.deletion_requested_at || null,
+      };
+    });
+  }
+
+  async function approveMemberDeletionRequest(id) {
+    return apiFetch('/members/' + id + '/approve-deletion-request', { method: 'POST', body: JSON.stringify({}) });
+  }
+
+  async function rejectMemberDeletionRequest(id) {
+    return apiFetch('/members/' + id + '/reject-deletion-request', { method: 'POST', body: JSON.stringify({}) });
   }
 
   async function resetMemberPassword(id) {
     return apiFetch('/members/' + id + '/reset-password', { method: 'POST', body: JSON.stringify({}) });
   }
 
-  async function loadFullState() {
+  async function loadFullState(opts) {
+    opts = opts || {};
+    var sessionStart = opts.sessionStartDate || opts.sessionStart || opts.startDate;
+    var sessionEnd = opts.sessionEndDate || opts.sessionEnd || opts.endDate;
+    if (!sessionStart || !sessionEnd) {
+      throw new Error('loadFullState requires startDate and endDate (or sessionStartDate/sessionEndDate)');
+    }
+    var bootstrapUrl = '/bootstrap?startDate=' + encodeURIComponent(sessionStart) +
+      '&endDate=' + encodeURIComponent(sessionEnd);
+    var data;
+    try {
+      data = await apiFetch(bootstrapUrl);
+    } catch (bootstrapErr) {
+      console.warn('bootstrap fallback:', bootstrapErr.message || bootstrapErr);
+      return loadFullStateLegacy(sessionStart, sessionEnd);
+    }
+    return mapBootstrapToState(data);
+  }
+
+  function mapBootstrapToState(data) {
+    data = data || {};
+    var workingHours = data.workingHours || {};
+    var whMap = workingHours || {};
+    var defaultWh = { 0: { start: '08:00', end: '20:00', enabled: false }, 1: { start: '08:00', end: '20:00', enabled: true }, 2: { start: '08:00', end: '20:00', enabled: true }, 3: { start: '08:00', end: '20:00', enabled: true }, 4: { start: '08:00', end: '20:00', enabled: true }, 5: { start: '08:00', end: '20:00', enabled: true }, 6: { start: '08:00', end: '20:00', enabled: true } };
+    Object.keys(whMap).forEach(function (k) {
+      var v = whMap[k];
+      defaultWh[k] = { start: v.start || '08:00', end: v.end || '20:00', enabled: !!v.enabled };
+    });
+    return {
+      settings: { slotMinutes: 60 },
+      workingHours: defaultWh,
+      rooms: (data.rooms || []).map(roomFromApi),
+      packages: (data.packages || []).map(packageFromApi),
+      memberPackages: (data.memberPackages || []).map(memberPackageFromApi),
+      staff: (data.staff || []).map(staffFromApi),
+      members: (data.members || []).map(memberFromApi),
+      sessions: (data.sessions || []).map(sessionFromApi),
+    };
+  }
+
+  async function loadFullStateLegacy(sessionStart, sessionEnd) {
+    var sessionsUrl = '/sessions?startDate=' + encodeURIComponent(sessionStart) +
+      '&endDate=' + encodeURIComponent(sessionEnd);
     const settled = await Promise.allSettled([
       apiFetch('/members'),
       apiFetch('/staff'),
@@ -285,7 +462,7 @@
       apiFetch('/packages'),
       apiFetch('/member-packages'),
       apiFetch('/settings/working-hours'),
-      apiFetch('/sessions?startDate=2000-01-01&endDate=2030-12-31'),
+      apiFetch(sessionsUrl),
     ]);
 
     function unwrap(index, fallback) {
@@ -295,35 +472,39 @@
       return fallback;
     }
 
-    const members = unwrap(0, []);
-    const staff = unwrap(1, []);
-    const rooms = unwrap(2, []);
-    const packages = unwrap(3, []);
-    const memberPackagesRes = unwrap(4, []);
-    const workingHours = unwrap(5, {});
-    const sessionsRes = unwrap(6, []);
-
-    const whMap = workingHours || {};
-    const defaultWh = { 0: { start: '08:00', end: '20:00', enabled: false }, 1: { start: '08:00', end: '20:00', enabled: true }, 2: { start: '08:00', end: '20:00', enabled: true }, 3: { start: '08:00', end: '20:00', enabled: true }, 4: { start: '08:00', end: '20:00', enabled: true }, 5: { start: '08:00', end: '20:00', enabled: true }, 6: { start: '08:00', end: '20:00', enabled: true } };
-    Object.keys(whMap).forEach(function (k) {
-      const v = whMap[k];
-      defaultWh[k] = { start: v.start || '08:00', end: v.end || '20:00', enabled: !!v.enabled };
+    return mapBootstrapToState({
+      members: unwrap(0, []),
+      staff: unwrap(1, []),
+      rooms: unwrap(2, []),
+      packages: unwrap(3, []),
+      memberPackages: unwrap(4, []),
+      workingHours: unwrap(5, {}),
+      sessions: unwrap(6, []),
     });
-    return {
-      settings: { slotMinutes: 60 },
-      workingHours: defaultWh,
-      rooms: (rooms || []).map(roomFromApi),
-      packages: (packages || []).map(packageFromApi),
-      memberPackages: (memberPackagesRes || []).map(memberPackageFromApi),
-      staff: (staff || []).map(staffFromApi),
-      members: (members || []).map(memberFromApi),
-      sessions: (sessionsRes || []).map(sessionFromApi),
-    };
   }
 
   // CRUD – frontend state güncellemesi için API yanıtını döndürür
   async function createMember(body) {
     var row = await apiFetch('/members', { method: 'POST', body: JSON.stringify(memberToApi(body)) });
+    return memberFromApi(row);
+  }
+  async function getFormerMembers() {
+    var rows = await apiFetch('/members/former');
+    return (rows || []).map(function (row) {
+      var m = memberFromApi(row);
+      m.packageCount = row.package_count;
+      m.sessionCount = row.session_count;
+      return m;
+    });
+  }
+  async function getFormerMemberPackages(memberId) {
+    return apiFetch('/members/former/' + memberId + '/packages');
+  }
+  async function reactivateMember(id, body) {
+    var row = await apiFetch('/members/' + id + '/reactivate', {
+      method: 'POST',
+      body: JSON.stringify(body ? memberToApi(body) : {}),
+    });
     return memberFromApi(row);
   }
   async function updateMember(id, body) {
@@ -462,10 +643,39 @@
     return row ? memberPackageFromApi(row) : null;
   }
   async function getMemberPackageSessions(id) {
-    return apiFetch('/member-packages/' + id + '/sessions');
+    const rows = await apiFetch('/member-packages/' + id + '/sessions');
+    return (rows || []).map(packageSessionFromApi);
   }
-  async function getSessions() {
-    const rows = await apiFetch('/sessions?startDate=2000-01-01&endDate=2030-12-31&_=' + Date.now());
+  function packageSessionFromApi(row) {
+    return {
+      id: row.id,
+      startTs: Number(row.startTs != null ? row.startTs : row.start_ts),
+      endTs: Number(row.endTs != null ? row.endTs : row.end_ts),
+      note: row.note || '',
+      staffName: row.staffName || row.staff_name || '',
+      roomName: row.roomName || row.room_name || '',
+      checkedIn: row.checkedIn != null ? !!row.checkedIn : !!row.checked_in,
+      checkedInAt: row.checkedInAt || row.checked_in_at || null,
+      checkInMethod: row.checkInMethod || row.check_in_method || null,
+      attendanceOutcome: row.attendanceOutcome || row.attendance_outcome || null,
+      attendanceConfirmedAt: row.attendanceConfirmedAt || row.attendance_confirmed_at || null,
+      isPast: !!row.isPast,
+      isCancelled: !!(row.isCancelled || row.is_cancelled),
+      isConsumed: !!(row.isConsumed || row.is_consumed),
+      canCancel: !!row.canCancel,
+      cancelReason: row.cancelReason || null,
+      cancelReasonDetail: row.cancelReasonDetail || null,
+      status: row.status || null,
+      statusLabel: row.statusLabel || null,
+      approvalLabel: row.approvalLabel || row.approval_label || null,
+      approvalKind: row.approvalKind || row.approval_kind || null,
+    };
+  }
+  async function getSessions(startDate, endDate) {
+    if (!startDate || !endDate) {
+      throw new Error('getSessions requires startDate and endDate');
+    }
+    const rows = await apiFetch('/sessions?startDate=' + encodeURIComponent(startDate) + '&endDate=' + encodeURIComponent(endDate) + '&_=' + Date.now());
     return (rows || []).map(sessionFromApi);
   }
 
@@ -514,15 +724,19 @@
   }
   async function updateSession(id, body) {
     const payload = {};
-    ['staffId', 'memberId', 'roomId', 'startTs', 'endTs', 'note', 'memberPackageId'].forEach(function (k) {
+    ['staffId', 'memberId', 'roomId', 'startTs', 'endTs', 'note', 'memberPackageId', 'adminPassword'].forEach(function (k) {
       if (body[k] !== undefined) payload[k] = body[k];
     });
     const res = await apiFetch('/sessions/' + id, { method: 'PUT', body: JSON.stringify(payload) });
     const session = res && res.session ? res.session : res;
     return session && session.id ? sessionFromApi(session) : { ...payload, id: parseInt(id, 10) };
   }
-  async function deleteSession(id) {
-    await apiFetch('/sessions/' + id, { method: 'DELETE' });
+  async function deleteSession(id, options) {
+    var opts = options || {};
+    await apiFetch('/sessions/' + id, {
+      method: 'DELETE',
+      body: opts.adminPassword ? JSON.stringify({ adminPassword: opts.adminPassword }) : undefined,
+    });
   }
 
   async function updateWorkingHours(workingHours) {
@@ -531,6 +745,17 @@
       payload[k] = workingHours[k];
     });
     await apiFetch('/settings/working-hours', { method: 'PUT', body: JSON.stringify(payload) });
+  }
+
+  async function getInstitutionWhatsapp() {
+    return apiFetch('/settings/institution-whatsapp');
+  }
+
+  async function saveInstitutionWhatsapp(whatsapp) {
+    return apiFetch('/settings/institution-whatsapp', {
+      method: 'PUT',
+      body: JSON.stringify({ whatsapp: whatsapp != null ? String(whatsapp) : '' }),
+    });
   }
 
   async function getActivityLogs(params) {
@@ -557,6 +782,61 @@
   async function executeDevReset(targets, adminPassword) {
     return apiFetch('/dev-reset', { method: 'POST', body: JSON.stringify({ targets, adminPassword }) });
   }
+  async function getDevSeedMeta() {
+    return apiFetch('/dev-reset/seed-test-members/meta');
+  }
+  async function seedTestMembers(count, adminPassword) {
+    return apiFetch('/dev-reset/seed-test-members', {
+      method: 'POST',
+      body: JSON.stringify({ count, adminPassword }),
+    });
+  }
+
+  async function getAttendanceEntryList(params) {
+    var q = new URLSearchParams();
+    if (params && params.startDate) q.set('startDate', params.startDate);
+    if (params && params.endDate) q.set('endDate', params.endDate);
+    if (params && params.date) q.set('date', params.date);
+    if (params && params.staffId != null) q.set('staffId', params.staffId);
+    var path = '/sessions/attendance/entry-list' + (q.toString() ? '?' + q.toString() : '');
+    return apiFetch(path);
+  }
+
+  async function getWalkInAccessList(params) {
+    var q = new URLSearchParams();
+    if (params && params.startDate) q.set('startDate', params.startDate);
+    if (params && params.endDate) q.set('endDate', params.endDate);
+    if (params && params.date) q.set('date', params.date);
+    var path = '/sessions/attendance/walk-in-list' + (q.toString() ? '?' + q.toString() : '');
+    return apiFetch(path);
+  }
+
+  async function getPendingAttendance(params) {
+    var q = new URLSearchParams();
+    if (params && params.date) q.set('date', params.date);
+    var path = '/sessions/attendance/pending' + (q.toString() ? '?' + q.toString() : '');
+    return apiFetch(path);
+  }
+
+  async function confirmSessionAttendance(sessionId, action) {
+    return apiFetch('/sessions/attendance/' + sessionId, {
+      method: 'POST',
+      body: JSON.stringify({ action: action }),
+    });
+  }
+
+  async function getStaffNotifications(unreadOnly) {
+    var path = '/sessions/attendance/notifications/list' + (unreadOnly ? '?unread=1' : '');
+    return apiFetch(path);
+  }
+
+  async function markStaffNotificationRead(id) {
+    return apiFetch('/sessions/attendance/notifications/' + id + '/read', { method: 'POST' });
+  }
+
+  async function checkStaffShiftReminder() {
+    return apiFetch('/sessions/attendance/shift-reminder', { method: 'POST' });
+  }
 
   window.API = {
     getToken,
@@ -568,13 +848,30 @@
     getLegalLinks,
     setPassword,
     changePassword,
+    updateAccountProfile,
     logout,
     loadFullState,
     loadMemberPortalState,
     getMemberDashboard,
     cancelMemberSession,
+    requestMemberAccountDeletion,
+    createMemberPackageRequest,
+    getPackageRequests,
+    getPackageRequestsUnseenCount,
+    markPackageRequestsSeen,
+    dismissPackageRequest,
+    getClosurePeriods,
+    createClosurePeriod,
+    deleteClosurePeriod,
+    getMemberAccessQr,
+    getDeletionRequests,
+    approveMemberDeletionRequest,
+    rejectMemberDeletionRequest,
     resetMemberPassword,
     createMember,
+    getFormerMembers,
+    getFormerMemberPackages,
+    reactivateMember,
     updateMember,
     deleteMember,
     createStaff,
@@ -600,11 +897,22 @@
     updateSession,
     deleteSession,
     updateWorkingHours,
+    getInstitutionWhatsapp,
+    saveInstitutionWhatsapp,
     apiFetch,
     getActivityLogs,
     getDevResetMeta,
     previewDevReset,
     executeDevReset,
+    getDevSeedMeta,
+    seedTestMembers,
+    getPendingAttendance,
+    getAttendanceEntryList,
+    getWalkInAccessList,
+    confirmSessionAttendance,
+    getStaffNotifications,
+    markStaffNotificationRead,
+    checkStaffShiftReminder,
   };
   window.__API_BASE__ = API_BASE;
 })();
