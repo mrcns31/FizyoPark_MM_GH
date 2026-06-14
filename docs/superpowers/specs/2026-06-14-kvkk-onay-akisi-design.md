@@ -5,11 +5,17 @@
 Üyeler, personel ve admin kullanıcıları sisteme giriş yapıp kişisel verileri
 (ad soyad, telefon, e-posta, doğum tarihi, cinsiyet, profil fotoğrafı, paket
 bilgileri, seans katılımı, giriş kayıtları, QR kod kullanımı, IP adresi, cihaz
-bilgileri vb.) işlenirken hiçbir aşamada **Gizlilik Politikası, KVKK Aydınlatma
-Metni ve Açık Rıza Metni**'ni onaylamıyor. Bu metinler
-`https://fizyopark.com.tr/privacy-policy` adresinde yayında (son güncelleme
-09.06.2026), ancak uygulama içinde kullanıcıdan onay alınmıyor ve audit trail
-tutulmuyor.
+bilgileri vb.) işlenirken hiçbir aşamada **Gizlilik Politikası, Açık Rıza
+Metni, Üyelik ve Kullanım Koşulları ve Çerez Politikası**'nı onaylamıyor. Bu
+dört metin fizyopark.com.tr üzerinde ayrı sayfalarda yayında (son güncelleme
+14.06.2026):
+
+- Gizlilik Politikası: `https://fizyopark.com.tr/privacy-policy`
+- Açık Rıza Metni: `https://fizyopark.com.tr/explicit-consent-text`
+- Üyelik ve Kullanım Koşulları: `https://fizyopark.com.tr/membership-and-terms-of-use`
+- Çerez Politikası: `https://fizyopark.com.tr/cookie-policy`
+
+ancak uygulama içinde kullanıcıdan onay alınmıyor ve audit trail tutulmuyor.
 
 KVKK madde 10 (aydınlatma yükümlülüğü) ve madde 12 (veri güvenliği / işleme
 kayıtları) gereği, kullanıcıların bu metinleri okuduğuna ve açık rıza
@@ -19,7 +25,9 @@ yeniden onay vermeli.
 ## Kapsam kararları (brainstorming sırasında onaylandı)
 
 1. Metin içeriği uygulama içine **gömülmez** — uygulama içinden
-   `https://fizyopark.com.tr/privacy-policy` sayfasına link verilir.
+   fizyopark.com.tr üzerindeki ilgili sayfalara link verilir (Gizlilik
+   Politikası, Açık Rıza Metni, Üyelik ve Kullanım Koşulları, Çerez
+   Politikası — 4 ayrı link).
 2. Onay ekranı **tüm rollere** gösterilir: Üye, Personel, Admin.
 3. İlk girişte (yeni kullanıcı, `must_change_password = true`), onay ekranı
    **şifre belirleme ekranından önce** gösterilir.
@@ -50,8 +58,11 @@ COMMENT ON TABLE user_consents IS 'KVKK / Gizlilik Politikası onay kayıtları 
 
 ```js
 module.exports = {
-  CONSENT_VERSION: '2026-06-09', // fizyopark.com.tr/privacy-policy "son güncelleme" tarihiyle eşleşmeli
+  CONSENT_VERSION: '2026-06-14', // fizyopark.com.tr sayfalarındaki "Son Güncelleme Tarihi" ile eşleşmeli
   PRIVACY_POLICY_URL: 'https://fizyopark.com.tr/privacy-policy',
+  EXPLICIT_CONSENT_URL: 'https://fizyopark.com.tr/explicit-consent-text',
+  TERMS_OF_USE_URL: 'https://fizyopark.com.tr/membership-and-terms-of-use',
+  COOKIE_POLICY_URL: 'https://fizyopark.com.tr/cookie-policy',
 };
 ```
 
@@ -68,8 +79,9 @@ module.exports = {
 
 ### `backend/utils/legalConsent.js` (yeni dosya)
 
-`CONSENT_VERSION` ve `PRIVACY_POLICY_URL` sabitlerini export eder (yukarıdaki
-içerik).
+`CONSENT_VERSION` ve 4 URL sabitini (`PRIVACY_POLICY_URL`,
+`EXPLICIT_CONSENT_URL`, `TERMS_OF_USE_URL`, `COOKIE_POLICY_URL`) export eder
+(yukarıdaki içerik).
 
 ### `backend/routes/auth.js`
 
@@ -149,11 +161,16 @@ Yeni tam ekran overlay `#legalConsentScreen`, `#passwordChangeScreen`
   - Hero ikon + başlık: "Verilerinizin Korunması"
   - Açıklama paragrafı: kısaca hangi veriler işleniyor ve neden onay
     gerektiği.
-  - Link butonu (yeni sekmede açılır, `target="_blank" rel="noopener"`):
-    "Gizlilik Politikası, KVKK Aydınlatma Metni ve Açık Rıza Metni'ni
-    Görüntüle" → `PRIVACY_POLICY_URL`.
-  - Checkbox + label: "Yukarıdaki metinleri okudum, anladım ve kişisel
-    verilerimin belirtilen amaçlarla işlenmesine açık rıza veriyorum."
+  - 4 ayrı link (her biri yeni sekmede açılır, `target="_blank"
+    rel="noopener"`), liste halinde:
+    - "Gizlilik Politikası" → `PRIVACY_POLICY_URL`
+    - "Açık Rıza Metni" → `EXPLICIT_CONSENT_URL`
+    - "Üyelik ve Kullanım Koşulları" → `TERMS_OF_USE_URL`
+    - "Çerez Politikası" → `COOKIE_POLICY_URL`
+  - Checkbox + label: "Yukarıdaki Gizlilik Politikası, Açık Rıza Metni,
+    Üyelik ve Kullanım Koşulları ve Çerez Politikası'nı okudum, anladım ve
+    kişisel verilerimin belirtilen amaçlarla işlenmesine açık rıza
+    veriyorum."
   - "Kabul Ediyorum ve Devam Et" butonu — `disabled` until checkbox checked.
   - Hata mesajı alanı `#legalConsentError` (network hatası için).
 
@@ -202,10 +219,11 @@ Yeni tam ekran overlay `#legalConsentScreen`, `#passwordChangeScreen`
 
 ### Uygulama içi link ekleme
 
-- `index.html` login ekranı footer'ına (`.login-footer` altına), gizlilik
-  politikasına link eklenir: "Gizlilik Politikası ve KVKK Aydınlatma Metni"
-  → `PRIVACY_POLICY_URL`, `target="_blank"`.
-- Üye profil modalı ve personel/admin hesap modalında (varsa) benzer bir link
+- `index.html` login ekranı footer'ına (`.login-footer` altına), 4 metne de
+  link eklenir (kısa, alt alta veya `·` ile ayrılmış satır): "Gizlilik
+  Politikası · Açık Rıza Metni · Üyelik ve Kullanım Koşulları · Çerez
+  Politikası" — her biri ilgili URL'ye `target="_blank"` ile gider.
+- Üye profil modalı ve personel/admin hesap modalında (varsa) aynı 4 link
   eklenir — implementasyon planında ilgili modal dosyaları/satırları
   belirlenecek.
 
