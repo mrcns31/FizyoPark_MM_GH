@@ -56,6 +56,18 @@ değişiklik gerekmiyor. Sorun sadece frontend'in bu kuralı kendi başına
 (yanlış ve daha kısıtlayıcı şekilde, personel-oda eşleşmesi üzerinden)
 tekrar uygulamaya çalışması.
 
+**Doğrulama (kullanıcı örneği, 15.06.2026 10:00):** Arzum 2→3, Cansu 2,
+Şerife 3 talep ediyor (toplam 8). Odalar 3+3+2 alet. `matchStaffToRooms`:
+talepler azalan (Arzum 3, Şerife 3, Cansu 2) ↔ odalar azalan (3, 3, 2) →
+sıralı eşleşme, hepsi `talep ≤ kapasite` → **feasible**, rebalance ile
+doğru dağıtılır. Karışık kapasiteli odalarda (örn. 3+2+2+2) da aynı
+azalan-azalan eşleştirme algoritması matematiksel olarak doğru çalışır —
+"toplam alet" ve "personel başı max" gibi iki ayrı global sayıya
+indirgemek yeterli değildir (örn. 3,2,2,2'de bir personele "3,3,3"
+dağıtılamaz, çünkü 3 alet kapasiteli oda sadece bir tane); bu nedenle
+oda listesi (`rooms` tablosu) ve mevcut eşleştirme algoritması olduğu
+gibi korunur, yeni global ayar eklenmez.
+
 ## Çözüm: Kapasite Kontrolünü Backend'e Devret
 
 ### Yeni ortak prensip
