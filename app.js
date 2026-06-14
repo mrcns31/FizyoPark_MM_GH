@@ -1362,6 +1362,13 @@ function cacheEls() {
     "staffAddModal",
     "adminHubTitle",
     "adminHubDevResetNav",
+    "closurePeriodStart",
+    "closurePeriodEnd",
+    "closurePeriodDescription",
+    "closurePeriodError",
+    "closurePeriodSummary",
+    "saveClosurePeriodBtn",
+    "closurePeriodsList",
     "passwordChangeScreen",
     "passwordChangeBackBtn",
     "passwordChangeForm",
@@ -3971,6 +3978,13 @@ function escapeHtml(str) {
     .replaceAll("'", "&#039;");
 }
 
+function formatDateTR(dateStr) {
+  if (!dateStr) return "";
+  var parts = String(dateStr).slice(0, 10).split("-");
+  if (parts.length !== 3) return dateStr;
+  return parts[2] + "." + parts[1] + "." + parts[0];
+}
+
 /** Her personel için kendine özgü, birbirinden ayrışan renk paleti (HSL) */
 const STAFF_COLOR_PALETTE = [
   { h: 265, s: 75 },  // mor
@@ -4048,6 +4062,112 @@ function renderRooms() {
     });
 
     wrap.appendChild(item);
+  }
+}
+
+function renderClosurePeriods(list) {
+  var wrap = els.closurePeriodsList;
+  if (!wrap) return;
+  wrap.innerHTML = "";
+  (list || []).forEach(function (cp) {
+    var item = document.createElement("div");
+    item.className = "listItem";
+    item.innerHTML =
+      '<div class="listItem__left">' +
+        '<div class="listItem__title">' + escapeHtml(formatDateTR(cp.startDate)) + ' – ' + escapeHtml(formatDateTR(cp.endDate)) + '</div>' +
+        '<div class="listItem__meta">' + escapeHtml(cp.description) + '</div>' +
+      '</div>' +
+      '<div class="listItem__actions">' +
+        '<button class="btn btn--xs btn--ghost" type="button">Sil</button>' +
+      '</div>';
+    item.querySelector("button").addEventListener("click", function () {
+      deleteClosurePeriodRow(cp.id);
+    });
+    wrap.appendChild(item);
+  });
+}
+
+async function loadClosurePeriods() {
+  if (!window.API) return;
+  try {
+    var result = await window.API.getClosurePeriods();
+    renderClosurePeriods(result.closurePeriods || []);
+  } catch (e) {
+    if (els.closurePeriodError) {
+      els.closurePeriodError.textContent = (e.data && e.data.error) || e.message || "Liste yüklenemedi.";
+      els.closurePeriodError.classList.remove("hidden");
+    }
+  }
+}
+
+function prepareClosureDaysPanel() {
+  if (els.closurePeriodError) els.closurePeriodError.classList.add("hidden");
+  if (els.closurePeriodSummary) els.closurePeriodSummary.classList.add("hidden");
+  if (els.closurePeriodStart) els.closurePeriodStart.value = "";
+  if (els.closurePeriodEnd) els.closurePeriodEnd.value = "";
+  if (els.closurePeriodDescription) els.closurePeriodDescription.value = "";
+  loadClosurePeriods();
+}
+
+async function saveClosurePeriod() {
+  if (!els.closurePeriodError) return;
+  els.closurePeriodError.classList.add("hidden");
+  if (els.closurePeriodSummary) els.closurePeriodSummary.classList.add("hidden");
+
+  var startDate = (els.closurePeriodStart.value || "").trim();
+  var endDate = (els.closurePeriodEnd.value || "").trim();
+  var description = (els.closurePeriodDescription.value || "").trim();
+  var todayStr = new Date().toISOString().slice(0, 10);
+
+  if (!startDate || !endDate || !description) {
+    els.closurePeriodError.textContent = "Tüm alanları doldurun.";
+    els.closurePeriodError.classList.remove("hidden");
+    return;
+  }
+  if (endDate < startDate) {
+    els.closurePeriodError.textContent = "Bitiş tarihi başlangıç tarihinden önce olamaz.";
+    els.closurePeriodError.classList.remove("hidden");
+    return;
+  }
+  if (startDate < todayStr) {
+    els.closurePeriodError.textContent = "Geçmiş tarihli kapanış girilemez.";
+    els.closurePeriodError.classList.remove("hidden");
+    return;
+  }
+
+  if (!window.API) return;
+  try {
+    var result = await window.API.createClosurePeriod({ startDate: startDate, endDate: endDate, description: description });
+    var s = result.summary || {};
+    if (els.closurePeriodSummary) {
+      els.closurePeriodSummary.textContent =
+        s.dayCount + " günlük kapanış kaydedildi. " +
+        s.extendedPackageCount + " aktif paketin süresi " + s.dayCount + " gün uzatıldı, " +
+        s.rescheduledCount + " seans ileri tarihe alındı" +
+        (s.cancelledOnlyCount > 0 ? ", " + s.cancelledOnlyCount + " seans yeniden planlanamadığı için sadece iptal edildi." : ".");
+      els.closurePeriodSummary.classList.remove("hidden");
+    }
+    els.closurePeriodStart.value = "";
+    els.closurePeriodEnd.value = "";
+    els.closurePeriodDescription.value = "";
+    loadClosurePeriods();
+  } catch (e) {
+    els.closurePeriodError.textContent = (e.data && e.data.error) || e.message || "Kapanış kaydedilemedi.";
+    els.closurePeriodError.classList.remove("hidden");
+  }
+}
+
+async function deleteClosurePeriodRow(id) {
+  if (!(await showAppConfirm("Bu kapanış kaydını silmek istediğinize emin misiniz? Daha önce yapılan seans kaydırma ve paket uzatma işlemleri geri alınmaz."))) return;
+  if (!window.API) return;
+  try {
+    await window.API.deleteClosurePeriod(id);
+    loadClosurePeriods();
+  } catch (e) {
+    if (els.closurePeriodError) {
+      els.closurePeriodError.textContent = (e.data && e.data.error) || e.message || "Kayıt silinemedi.";
+      els.closurePeriodError.classList.remove("hidden");
+    }
   }
 }
 
@@ -6458,6 +6578,7 @@ function refreshAdminHubSection(section) {
   else if (section === "rooms") prepareRoomsPanel();
   else if (section === "packages") preparePackagesPanel();
   else if (section === "staff-list") prepareStaffListPanel();
+  else if (section === "closure-days") prepareClosureDaysPanel();
   else if (section === "dev-reset") prepareDevResetPanel();
   else if (section === "dev-seed") prepareDevSeedPanel();
   else if (section === "profile") fillAdminProfileModal();
@@ -10915,6 +11036,10 @@ function bindEvents() {
     MOBILE_PLANNER_MQ.addEventListener("change", onMobilePlannerMediaChange);
   } else if (typeof MOBILE_PLANNER_MQ.addListener === "function") {
     MOBILE_PLANNER_MQ.addListener(onMobilePlannerMediaChange);
+  }
+
+  if (els.saveClosurePeriodBtn) {
+    els.saveClosurePeriodBtn.addEventListener("click", saveClosurePeriod);
   }
 
   els.addRoomBtn.addEventListener("click", async () => {
