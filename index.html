@@ -196,6 +196,49 @@
       </div>
     </div>
 
+    <!-- KVKK / Gizlilik onay ekranı (tüm roller, giriş/boot sonrası gösterilir) -->
+    <div id="legalConsentScreen" class="pw-change hidden" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="legalConsentHeaderTitle">
+      <header class="pw-change__header">
+        <span class="pw-change__header-spacer" aria-hidden="true"></span>
+        <h1 id="legalConsentHeaderTitle" class="pw-change__header-title">Gizlilik ve Kişisel Verilerin Korunması</h1>
+        <span class="pw-change__header-spacer" aria-hidden="true"></span>
+      </header>
+      <div class="pw-change__scroll">
+        <div class="pw-change__hero">
+          <div class="pw-change__hero-icon" aria-hidden="true">
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75">
+              <path d="M12 2 4 5v6c0 5 3.5 9 8 11 4.5-2 8-6 8-11V5l-8-3z"/>
+              <path d="M9 12l2 2 4-4"/>
+            </svg>
+          </div>
+          <p class="pw-change__hero-title">Verilerinizin Korunması</p>
+        </div>
+        <div class="pw-change__info" role="note">
+          <span class="pw-change__info-icon" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+          </span>
+          <p class="pw-change__info-text">FizyoPark olarak kişisel verilerinizi (ad soyad, iletişim bilgileri, üyelik/seans kayıtları, QR kod ile tesis giriş kayıtları, cihaz ve IP bilgileri) yalnızca hizmetlerimizin yürütülmesi, seans planlaması, tesis güvenliği ve yasal yükümlülüklerimiz kapsamında işliyoruz. Devam etmeden önce lütfen aşağıdaki metinleri inceleyin.</p>
+        </div>
+        <form id="legalConsentForm" class="pw-change__form-card" novalidate>
+          <ul class="pw-change__link-list">
+            <li><a id="legalConsentLinkPrivacy" href="https://fizyopark.com.tr/privacy-policy" target="_blank" rel="noopener">Gizlilik Politikası</a></li>
+            <li><a id="legalConsentLinkExplicitConsent" href="https://fizyopark.com.tr/explicit-consent-text" target="_blank" rel="noopener">Açık Rıza Metni</a></li>
+            <li><a id="legalConsentLinkTerms" href="https://fizyopark.com.tr/membership-and-terms-of-use" target="_blank" rel="noopener">Üyelik ve Kullanım Koşulları</a></li>
+            <li><a id="legalConsentLinkCookie" href="https://fizyopark.com.tr/cookie-policy" target="_blank" rel="noopener">Çerez Politikası</a></li>
+          </ul>
+          <label class="pw-change__checkbox-field" for="legalConsentCheckbox">
+            <input type="checkbox" id="legalConsentCheckbox" required />
+            <span>Yukarıdaki Gizlilik Politikası, Açık Rıza Metni, Üyelik ve Kullanım Koşulları ve Çerez Politikası'nı okudum, anladım ve kişisel verilerimin belirtilen amaçlarla işlenmesine açık rıza veriyorum.</span>
+          </label>
+          <p id="legalConsentError" class="pw-change__error error hidden"></p>
+          <button id="legalConsentSubmitBtn" class="pw-change__submit" type="submit">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+            <span>Kabul Ediyorum ve Devam Et</span>
+          </button>
+        </form>
+      </div>
+    </div>
+
     <!-- Admin – Hesap bilgileri güncelleme -->
     <div id="adminAccountScreen" class="pw-change hidden" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="adminAccountHeaderTitle">
       <header class="pw-change__header">
