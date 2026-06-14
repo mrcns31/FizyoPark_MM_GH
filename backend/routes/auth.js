@@ -290,6 +290,7 @@ router.put('/account', verifyToken, [
   body('email').optional().trim().isEmail().withMessage('Geçerli e-posta girin'),
   body('phone').optional({ nullable: true }).isString(),
   body('whatsapp').optional({ nullable: true }).isString(),
+  body('legalLinks').optional().isObject(),
   body('currentPassword').optional().isString(),
   body('newPassword').optional().isLength({ min: 4 }).withMessage('Yeni şifre en az 4 karakter olmalı'),
   body('confirmPassword').optional().isString(),
@@ -306,6 +307,7 @@ router.put('/account', verifyToken, [
       email,
       phone,
       whatsapp,
+      legalLinks,
       currentPassword,
       newPassword,
       confirmPassword,
@@ -396,6 +398,10 @@ router.put('/account', verifyToken, [
       }
     }
 
+    if (legalLinks !== undefined && legalLinks && typeof legalLinks === 'object' && (user.role === 'admin' || user.role === 'manager')) {
+      await setLegalLinks(legalLinks);
+    }
+
     const profileRes = await db.query(
       `SELECT u.id, u.username, u.email, u.role, u.must_change_password, u.display_name,
               s.id AS staff_id, s.first_name, s.last_name, s.phone,
@@ -408,10 +414,15 @@ router.put('/account', verifyToken, [
       [user.id]
     );
 
-    const profile = buildUserProfile(profileRes.rows[0]);
+    const profile = {
+      ...buildUserProfile(profileRes.rows[0]),
+      ...(await getConsentStatus(user.id)),
+    };
     let institutionWhatsapp = '';
+    let legalLinksOut;
     if (user.role === 'admin' || user.role === 'manager') {
       institutionWhatsapp = (await getInstitutionWhatsApp()) || '';
+      legalLinksOut = await getLegalLinks();
     }
 
     await activityLog(req, {
@@ -424,6 +435,7 @@ router.put('/account', verifyToken, [
         emailChanged: email != null,
         passwordChanged: !!(newPassword && String(newPassword).trim()),
         whatsappChanged: whatsapp !== undefined,
+        legalLinksChanged: legalLinks !== undefined,
       },
     }).catch(() => {});
 
@@ -431,6 +443,7 @@ router.put('/account', verifyToken, [
       message: 'Bilgileriniz güncellendi',
       user: profile,
       institutionWhatsapp,
+      ...(legalLinksOut ? { legalLinks: legalLinksOut } : {}),
     });
   } catch (error) {
     console.error('Account update error:', error);
