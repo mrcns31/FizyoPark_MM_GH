@@ -1,0 +1,81 @@
+---
+description: Mobile-first UI/UX standartları — tüm frontend tasarım ve CSS değişikliklerinde geçerli
+globs: styles.css,index.html,app.js,api.js,activity-logs.html,activity-logs.js
+alwaysApply: true
+---
+
+# Mobile-First Tasarım
+
+Bu projede tüm yeni ve güncellenen arayüz çalışmaları **mobile-first** prensibine uygun yapılır.
+
+## CSS
+
+- Varsayılan stiller **320–480px** için yazılır; geniş ekranlar `min-width` media query ile eklenir (`640px`, `1024px`).
+- `max-width` ile “küçültme” yerine `min-width` ile “genişletme” tercih edilir.
+- Dokunma hedefleri min **44×44px**; buton/input arası yeterli `gap`.
+- `:hover` ile kritik işlev verilmez; `@media (hover: hover)` ile sarmalanır.
+- `env(safe-area-inset-*)` ile çentikli ekranlara padding eklenir.
+
+## Layout
+
+- Sidebar hover’a bağlı olmaz; drawer/overlay + toggle butonu kullanılır.
+- Topbar mobilde sade: hamburger, tarih nav, birincil aksiyon; ikincil aksiyonlar overflow menüde.
+- `.formGrid` ve benzeri grid’ler mobilde tek sütun başlar.
+- Tablolar mobilde kart listesi veya yatay scroll + sticky ilk sütun.
+
+## Takvim
+
+- Mobilde varsayılan: **günlük liste** görünümü; haftalık 7 sütunlu grid zorlanmaz.
+- Üye rolü: tam genişlik seans kartları; sidebar yerine alt tab bar düşünülür.
+- `min-width: 960px` gibi sabit genişlikler yalnızca `min-width: 1024px` üstünde uygulanır.
+
+## Modallar
+
+- `width: min(…, calc(100vw - 32px))`, `max-height: 100dvh`.
+- Küçük ekranda tam ekran veya bottom sheet; footer aksiyonları sticky.
+- Layout genişlik/yükseklik/flex **CSS sınıfında**; HTML/JS stringlerinde `style="…"` kullanma (aşağıdaki istisnalar hariç).
+
+## Capacitor — inline stil yasağı (CR-11)
+
+Mağaza uygulamasında (Capacitor WebView) layout inline stilleri ekran boyutuna göre bozulur. **Yeni ve güncellenen kod** bu kurallara uyar.
+
+### Yasak (üye + personel yolu)
+
+- `index.html`, üye/personel modal ve ana layout’ta `style="width|height|max-height|display|flex|overflow…"`
+- `app.js` içinde üye/personel modal/kart render stringlerinde layout inline (margin-only sarı liste — yine de sınıf tercih et)
+- Küçük popup yerine dar modal: üye listeleri gibi geniş içerik → **`admin-main-panel`** ana alanda (`#adminMembersListView` vb.), modal değil
+
+### Tercih edilen sınıflar
+
+| Amaç | Sınıf / kalıp |
+|------|----------------|
+| Üye sheet modal | `.modal__card--member-sheet` |
+| Kompakt onay | `.modal--compact` + `.modal__card--member-request` / `.member-cancel-modal__card` |
+| Admin geniş liste | `.admin-main-panel`, `.admin-main-panel__content` |
+| Admin modal kart | `.modal__card--admin-hub`, `.member-package-modal`, `.staff-hours-modal`, … |
+| Boş / yükleniyor | `.admin-panel-empty`, `.admin-panel-loading` |
+| Sidebar seçili | `.sidebar-nav__btn--active` |
+
+Yeni modal eklemeden önce `styles.css` ve `docs/CAPACITOR-ROADMAP.md` Ek A’ya bak; benzer sınıf varsa genişlet.
+
+### İzin verilen istisnalar (yeşil)
+
+- Admin takvim **grid sütun/genişlik** hesabı (`grid-template-columns`, event `width`/`height` px) — runtime layout motoru
+- Personel rengi kartları: yalnızca CSS değişkeni (`--staff-card-border`, `--staff-card-bg`) inline; tam `background`/`border-color` stringi yazma
+- `element.style.display` / görünürlük toggle (mevcut form akışları)
+- Admin-only PDF/yazdırma penceresi içi `<style>` (Capacitor CSP ayrı test — CR-10)
+- Admin-only export tabloları (`innerHTML` PDF/Excel)
+
+### Doğrulama
+
+- PR/ değişiklik sonrası: üye ve personel modal akışlarında `style="` araması yap; layout inline kalmamalı
+- Envanter: `docs/CAPACITOR-ROADMAP.md` Ek A (CR-01)
+
+## JS
+
+- `matchMedia('(max-width: 767px)')` ile mobil davranış; resize’da layout state güncellenir.
+- Yeni UI özelliği eklerken önce mobil akışı tasarla, sonra masaüstünü genişlet.
+
+## Referans
+
+Görev listeleri: `docs/MOBILE-FIRST-TASKS.md`, `docs/MEMBER-PACKAGE-LOGIC.md`

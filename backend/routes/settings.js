@@ -3,6 +3,7 @@ import { body, validationResult } from 'express-validator';
 import db from '../config/database.js';
 import { verifyToken } from './auth.js';
 import { log as activityLog } from '../utils/activityLogger.js';
+import { getInstitutionWhatsApp, setInstitutionWhatsApp } from '../utils/appSettings.js';
 
 const router = express.Router();
 router.use(verifyToken);
@@ -87,6 +88,61 @@ router.put('/working-hours', checkAdminOrManager, [
   } catch (error) {
     console.error('Working hours update error:', error);
     res.status(500).json({ error: 'Çalışma saatleri güncellenirken hata oluştu' });
+  }
+});
+
+// Kurum WhatsApp numarası (üye iptal sonrası yönlendirme)
+router.get('/institution-whatsapp', async (req, res) => {
+  try {
+    const whatsapp = await getInstitutionWhatsApp();
+    res.json({ whatsapp: whatsapp || '' });
+  } catch (error) {
+    console.error('Institution WhatsApp get error:', error);
+    res.status(500).json({ error: 'Kurum WhatsApp numarası alınırken hata oluştu' });
+  }
+});
+
+router.put('/institution-whatsapp', checkAdminOrManager, [
+  body('whatsapp').optional({ nullable: true }).isString(),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+    const raw = req.body?.whatsapp;
+    if (raw == null || String(raw).trim() === '') {
+      await db.query(
+        `INSERT INTO app_settings (key, value, updated_at) VALUES ('institution_whatsapp', NULL, CURRENT_TIMESTAMP)
+         ON CONFLICT (key) DO UPDATE SET value = NULL, updated_at = CURRENT_TIMESTAMP`
+      );
+      await activityLog(req, {
+        action: 'settings.institution_whatsapp_clear',
+        entityType: 'settings',
+        details: {},
+      }).catch(() => {});
+      return res.json({ whatsapp: '', message: 'Kurum WhatsApp numarası temizlendi' });
+    }
+    const saved = await setInstitutionWhatsApp(raw);
+    await activityLog(req, {
+      action: 'settings.institution_whatsapp_update',
+      entityType: 'settings',
+      details: { whatsapp: saved },
+    }).catch(() => {});
+    res.json({ whatsapp: saved, message: 'Kurum WhatsApp numarası kaydedildi' });
+  } catch (error) {
+    if (error.code === 'INVALID_WHATSAPP') {
+      return res.status(400).json({
+        error: 'Geçerli bir WhatsApp numarası girin (ülke kodu ile, 10–15 hane).',
+      });
+    }
+    if (error.code === '42P01') {
+      return res.status(503).json({
+        error: 'Ayarlar tablosu henüz etkin değil. Lütfen migration_app_settings.sql çalıştırın.',
+      });
+    }
+    console.error('Institution WhatsApp update error:', error);
+    res.status(500).json({ error: 'Kurum WhatsApp numarası kaydedilirken hata oluştu' });
   }
 });
 

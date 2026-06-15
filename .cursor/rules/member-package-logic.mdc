@@ -1,0 +1,28 @@
+---
+description: Üye paket ve seans mantığı — admin ile üye aynı düzende; tek kaynak docs/MEMBER-PACKAGE-LOGIC.md
+globs: app.js,api.js,backend/routes/member-portal.js,backend/routes/member-packages.js,backend/utils/packageSessions.js,backend/routes/sessions.js
+alwaysApply: true
+---
+
+# Üye Paket Mantığı (Admin + Üye Tek Düzen)
+
+Paket/seans ile ilgili tüm değişiklikler `docs/MEMBER-PACKAGE-LOGIC.md` dosyasına uyar.
+
+## Zorunlu prensipler
+
+- Veri: `packages` → `member_packages` → `member_package_slots` → `sessions`
+- Üye başına tek aktif paket; sabit/esnek kuralları backend’de (`sessionToDto`, `addNextSessionAfterLastForPackage`)
+- Admin ve üye **aynı paket DTO** ve **aynı seans listesi düzeni** (Tarih: `GG.AA.YYYY GünAdı`, Saat: `H:mm`)
+- Telafi seansı yalnızca `backend/utils/packageSessions.js`; iptal edilen `start_ts` tekrar eklenmez (`skipStartTs`)
+- Rol farkı yalnızca yetki: üye iptal (esnek), admin CRUD/export
+
+## Kod yazarken
+
+- İki ayrı tablo render (`renderPackageSessionsTable` / `renderMemberPortalSessionsTable`) yerine ortak render tercih et
+- Tarih/saat formatı için `fmtPackageSessionDate` / `fmtPackageSessionTime` (veya mevcut `fmtSessionList*`) — yeni format icat etme
+- Frontend iptal kuralı backend `sessionToDto` ile uyumlu olmalı
+- Yeni iş kuralı → `docs/MEMBER-PACKAGE-LOGIC.md` içine `MP-xx` görevi ekle
+
+## Referans
+
+Ana görev listesi: `docs/MEMBER-PACKAGE-LOGIC.md` §8 (MP-01 … MP-22)

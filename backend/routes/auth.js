@@ -322,6 +322,15 @@ router.put('/account', verifyToken, [
     }
     const user = userRes.rows[0];
 
+    let memberRow = null;
+    if (user.role === 'member') {
+      const memberRes = await db.query(
+        'SELECT id, first_name, last_name, phone, email FROM members WHERE user_id = $1 AND deleted_at IS NULL',
+        [user.id]
+      );
+      memberRow = memberRes.rows[0] || null;
+    }
+
     if (newPassword != null && String(newPassword).trim()) {
       if (newPassword !== confirmPassword) {
         return res.status(400).json({ error: 'Şifreler eşleşmiyor' });
@@ -347,6 +356,15 @@ router.put('/account', verifyToken, [
         'UPDATE users SET display_name = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
         [name, user.id]
       );
+      if (memberRow) {
+        const parts = name.split(/\s+/);
+        const firstName = parts.shift() || '';
+        const lastName = parts.join(' ');
+        await db.query(
+          'UPDATE members SET first_name = $1, last_name = $2, name = $3, updated_at = CURRENT_TIMESTAMP WHERE id = $4',
+          [firstName, lastName, name, memberRow.id]
+        );
+      }
     }
 
     if (email != null) {
@@ -362,6 +380,12 @@ router.put('/account', verifyToken, [
         'UPDATE users SET email = $1, username = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
         [emailTrim, user.id]
       );
+      if (memberRow) {
+        await db.query(
+          'UPDATE members SET email = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+          [emailTrim, memberRow.id]
+        );
+      }
     }
 
     if (phone !== undefined) {
@@ -372,10 +396,25 @@ router.put('/account', verifyToken, [
           return res.status(400).json({ error: 'Telefon (xxx)xxx-xx-xx formatında olmalı, 10 hane.' });
         }
       }
+      if (memberRow && phoneVal) {
+        const dup = await db.query(
+          'SELECT id FROM members WHERE trim(phone) = $1 AND id != $2',
+          [phoneVal, memberRow.id]
+        );
+        if (dup.rows.length > 0) {
+          return res.status(409).json({ error: 'Bu telefon numarası başka bir üyede kayıtlı.' });
+        }
+      }
       await db.query(
         'UPDATE users SET phone = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
         [phoneVal, user.id]
       );
+      if (memberRow) {
+        await db.query(
+          'UPDATE members SET phone = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+          [phoneVal, memberRow.id]
+        );
+      }
     }
 
     if (whatsapp !== undefined && (user.role === 'admin' || user.role === 'manager')) {

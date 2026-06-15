@@ -15,9 +15,12 @@ const pool = new Pool({
   connectionTimeoutMillis: 2000,
 });
 
-// Bağlantı testi
+let dbConnectLogged = false;
 pool.on('connect', () => {
-  console.log('✅ Veritabanına bağlandı');
+  if (!dbConnectLogged) {
+    console.log('✅ Veritabanına bağlandı');
+    dbConnectLogged = true;
+  }
 });
 
 pool.on('error', (err) => {

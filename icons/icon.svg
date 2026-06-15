@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Seans Planlay1c1">
+  <defs>
+    <linearGradient id="accent" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#7c5cff"/>
+      <stop offset="100%" stop-color="#5a3fd4"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="108" fill="#0b1020"/>
+  <rect x="80" y="120" width="352" height="312" rx="40" fill="#121a33" stroke="url(#accent)" stroke-width="12"/>
+  <rect x="80" y="120" width="352" height="72" rx="40" fill="url(#accent)"/>
+  <circle cx="160" cy="156" r="12" fill="#0b1020"/>
+  <circle cx="352" cy="156" r="12" fill="#0b1020"/>
+  <rect x="128" y="232" width="56" height="56" rx="12" fill="#7c5cff"/>
+  <rect x="208" y="232" width="56" height="56" rx="12" fill="#7c5cff"/>
+  <rect x="288" y="232" width="56" height="56" rx="12" fill="#7c5cff"/>
+  <rect x="128" y="312" width="56" height="56" rx="12" fill="#7c5cff" opacity=".45"/>
+  <rect x="208" y="312" width="56" height="56" rx="12" fill="#7c5cff"/>
+</svg>

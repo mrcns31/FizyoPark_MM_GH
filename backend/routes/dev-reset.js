@@ -8,6 +8,7 @@ import { body, validationResult } from 'express-validator';
 import db from '../config/database.js';
 import { verifyToken } from './auth.js';
 import { log as activityLog } from '../utils/activityLogger.js';
+import { getSeedTestMembersMeta, seedTestMembers } from '../utils/devSeedMembers.js';
 
 const router = express.Router();
 router.use(verifyToken);
@@ -43,10 +44,11 @@ export const RESET_GROUPS = [
   {
     id: 'members',
     label: 'Üyeler',
-    description: 'Tüm üye kartları kalıcı olarak silinir (soft-silinenler dahil).',
+    description: 'Tüm üye kartları ve üye giriş hesapları kalıcı olarak silinir (soft-silinenler dahil).',
     warnings: [
       'Üye paket atamaları da silinir (bağlı kayıtlar).',
       'Seanslar kalır; üye bilgisi seanslardan kaldırılır.',
+      'users tablosundaki role=member hesapları da silinir (admin/personel korunur).',
     ],
     autoAdds: ['member_packages'],
   },
@@ -219,6 +221,7 @@ async function runReset(client, orderedTargets) {
         break;
       case 'members':
         await client.query('DELETE FROM members');
+        await client.query("DELETE FROM users WHERE role = 'member'");
         done.push(id);
         break;
       case 'staff':
@@ -342,6 +345,60 @@ router.post('/', [
       });
     }
     res.status(500).json({ error: 'Veritabanı sıfırlanırken hata oluştu: ' + (error.message || '') });
+  }
+});
+
+router.get('/seed-test-members/meta', async (req, res) => {
+  try {
+    const meta = await getSeedTestMembersMeta(db);
+    res.json(meta);
+  } catch (error) {
+    console.error('Dev seed meta error:', error);
+    res.status(500).json({ error: 'Test üye bilgisi alınamadı' });
+  }
+});
+
+router.post('/seed-test-members', [
+  body('count').optional().isInt({ min: 1, max: 200 }),
+  body('adminPassword').notEmpty().withMessage('Admin şifresi gerekli'),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { adminPassword } = req.body;
+    const count = req.body.count != null ? Number(req.body.count) : 110;
+
+    const pw = await verifyAdminPassword(adminPassword);
+    if (!pw.ok) {
+      return res.status(401).json({ error: pw.error });
+    }
+
+    const result = await seedTestMembers(db, { count });
+
+    await activityLog(req, {
+      action: 'dev_seed_test_members',
+      entityType: 'database',
+      details: {
+        requested: result.requested,
+        created: result.created,
+        skipped: result.skipped,
+        sessionsCreated: result.sessionsCreated,
+      },
+    }).catch(() => {});
+
+    res.json({
+      message: `${result.created} test üyesi oluşturuldu (${result.skipped} zaten vardı). ${result.sessionsCreated} seans eklendi.`,
+      ...result,
+    });
+  } catch (error) {
+    console.error('Dev seed test members error:', error);
+    if (error.code === 'PREREQUISITES') {
+      return res.status(400).json({ error: error.message });
+    }
+    res.status(500).json({ error: 'Test üyeleri oluşturulurken hata: ' + (error.message || '') });
   }
 });
 

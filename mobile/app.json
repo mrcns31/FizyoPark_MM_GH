@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "FizyoPark",
+    "slug": "fizyopark",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/fizyopark-logo.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/fizyopark-logo.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0B1020"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.fizyopark.ankara"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/fizyopark-logo.png",
+        "backgroundColor": "#0B1020"
+      },
+      "package": "com.fizyopark.ankara"
+    },
+    "plugins": [
+      "expo-asset"
+    ]
+  }
+}

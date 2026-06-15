@@ -6,6 +6,7 @@ import express from 'express';
 import { query, validationResult } from 'express-validator';
 import db from '../config/database.js';
 import { verifyToken } from './auth.js';
+import { enrichActivityLogRows } from '../utils/activityLogDisplay.js';
 
 const router = express.Router();
 router.use(verifyToken);
@@ -79,8 +80,10 @@ router.get('/', checkAdminOrManager, [
       params
     );
 
+    const enriched = await enrichActivityLogRows(db, result.rows);
+
     res.json({
-      items: result.rows,
+      items: enriched,
       pagination: { page, limit, total, totalPages: Math.ceil(total / limit) }
     });
   } catch (err) {

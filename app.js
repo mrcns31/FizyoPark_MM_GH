@@ -1139,6 +1139,12 @@ function cacheEls() {
     "packageSessionsTable",
     "packageSessionsTableBody",
     "packageSessionsEmpty",
+    "packageSessionsCancelledSection",
+    "packageSessionsCancelledSummary",
+    "packageSessionsCancelledCards",
+    "packageSessionsCancelledTableWrap",
+    "packageSessionsCancelledTable",
+    "packageSessionsCancelledTableBody",
     "sessionModal",
     "sessionModalTitle",
     "sessionDate",
@@ -2454,7 +2460,7 @@ function renderPackageSessionsTableRows(container, sessions, options) {
     var staffStr = compact ? fmtPersonShortName(s.staffName) : s.staffName;
     var tr = document.createElement("tr");
     tr.className = "package-sessions-table__row";
-    if (role === "admin") {
+    if (role === "admin" && options.clickable !== false) {
       tr.style.cursor = "pointer";
       tr.title = "Gün, saat veya personel değiştirmek için tıklayın";
       tr.dataset.sessionId = String(s.id);
@@ -2551,10 +2557,11 @@ function renderPackageSessionsCards(container, sessions, options) {
           s.checkInTimeStr && s.checkInTimeStr !== "—"
             ? '<div class="package-session-card__meta">Giriş: ' + escapeHtml(s.checkInTimeStr) + "</div>"
             : "";
+        var clickable = options.clickable !== false;
         return (
-          '<article class="package-session-card package-session-card--clickable" data-session-id="' +
-          s.id +
-          '" tabindex="0" role="button" title="Gün, saat veya personel değiştirmek için dokunun">' +
+          '<article class="package-session-card' + (clickable ? " package-session-card--clickable" : "") + '"' +
+          (clickable ? ' data-session-id="' + s.id + '" tabindex="0" role="button" title="Gün, saat veya personel değiştirmek için dokunun"' : "") +
+          ">" +
           '<div class="package-session-card__head">' +
           "<div><div class=\"package-session-card__datetime\">" +
           '<span class="package-session-card__index">' +
@@ -2573,7 +2580,8 @@ function renderPackageSessionsCards(container, sessions, options) {
           escapeHtml(approvalLabel) +
           "</span></div>" +
           checkInLine +
-          '<div class="package-session-card__hint hint">Düzenlemek için dokunun</div></article>'
+          (clickable ? '<div class="package-session-card__hint hint">Düzenlemek için dokunun</div>' : "") +
+          "</article>"
         );
       }
 
@@ -4134,6 +4142,11 @@ async function saveClosurePeriod() {
     els.closurePeriodError.classList.remove("hidden");
     return;
   }
+
+  var confirmMsg =
+    formatDateTR(startDate) + " – " + formatDateTR(endDate) + " (" + description + ") tarih aralığını kapanış günü olarak kaydetmek istediğinize emin misiniz? " +
+    "Bu aralıktaki seanslar otomatik olarak ileri tarihe alınacak ve tüm aktif üyelerin paket süresi uzatılacaktır.";
+  if (!(await showAppConfirm(confirmMsg))) return;
 
   if (!window.API) return;
   try {
@@ -8187,6 +8200,7 @@ function loadPackageSessionsForModal(mp) {
   if (els.packageSessionsCards) els.packageSessionsCards.classList.add("hidden");
   if (els.packageSessionsTableWrap) els.packageSessionsTableWrap.classList.remove("hidden");
   if (els.packageSessionsTable) els.packageSessionsTable.classList.remove("hidden");
+  if (els.packageSessionsCancelledSection) els.packageSessionsCancelledSection.classList.add("hidden");
   if (!window.API || !window.API.getMemberPackageSessions) {
     els.packageSessionsEmpty.textContent = "API kullanılamıyor.";
     els.packageSessionsEmpty.classList.remove("hidden");
@@ -8264,7 +8278,11 @@ function closePackageSessionsModal() {
 }
 
 function renderPackageSessionsTable(sessions) {
-  renderPackageSessionsList(sessions, {
+  var list = sessions || [];
+  var active = list.filter(function (s) { return !(s.isCancelled || s.is_cancelled); });
+  var cancelled = list.filter(function (s) { return !!(s.isCancelled || s.is_cancelled); });
+
+  renderPackageSessionsList(active, {
     role: "admin",
     compact: true,
     cardsEl: els.packageSessionsCards,
@@ -8272,6 +8290,30 @@ function renderPackageSessionsTable(sessions) {
     tableBodyEl: els.packageSessionsTableBody,
     tableEl: els.packageSessionsTable,
     emptyEl: els.packageSessionsEmpty,
+  });
+
+  renderPackageSessionsCancelledSection(cancelled);
+}
+
+function renderPackageSessionsCancelledSection(cancelled) {
+  if (!els.packageSessionsCancelledSection) return;
+  if (!cancelled.length) {
+    els.packageSessionsCancelledSection.classList.add("hidden");
+    return;
+  }
+  if (els.packageSessionsCancelledSummary) {
+    els.packageSessionsCancelledSummary.textContent = "İptal edilenler (" + cancelled.length + ")";
+  }
+  els.packageSessionsCancelledSection.classList.remove("hidden");
+  renderPackageSessionsList(cancelled, {
+    role: "admin",
+    compact: true,
+    clickable: false,
+    cardsEl: els.packageSessionsCancelledCards,
+    tableWrapEl: els.packageSessionsCancelledTableWrap,
+    tableBodyEl: els.packageSessionsCancelledTableBody,
+    tableEl: els.packageSessionsCancelledTable,
+    emptyEl: null,
   });
 }
 

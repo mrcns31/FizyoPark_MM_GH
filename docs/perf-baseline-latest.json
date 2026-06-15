@@ -1,0 +1,113 @@
+{
+  "measuredAt": "2026-06-09T20:55:14.010Z",
+  "api": "http://localhost:3000/api",
+  "staticLocal": {
+    "index.html": {
+      "bytes": 89592,
+      "kb": "87.5",
+      "lines": 1320
+    },
+    "app.js": {
+      "bytes": 335894,
+      "kb": "328.0",
+      "lines": 8801
+    },
+    "api.js": {
+      "bytes": 23501,
+      "kb": "23.0",
+      "lines": 644
+    },
+    "styles.css": {
+      "bytes": 70785,
+      "kb": "69.1",
+      "lines": 3286
+    },
+    "pwa-register.js": {
+      "bytes": 274,
+      "kb": "0.3",
+      "lines": 10
+    },
+    "sw.js": {
+      "bytes": 2329,
+      "kb": "2.3",
+      "lines": 92
+    }
+  },
+  "staticRemote": {
+    "index.html": {
+      "ms": 630,
+      "bytes": 89592,
+      "ok": true
+    },
+    "app.js": {
+      "ms": 62,
+      "bytes": 335894,
+      "ok": true
+    },
+    "api.js": {
+      "ms": 10,
+      "bytes": 23501,
+      "ok": true
+    },
+    "styles.css": {
+      "ms": 21,
+      "bytes": 70785,
+      "ok": true
+    }
+  },
+  "admin": {
+    "loginMs": 338,
+    "parallelMs": 113,
+    "sequentialMs": 62,
+    "requestCount": 8,
+    "totalBytes": 216,
+    "slowest": {
+      "label": "GET /packages",
+      "ms": 91,
+      "bytes": 27
+    },
+    "endpoints": [
+      {
+        "label": "GET /auth/me",
+        "ms": 75,
+        "bytes": 27
+      },
+      {
+        "label": "GET /members",
+        "ms": 81,
+        "bytes": 27
+      },
+      {
+        "label": "GET /staff",
+        "ms": 82,
+        "bytes": 27
+      },
+      {
+        "label": "GET /rooms",
+        "ms": 85,
+        "bytes": 27
+      },
+      {
+        "label": "GET /packages",
+        "ms": 91,
+        "bytes": 27
+      },
+      {
+        "label": "GET /member-packages",
+        "ms": 79,
+        "bytes": 27
+      },
+      {
+        "label": "GET /settings/working-hours",
+        "ms": 81,
+        "bytes": 27
+      },
+      {
+        "label": "GET /sessions (full range)",
+        "ms": 89,
+        "bytes": 27
+      }
+    ]
+  },
+  "member": null
+}

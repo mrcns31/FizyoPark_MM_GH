@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b1020" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <title>İşlem Logları – Seans Planlayıcı</title>
+    <link rel="manifest" href="./manifest.json" />
+    <link rel="icon" href="./icons/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="logs-page">
+      <header class="logs-page__header">
+        <h1 class="logs-page__title">İşlem Logları</h1>
+        <button type="button" class="btn btn--ghost" id="logsCloseBtn">Kapat</button>
+      </header>
+      <p class="hint logs-page__intro">Kim işlemi yaptı, ne yaptı, hangi kayıt üzerinde, ek ayrıntılar.</p>
+      <p class="hint logs-page__intro--sub"><strong>Varlık:</strong> işlemin hedefi — örn. seans (tarih + üye), üye paketi (üye + paket adı), oda veya personel kaydı.</p>
+      <div class="logs-page__filters">
+        <select id="activityLogsActionFilter" class="input logs-page__filter-action">
+          <option value="">Tüm işlemler</option>
+          <option value="auth.login">Giriş</option>
+          <option value="auth.login_failed">Giriş başarısız</option>
+          <option value="member.create">Üye ekleme</option>
+          <option value="member.update">Üye güncelleme</option>
+          <option value="member.delete">Üye silme</option>
+          <option value="member.request_deletion">Üyelik iptal talebi</option>
+          <option value="member.approve_deletion_request">Üyelik iptali onayı</option>
+          <option value="member.reject_deletion_request">Üyelik iptal talebi reddi</option>
+          <option value="session.create">Seans ekleme</option>
+          <option value="session.update">Seans güncelleme</option>
+          <option value="session.delete">Seans silme</option>
+          <option value="session.cancel_by_member">Üye seans iptali</option>
+          <option value="session.check_in_qr">QR ile giriş</option>
+          <option value="session.attendance_confirm">Seans giriş onayı</option>
+          <option value="room.create">Oda ekleme</option>
+          <option value="room.update">Oda güncelleme</option>
+          <option value="room.delete">Oda silme</option>
+          <option value="staff.create">Personel ekleme</option>
+          <option value="staff.update">Personel güncelleme</option>
+          <option value="staff.reset_password">Personel şifre sıfırlama</option>
+          <option value="staff.delete">Personel silme</option>
+          <option value="package.create">Paket ekleme</option>
+          <option value="package.update">Paket güncelleme</option>
+          <option value="package.delete">Paket silme</option>
+          <option value="member_package.create">Üye paketi ekleme</option>
+          <option value="member_package.update">Üye paketi güncelleme</option>
+          <option value="member_package.end">Üye paketi sonlandırma</option>
+          <option value="settings.working_hours_update">Çalışma saatleri</option>
+        </select>
+        <label class="label logs-page__date-label">Başlangıç <input id="activityLogsFrom" class="input logs-page__date-input" type="date" /></label>
+        <label class="label logs-page__date-label">Bitiş <input id="activityLogsTo" class="input logs-page__date-input" type="date" /></label>
+        <button id="activityLogsApplyFilterBtn" class="btn btn--primary" type="button">Filtrele</button>
+      </div>
+      <div id="activityLogsError" class="error hidden"></div>
+      <div id="activityLogsCards" class="activity-logs-cards hidden"></div>
+      <div class="logs-page__tableWrap activity-logs-table-wrap" id="activityLogsTableWrap">
+        <table class="packagesTable activity-logs-table">
+          <thead>
+            <tr>
+              <th>Tarih / Saat</th>
+              <th>Kim</th>
+              <th>İşlem</th>
+              <th>Varlık</th>
+              <th>Detay</th>
+            </tr>
+          </thead>
+          <tbody id="activityLogsTableBody"></tbody>
+        </table>
+      </div>
+      <div id="activityLogsPagination" class="logs-page__pagination"></div>
+    </div>
+    <script src="./api.js"></script>
+    <script src="./activity-logs.js"></script>
+    <script src="./pwa-register.js"></script>
+  </body>
+</html>
