@@ -1,6 +1,7 @@
 /* Seans Planlayıcı – API istemcisi (backend'e bağlantı) */
 (function () {
-  const API_BASE = (typeof window !== 'undefined' && window.__API_BASE__) || 'http://localhost:3000/api';
+  const API_BASE = (typeof window !== 'undefined' && window.__API_BASE__)
+    || (typeof window !== 'undefined' ? `${window.location.protocol}//${window.location.hostname}:3000/api` : 'http://localhost:3000/api');
   const TOKEN_KEY = 'seans_planner_token';
 
   function getToken() {
@@ -175,10 +176,10 @@
     }
   }
 
-  async function login(email, password) {
+  async function login(email, password, rememberMe) {
     const data = await apiFetch('/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ email, password }),
+      body: JSON.stringify({ email, password, rememberMe: !!rememberMe }),
     });
     if (data.token) setToken(data.token);
     return data;

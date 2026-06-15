@@ -689,6 +689,9 @@ body.login-screen-open{
   overflow:hidden;
   text-overflow:ellipsis;
 }
+.member-home-header__name--clickable{
+  cursor:pointer;
+}
 .member-home-header__settings{
   flex:0 0 auto;
   width:44px;
@@ -786,25 +789,41 @@ body.login-screen-open{
   display:flex;
   align-items:center;
   gap:8px;
+  min-width:0;
 }
 .member-session-box__cal-icon{
   flex:0 0 auto;
   display:flex;
   color:rgba(107,140,255,.9);
 }
+.member-session-box__date-lines{
+  flex:1;
+  min-width:0;
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+}
+.member-session-box__date-row{
+  display:grid;
+  grid-template-columns:1fr auto;
+  align-items:center;
+  gap:8px;
+}
 .member-session-box__date-time{
+  min-width:0;
   font-size:14px;
   font-weight:700;
   line-height:1.3;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
 }
 .member-session-box__day{
-  margin-top:2px;
   font-size:12px;
   color:var(--muted);
-}
-.member-session-box__aside{
-  flex:0 0 auto;
-  align-self:center;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
 }
 .member-session-box__status{
   margin-top:8px;
@@ -839,23 +858,19 @@ body.login-screen-open{
   color:rgba(232,236,255,.42);
 }
 .member-session-box__cancel{
-  display:inline-flex;
+  display:flex;
   align-items:center;
-  gap:4px;
-  padding:5px 10px;
-  border-radius:999px;
-  border:1px solid rgba(74,105,255,.4);
+  justify-content:center;
+  padding:4px 14px;
+  border-radius:8px;
+  border:1px solid rgba(255,107,122,.45);
   background:transparent;
-  color:#8eb0ff;
+  color:#ff8a96;
   font:inherit;
-  font-size:10px;
-  font-weight:650;
+  font-size:11px;
+  font-weight:700;
   cursor:pointer;
-  min-height:30px;
   white-space:nowrap;
-}
-.member-session-box__cancel svg{
-  flex:0 0 auto;
 }
 .member-session-status--cancelled{
   color:#ff8a96;
@@ -1762,13 +1777,7 @@ body.login-screen-open{
     max-width:none;
   }
   .topbar--admin-mobile:not(.topbar--member) .topbar__navBtn.btn--icon{
-    flex:0 0 32px;
-    width:32px;
-    height:32px;
-    min-width:32px;
-    min-height:32px;
-    max-width:32px;
-    max-height:32px;
+    display:none !important;
   }
 }
 .topbar__viewGroup{
@@ -3585,18 +3594,12 @@ body.body--sidebar-open{
 .expired-memberships-table-wrap{
   overflow-x:auto;
   -webkit-overflow-scrolling:touch;
+  margin-top:10px;
 }
 .expired-memberships-table{
   width:100%;
-  min-width:520px;
+  min-width:1180px;
   border-collapse:collapse;
-  font-size:11px;
-}
-@media (min-width: 640px){
-  .expired-memberships-table{
-    font-size:13px;
-    min-width:900px;
-  }
 }
 .expired-memberships-table thead tr{
   background:rgba(255,255,255,.05);
@@ -3604,21 +3607,13 @@ body.body--sidebar-open{
 }
 .expired-memberships-table th,
 .expired-memberships-table td{
-  padding:6px 4px;
+  padding:6px 10px;
   text-align:left;
   white-space:nowrap;
   vertical-align:middle;
 }
-@media (min-width: 640px){
-  .expired-memberships-table th,
-  .expired-memberships-table td{ padding:10px; }
-}
 .expired-memberships-table th{
   font-weight:700;
-  font-size:10px;
-}
-@media (min-width: 640px){
-  .expired-memberships-table th{ font-size:13px; }
 }
 .expired-memberships-table th[data-sort]{
   cursor:pointer;
@@ -3637,33 +3632,27 @@ body.body--sidebar-open{
     background:rgba(255,255,255,.04);
   }
 }
-.expired-memberships-table__name{
-  max-width:72px;
-  overflow:hidden;
-  text-overflow:ellipsis;
-}
-.expired-memberships-table__package{
-  max-width:64px;
-  overflow:hidden;
-  text-overflow:ellipsis;
-}
 .expired-memberships-table__actions{
   display:inline-flex;
   gap:4px;
   flex-wrap:nowrap;
 }
-.expired-memberships-table__actions .btn{
-  padding:4px 6px;
-  font-size:10px;
-  min-height:32px;
+.btn--icon-action{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  padding:6px 8px !important;
+  min-width:32px;
+  min-height:32px !important;
+  font-size:14px !important;
+  line-height:1;
 }
 @media (min-width: 640px){
-  .expired-memberships-table__name{ max-width:none; }
-  .expired-memberships-table__package{ max-width:160px; }
-  .expired-memberships-table__actions .btn{
-    padding:8px 12px;
-    font-size:inherit;
-    min-height:var(--touch-min);
+  .btn--icon-action{
+    padding:6px 10px !important;
+    min-width:36px;
+    min-height:36px !important;
+    font-size:16px !important;
   }
 }
 
@@ -3966,24 +3955,14 @@ body.body--sidebar-open{
   .list-members-filter{ max-width:320px; }
 }
 
-.list-members-toolbar{
-  display:flex;
-  flex-direction:column;
-  gap:6px;
-  margin-top:10px;
-}
-.list-members-sort-select{
-  width:100%;
-}
-
 .list-members-cards{
   display:flex;
   flex-direction:column;
-  gap:10px;
+  gap:8px;
   margin-top:10px;
 }
 .list-members-card{
-  padding:12px 14px;
+  padding:10px 12px;
   border:1px solid var(--border);
   border-radius:12px;
   background:rgba(255,255,255,.03);
@@ -3992,7 +3971,7 @@ body.body--sidebar-open{
 .list-members-card__head{
   display:flex;
   justify-content:space-between;
-  align-items:flex-start;
+  align-items:center;
   gap:10px;
 }
 .list-members-card__name{
@@ -4001,17 +3980,18 @@ body.body--sidebar-open{
   word-break:break-word;
   min-width:0;
 }
-.list-members-card__no{
-  flex:0 0 auto;
-  font-size:12px;
-  color:var(--muted);
+.list-members-card__head-actions{
+  display:flex;
+  flex-shrink:0;
+  align-items:center;
+  gap:4px;
 }
 .list-members-card__meta,
 .list-members-card__dates{
   display:flex;
   flex-wrap:wrap;
   gap:6px 14px;
-  margin-top:8px;
+  margin-top:6px;
   font-size:12px;
   color:var(--muted);
 }
@@ -4023,17 +4003,50 @@ body.body--sidebar-open{
   font-weight:650;
   color:var(--text);
 }
-.list-members-card__actions{
+
+.list-pagination{
   display:flex;
+  align-items:center;
+  justify-content:space-between;
   flex-wrap:wrap;
-  gap:8px;
-  justify-content:flex-end;
-  margin-top:10px;
+  gap:10px;
+  margin-top:12px;
   padding-top:10px;
   border-top:1px solid var(--border);
+  font-size:13px;
+  color:var(--muted);
 }
-.list-members-card__actions .btn{
-  min-height:var(--touch-min);
+.list-pagination.hidden{
+  display:none;
+}
+.list-pagination__controls{
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.list-pagination__btn{
+  min-width:32px;
+  padding:6px 10px;
+}
+.list-pagination__btn:disabled{
+  opacity:.4;
+  cursor:default;
+}
+.list-pagination__page{
+  font-weight:650;
+  color:var(--text);
+  min-width:56px;
+  text-align:center;
+}
+.list-pagination__size{
+  display:flex;
+  align-items:center;
+  gap:6px;
+}
+.list-pagination__size-select{
+  width:auto;
+  padding:6px 8px;
+  min-height:auto;
 }
 
 .list-members-table-wrap{
@@ -4052,7 +4065,7 @@ body.body--sidebar-open{
 }
 .list-members-table th,
 .list-members-table td{
-  padding:10px;
+  padding:6px 10px;
   text-align:left;
   white-space:nowrap;
 }
@@ -4067,10 +4080,15 @@ body.body--sidebar-open{
   border-bottom:1px solid var(--border);
   cursor:pointer;
 }
+@media (hover:hover){
+  .list-members-table__row:hover{
+    background:rgba(255,255,255,.04);
+  }
+}
 .list-members-table__actions{
   display:inline-flex;
   flex-wrap:nowrap;
-  gap:6px;
+  gap:4px;
 }
 
 .btn{
@@ -4268,7 +4286,8 @@ select option:checked{
   -webkit-overflow-scrolling:touch;
   padding:8px 14px 14px;
 }
-.admin-main-panel__content .list-members-table-wrap{
+.admin-main-panel__content .list-members-table-wrap,
+.admin-main-panel__content .expired-memberships-table-wrap{
   width:100%;
 }
 .admin-main-panel__content .list-members-cards{
@@ -5038,6 +5057,21 @@ select option:checked{
   max-width:100%;
 }
 .login-form .formRow{ margin-bottom:12px; }
+.login-remember-row{ margin-bottom:6px; }
+.login-remember-label{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  font-size:13px;
+  color:var(--muted);
+  cursor:pointer;
+  user-select:none;
+}
+.login-remember-label input[type="checkbox"]{
+  width:16px;
+  height:16px;
+  cursor:pointer;
+}
 .login-form .input,
 .login-form .btn{
   width:100%;
@@ -5273,6 +5307,15 @@ select option:checked{
     max-width:440px;
     margin:0 auto;
     width:100%;
+  }
+}
+@media (min-width: 640px){
+  #adminAccountScreen .pw-change__scroll,
+  #adminAccountScreen .pw-change__footer{
+    max-width:760px;
+  }
+  #adminAccountScreen .formGrid{
+    grid-template-columns:1fr 1fr;
   }
 }
 
@@ -5694,22 +5737,6 @@ select option:checked{
   #memberPortalSessionsCards:not(.hidden),
   #packageSessionsCards:not(.hidden){
     display:flex !important;
-  }
-  .member-session-box{
-    flex-direction:column;
-    align-items:stretch;
-  }
-  .member-session-box__aside{
-    align-self:stretch;
-    margin-top:10px;
-  }
-  .member-session-box__cancel{
-    width:100%;
-    min-height:var(--touch-min);
-    justify-content:center;
-    font-size:13px;
-    padding:10px 14px;
-    border-radius:12px;
   }
 }
 

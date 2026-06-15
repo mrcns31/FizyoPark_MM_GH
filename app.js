@@ -3432,7 +3432,7 @@ function buildCellColumnLayout({ inWeek, staffGroups, startMin, slotMin }) {
     const row = Math.floor((startMinOfDay - startMin) / slotMin);
     const cellKey = `${dayIdx}_${row}`;
     addCellItem(cellKey, {
-      layoutKey: `g_${cellKey}_${normId(group.staffId)}`,
+      layoutKey: `g_${cellKey}_${normId(group.staffId)}_${group.startTs}`,
       staffId: group.staffId,
     });
   }
@@ -3590,7 +3590,7 @@ function renderEvents({ startMin, slotMin, slotsCount }) {
     if (row < 0 || row >= slotsCount) continue;
 
     const cellKey = `${dayIdx}_${row}`;
-    const layoutKey = `g_${cellKey}_${normId(group.staffId)}`;
+    const layoutKey = `g_${cellKey}_${normId(group.staffId)}_${group.startTs}`;
     const layout = cellColumnLayout.get(layoutKey) || { col: 0, cols: 1 };
     const cols = layout.cols;
     const col = layout.col;
@@ -3914,7 +3914,7 @@ function repositionOverlappingEvents() {
   const gap = 6;
   cells.forEach((cell) => {
     const events = cell.querySelectorAll(".event");
-    if (events.length <= 1) return;
+    if (events.length === 0) return;
     // Hücredeki tüm kartların cols değerlerinin en büyüğünü kullan; böylece "2 yan yana 1 açıkta" olmaz
     let maxCol = 0;
     let cols = 1;
@@ -3984,6 +3984,30 @@ function escapeHtml(str) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+/** Kalan seans oranına göre renk döndürür: %100 yeşil, %50 turuncu, %20 ve altı kırmızı (paket büyüklüğünden bağımsız). */
+function remainingSessionsColor(remaining, total) {
+  if (!total || total <= 0) return null;
+  const ratio = Math.max(0, Math.min(1, Number(remaining) / Number(total)));
+  let hue;
+  if (ratio >= 1) {
+    hue = 120; // %100 -> yeşil
+  } else if (ratio >= 0.5) {
+    hue = 30 + ((ratio - 0.5) / 0.5) * 90; // %50 -> turuncu (30), %100 -> yeşil (120)
+  } else if (ratio >= 0.2) {
+    hue = ((ratio - 0.2) / 0.3) * 30; // %20 -> kırmızı (0), %50 -> turuncu (30)
+  } else {
+    hue = 0; // %20 ve altı -> kırmızı
+  }
+  return `hsl(${Math.round(hue)}, 75%, 55%)`;
+}
+
+/** Kalan seans sayısını paket dolulu oranına göre renklendirilmiş span olarak döndürür. */
+function remainingSessionsHtml(remaining, total) {
+  const color = remainingSessionsColor(remaining, total);
+  const style = color ? ` style="color:${color}; font-weight:700;"` : "";
+  return `<span${style}>${escapeHtml(String(remaining))}</span>`;
 }
 
 function formatDateTR(dateStr) {
@@ -5359,11 +5383,11 @@ function renderMemberSessionBoxHtml(s, options) {
   options = options || {};
   var d = new Date(Number(s.startTs));
   var st = memberSessionStatusLabel(s);
-  var cancelAside =
+  var cancelBtn =
     options.showCancel && memberCanCancelSession(s)
-      ? '<div class="member-session-box__aside"><button type="button" class="member-session-box__cancel member-cancel-session-btn" data-session-id="' +
+      ? '<button type="button" class="member-session-box__cancel member-cancel-session-btn" data-session-id="' +
         escapeHtml(String(s.id)) +
-        '"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M15 9l-6 6M9 9l6 6"/></svg> İptal Et</button></div>'
+        '">İptal</button>'
       : "";
   return (
     '<article class="member-session-box">' +
@@ -5372,12 +5396,17 @@ function renderMemberSessionBoxHtml(s, options) {
     '<span class="member-session-box__cal-icon" aria-hidden="true">' +
     '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>' +
     "</span>" +
+    '<div class="member-session-box__date-lines">' +
+    '<div class="member-session-box__date-row">' +
     '<span class="member-session-box__date-time">' +
-    escapeHtml(fmtMemberCardDate(d) + " " + fmtSessionListTime(d)) +
+    escapeHtml(fmtMemberCardDate(d)) +
+    "</span>" +
+    cancelBtn +
+    "</div>" +
+    '<span class="member-session-box__day">' +
+    escapeHtml(fmtCalendarHeaderDayName(d) + " " + fmtSessionListTime(d)) +
     "</span>" +
     "</div>" +
-    '<div class="member-session-box__day">' +
-    escapeHtml(fmtCalendarHeaderDayName(d)) +
     "</div>" +
     '<div class="member-session-box__status"><span class="member-session-status ' +
     st.cls +
@@ -5387,7 +5416,6 @@ function renderMemberSessionBoxHtml(s, options) {
     memberSessionStatusDetailHtml(st.detail) +
     "</div>" +
     "</div>" +
-    cancelAside +
     "</article>"
   );
 }
@@ -5477,6 +5505,7 @@ function renderMemberHome() {
   updateMemberHomeTabsUI();
   var ap = ui.memberPortal && ui.memberPortal.activePackage;
   renderMemberHomePackageInfo(ap);
+  if (els.memberQrFabBtn) els.memberQrFabBtn.classList.toggle("hidden", !ap);
   var split = splitMemberPackageSessions(ap ? ap.sessions : []);
   renderMemberPastSessionsStats(ap);
   if (els.memberPastSessionsList) {
@@ -5947,6 +5976,10 @@ function isAdminMembersListViewActive() {
   return isAdminMainViewActive("members-list");
 }
 
+function isAdminExpiredMembershipsViewActive() {
+  return isAdminMainViewActive("expired-memberships");
+}
+
 function isAdminPanelViewActive() {
   return isAdminUser() && ui.adminMainView !== "calendar";
 }
@@ -5981,6 +6014,13 @@ function showAdminCalendarView() {
   if (!isAdminUser()) return;
   ui.adminMainView = "calendar";
   updateAdminMainViewUI();
+}
+
+/** Üyeleri Listele / Paketi bitmiş üyeler vb. görünümlerden takvime dönüş (ESC ile aynı davranış). */
+function returnToAdminCalendarView() {
+  clearPlannerFilters();
+  showAdminCalendarView();
+  render();
 }
 
 function clearPlannerFilters() {
@@ -6948,6 +6988,15 @@ function bindAdminHubNav() {
 function bindMemberProfileActions() {
   if (els.memberHomeSettingsBtn) {
     els.memberHomeSettingsBtn.addEventListener("click", openMemberSettings);
+  }
+  if (els.memberHomeName) {
+    els.memberHomeName.addEventListener("click", openMemberSettings);
+    els.memberHomeName.addEventListener("keydown", function (e) {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        openMemberSettings();
+      }
+    });
   }
   if (els.memberSessionsTabUpcoming) {
     els.memberSessionsTabUpcoming.addEventListener("click", function () {
@@ -8759,6 +8808,7 @@ async function endMemberPackageFromModal() {
   closeMemberPackageModal();
   render();
   if (ui.editingMemberId) renderMemberPackageHistory(normId(ui.editingMemberId));
+  if (isAdminMembersListViewActive()) openListMembersModal();
 }
 
 async function saveMemberCard() {
@@ -8894,6 +8944,8 @@ async function saveMemberCard() {
   }
   closeMemberCardModal();
   render();
+  if (isAdminMembersListViewActive()) openListMembersModal();
+  if (isAdminExpiredMembershipsViewActive()) openExpiredMembershipsModal();
 }
 
 /** Üye silme modalını açar (admin şifresi + geçmiş silinsin mi?). API yoksa veya token yoksa eski onay ile yerel siler. */
@@ -8945,6 +8997,7 @@ async function confirmDeleteMember() {
   if (els.memberCardModal && !els.memberCardModal.classList.contains("hidden")) closeMemberCardModal();
   render();
   if (isAdminMembersListViewActive()) openListMembersModal();
+  if (isAdminExpiredMembershipsViewActive()) openExpiredMembershipsModal();
 }
 
 async function deleteMemberFromList(memberId) {
@@ -10044,10 +10097,87 @@ function closeTaskDistributionModal() {
   els.taskDistributionModal.classList.add("hidden");
 }
 
+const LIST_PAGE_SIZE_OPTIONS = [20, 40, 75, 100];
+const DEFAULT_LIST_PAGE_SIZE = 20;
+
+/** Liste sayfalarında (Üyeleri Listele / Paketi Bitmiş Üyeler / Eski Üyeler) ortak sayfalama çubuğu; clamp edilmiş sayfa numarasını döndürür. */
+function renderPaginationBar(container, opts) {
+  if (!container) return 1;
+  const total = opts.total || 0;
+  const pageSize = opts.pageSize || DEFAULT_LIST_PAGE_SIZE;
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const page = Math.min(Math.max(1, opts.page || 1), totalPages);
+
+  container.innerHTML = "";
+  if (total === 0) {
+    container.classList.add("hidden");
+    return page;
+  }
+  container.classList.remove("hidden");
+
+  const from = (page - 1) * pageSize + 1;
+  const to = Math.min(total, page * pageSize);
+
+  const info = document.createElement("div");
+  info.className = "list-pagination__info";
+  info.textContent = from + "–" + to + " / " + total + " kayıt";
+  container.appendChild(info);
+
+  const controls = document.createElement("div");
+  controls.className = "list-pagination__controls";
+  function makeBtn(label, targetPage, disabled, ariaLabel) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "btn btn--xs btn--ghost list-pagination__btn";
+    btn.textContent = label;
+    btn.disabled = disabled;
+    btn.setAttribute("aria-label", ariaLabel);
+    btn.addEventListener("click", function () {
+      opts.onPageChange(targetPage);
+    });
+    return btn;
+  }
+  controls.appendChild(makeBtn("«", 1, page <= 1, "İlk sayfa"));
+  controls.appendChild(makeBtn("‹", page - 1, page <= 1, "Önceki sayfa"));
+  const pageLabel = document.createElement("span");
+  pageLabel.className = "list-pagination__page";
+  pageLabel.textContent = page + " / " + totalPages;
+  controls.appendChild(pageLabel);
+  controls.appendChild(makeBtn("›", page + 1, page >= totalPages, "Sonraki sayfa"));
+  controls.appendChild(makeBtn("»", totalPages, page >= totalPages, "Son sayfa"));
+  container.appendChild(controls);
+
+  const sizeWrap = document.createElement("div");
+  sizeWrap.className = "list-pagination__size";
+  const sizeLabel = document.createElement("label");
+  sizeLabel.className = "label";
+  sizeLabel.textContent = "Sayfa başı";
+  const sizeSelect = document.createElement("select");
+  sizeSelect.className = "input list-pagination__size-select";
+  LIST_PAGE_SIZE_OPTIONS.forEach(function (size) {
+    const option = document.createElement("option");
+    option.value = String(size);
+    option.textContent = String(size);
+    if (size === pageSize) option.selected = true;
+    sizeSelect.appendChild(option);
+  });
+  sizeSelect.addEventListener("change", function () {
+    opts.onPageSizeChange(Number(sizeSelect.value) || DEFAULT_LIST_PAGE_SIZE);
+  });
+  sizeWrap.appendChild(sizeLabel);
+  sizeWrap.appendChild(sizeSelect);
+  container.appendChild(sizeWrap);
+
+  return page;
+}
+
 /** Üyeliği bitmiş (bitiş tarihi geçmiş) paket listesi – modal açıldığında bir kez hesaplanır */
 let expiredMembershipsBaseList = [];
 /** Tıklanarak seçilen sıralama: { column: 'start'|'end', dir: 'asc'|'desc' } */
 let expiredMembershipsSort = { column: "end", dir: "desc" };
+let expiredMembershipsPage = 1;
+let expiredMembershipsPageSize = DEFAULT_LIST_PAGE_SIZE;
+let expiredMembershipsFilterText = "";
 
 /** Filtre ve sıralamaya göre tabloyu günceller (Üyeleri Listele ile aynı mantık: ad/soyad/telefon tek kutu) */
 function renderExpiredMembershipsTable() {
@@ -10055,6 +10185,10 @@ function renderExpiredMembershipsTable() {
   if (!content) return;
 
   const filterText = getAdminListFilterText();
+  if (filterText !== expiredMembershipsFilterText) {
+    expiredMembershipsFilterText = filterText;
+    expiredMembershipsPage = 1;
+  }
   let list = expiredMembershipsBaseList.slice();
 
   if (filterText) {
@@ -10067,8 +10201,14 @@ function renderExpiredMembershipsTable() {
 
   const startStr = (mp) => (mp.startDate || "").toString().slice(0, 10);
   const endStr = (mp) => (mp.endDate || "").toString().slice(0, 10);
+  const nameForMp = (mp) => getMemberDisplayName(state.members.find((x) => normId(x.id) === normId(mp.memberId)) || {});
   if (expiredMembershipsSort.column === "start") {
     list.sort((a, b) => expiredMembershipsSort.dir === "asc" ? startStr(a).localeCompare(startStr(b)) : startStr(b).localeCompare(startStr(a)));
+  } else if (expiredMembershipsSort.column === "name") {
+    list.sort((a, b) => {
+      const cmp = nameForMp(a).localeCompare(nameForMp(b), "tr");
+      return expiredMembershipsSort.dir === "asc" ? cmp : -cmp;
+    });
   } else {
     list.sort((a, b) => expiredMembershipsSort.dir === "asc" ? endStr(a).localeCompare(endStr(b)) : endStr(b).localeCompare(endStr(a)));
   }
@@ -10084,6 +10224,7 @@ function renderExpiredMembershipsTable() {
   }
 
   const sort = expiredMembershipsSort;
+  const nameLabel = "Ad Soy." + (sort.column === "name" ? (sort.dir === "asc" ? " ▲" : " ▼") : "");
   const startLabel = "Baş.Tar." + (sort.column === "start" ? (sort.dir === "asc" ? " ▲" : " ▼") : "");
   const endLabel = "Bit.Tar." + (sort.column === "end" ? (sort.dir === "asc" ? " ▲" : " ▼") : "");
 
@@ -10095,7 +10236,7 @@ function renderExpiredMembershipsTable() {
     <thead>
       <tr>
         <th>ÜyeNo</th>
-        <th>Ad Soy.</th>
+        <th data-sort="name" title="Tıklayın: A-Z / Z-A">${nameLabel}</th>
         <th>Tel</th>
         <th data-sort="start" title="Tıklayın: küçükten büyüğe / büyükten küçüğe">${startLabel}</th>
         <th data-sort="end" title="Tıklayın: küçükten büyüğe / büyükten küçüğe">${endLabel}</th>
@@ -10106,14 +10247,22 @@ function renderExpiredMembershipsTable() {
     <tbody>
   `;
 
+  table.querySelector("th[data-sort='name']").addEventListener("click", () => {
+    if (expiredMembershipsSort.column === "name") expiredMembershipsSort.dir = expiredMembershipsSort.dir === "asc" ? "desc" : "asc";
+    else { expiredMembershipsSort.column = "name"; expiredMembershipsSort.dir = "asc"; }
+    expiredMembershipsPage = 1;
+    renderExpiredMembershipsTable();
+  });
   table.querySelector("th[data-sort='start']").addEventListener("click", () => {
     if (expiredMembershipsSort.column === "start") expiredMembershipsSort.dir = expiredMembershipsSort.dir === "asc" ? "desc" : "asc";
     else { expiredMembershipsSort.column = "start"; expiredMembershipsSort.dir = "asc"; }
+    expiredMembershipsPage = 1;
     renderExpiredMembershipsTable();
   });
   table.querySelector("th[data-sort='end']").addEventListener("click", () => {
     if (expiredMembershipsSort.column === "end") expiredMembershipsSort.dir = expiredMembershipsSort.dir === "asc" ? "desc" : "asc";
     else { expiredMembershipsSort.column = "end"; expiredMembershipsSort.dir = "asc"; }
+    expiredMembershipsPage = 1;
     renderExpiredMembershipsTable();
   });
 
@@ -10129,7 +10278,21 @@ function renderExpiredMembershipsTable() {
     if (!(mid in lastPackageByMember) || end > endStrForCmp(lastPackageByMember[mid])) lastPackageByMember[mid] = mp;
   }
 
-  for (const mp of list) {
+  const paginationEl = document.createElement("div");
+  paginationEl.className = "list-pagination";
+  expiredMembershipsPage = renderPaginationBar(paginationEl, {
+    page: expiredMembershipsPage,
+    pageSize: expiredMembershipsPageSize,
+    total: list.length,
+    onPageChange: (p) => { expiredMembershipsPage = p; renderExpiredMembershipsTable(); },
+    onPageSizeChange: (size) => { expiredMembershipsPageSize = size; expiredMembershipsPage = 1; renderExpiredMembershipsTable(); },
+  });
+  const pageItems = list.slice(
+    (expiredMembershipsPage - 1) * expiredMembershipsPageSize,
+    expiredMembershipsPage * expiredMembershipsPageSize
+  );
+
+  for (const mp of pageItems) {
     const m = state.members.find((x) => normId(x.id) === normId(mp.memberId));
     const memberNo = m ? (m.memberNo || "–") : "–";
     const memberName = getMemberDisplayName(m || {});
@@ -10152,7 +10315,8 @@ function renderExpiredMembershipsTable() {
       <td class="expired-memberships-table__package">${escapeHtml(packageName)}</td>
       <td>
         <span class="expired-memberships-table__actions">
-          ${showNewPackageBtn ? `<button type="button" class="btn btn--xs btn--ghost" data-action="new-package" data-member-id="${mp.memberId || ""}">Yeni Paket</button>` : ""}
+          <button type="button" class="btn btn--xs btn--ghost btn--icon-action" data-action="member-card" data-member-id="${mp.memberId || ""}" title="Kimlik Kartı" aria-label="Kimlik Kartı">🪪</button>
+          ${showNewPackageBtn ? `<button type="button" class="btn btn--xs btn--ghost btn--icon-action" data-action="new-package" data-member-id="${mp.memberId || ""}" title="Yeni Paket" aria-label="Yeni Paket">➕</button>` : ""}
         </span>
       </td>
     `;
@@ -10160,6 +10324,13 @@ function renderExpiredMembershipsTable() {
       if (e.target.closest("button")) return;
       openPackageSessionsModal(mp, mp.memberId);
     });
+    const memberCardBtn = row.querySelector("button[data-action='member-card']");
+    if (memberCardBtn) {
+      memberCardBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        openMemberCard(mp.memberId);
+      });
+    }
     const newPkgBtn = row.querySelector("button[data-action='new-package']");
     if (newPkgBtn) {
       newPkgBtn.addEventListener("click", function (e) {
@@ -10174,6 +10345,7 @@ function renderExpiredMembershipsTable() {
   content.innerHTML = "";
   wrap.appendChild(table);
   content.appendChild(wrap);
+  content.appendChild(paginationEl);
 }
 
 /** Üyeliği bitmiş (bitiş tarihi geçmiş) paketleri ve seansları ayrı listeler; filtre ve sıralama uygulanır */
@@ -10182,6 +10354,7 @@ function openExpiredMembershipsModal() {
   if (!content) return;
   showAdminMainView("expired-memberships");
   content.innerHTML = "";
+  expiredMembershipsPage = 1;
 
   const todayStr = localTodayDateStr();
 
@@ -10200,6 +10373,12 @@ function closeExpiredMembershipsModal() {
 }
 
 let formerMembersBaseList = [];
+
+/** Eski Üyeler tablosu için ad/soyad sıralaması: { column: 'name'|null, dir: 'asc'|'desc' } */
+let formerMembersSort = { column: null, dir: "asc" };
+let formerMembersPage = 1;
+let formerMembersPageSize = DEFAULT_LIST_PAGE_SIZE;
+let formerMembersFilterText = "";
 
 function fmtFormerMemberDeletedAt(iso) {
   if (!iso) return "—";
@@ -10241,6 +10420,10 @@ function renderFormerMembersTable() {
   var content = els.formerMembersContent;
   if (!content) return;
   var filterText = getAdminListFilterText();
+  if (filterText !== formerMembersFilterText) {
+    formerMembersFilterText = filterText;
+    formerMembersPage = 1;
+  }
   var list = formerMembersBaseList.slice();
   if (filterText) {
     list = list.filter(function (m) { return memberMatchesListFilter(m, filterText); });
@@ -10252,17 +10435,47 @@ function renderFormerMembersTable() {
     return;
   }
 
+  if (formerMembersSort.column === "name") {
+    list.sort(function (a, b) {
+      var cmp = getMemberDisplayName(a).localeCompare(getMemberDisplayName(b), "tr");
+      return formerMembersSort.dir === "asc" ? cmp : -cmp;
+    });
+  }
+
+  var nameLabel = "Ad Soy." + (formerMembersSort.column === "name" ? (formerMembersSort.dir === "asc" ? " ▲" : " ▼") : "");
+
   var wrap = document.createElement("div");
   wrap.className = "expired-memberships-table-wrap former-members-table-wrap";
   var table = document.createElement("table");
   table.className = "expired-memberships-table former-members-table";
   table.innerHTML =
     "<thead><tr>" +
-    "<th>ÜyeNo</th><th>Ad Soy.</th><th>Tel</th><th>İpt.Tar.</th><th>Paket</th><th></th>" +
+    '<th>ÜyeNo</th><th data-sort="name" title="Tıklayın: A-Z / Z-A">' + nameLabel + "</th><th>Tel</th><th>İpt.Tar.</th><th>Paket</th><th></th>" +
     "</tr></thead><tbody></tbody>";
   var tbody = table.querySelector("tbody");
 
-  list.forEach(function (m) {
+  table.querySelector("th[data-sort='name']").addEventListener("click", function () {
+    if (formerMembersSort.column === "name") formerMembersSort.dir = formerMembersSort.dir === "asc" ? "desc" : "asc";
+    else { formerMembersSort.column = "name"; formerMembersSort.dir = "asc"; }
+    formerMembersPage = 1;
+    renderFormerMembersTable();
+  });
+
+  var paginationEl = document.createElement("div");
+  paginationEl.className = "list-pagination";
+  formerMembersPage = renderPaginationBar(paginationEl, {
+    page: formerMembersPage,
+    pageSize: formerMembersPageSize,
+    total: list.length,
+    onPageChange: function (p) { formerMembersPage = p; renderFormerMembersTable(); },
+    onPageSizeChange: function (size) { formerMembersPageSize = size; formerMembersPage = 1; renderFormerMembersTable(); },
+  });
+  var pageItems = list.slice(
+    (formerMembersPage - 1) * formerMembersPageSize,
+    formerMembersPage * formerMembersPageSize
+  );
+
+  pageItems.forEach(function (m) {
     var pkgCount = m.packageCount != null ? m.packageCount : (m.package_count != null ? m.package_count : "—");
     var row = document.createElement("tr");
     row.className = "expired-memberships-table__row former-members-table__row";
@@ -10274,7 +10487,7 @@ function renderFormerMembersTable() {
       "<td>" + escapeHtml(fmtFormerMemberDeletedAt(m.deletedAt || m.deleted_at)) + "</td>" +
       '<td class="expired-memberships-table__package">' + escapeHtml(String(pkgCount)) + "</td>" +
       '<td><span class="expired-memberships-table__actions">' +
-      '<button type="button" class="btn btn--xs btn--primary" data-former-reactivate="' + m.id + '">Tekrar Aktif Et</button>' +
+      '<button type="button" class="btn btn--xs btn--primary btn--icon-action" data-former-reactivate="' + m.id + '" title="Tekrar Aktif Et" aria-label="Tekrar Aktif Et">↺</button>' +
       "</span></td>";
     row.addEventListener("click", function (e) {
       if (e.target.closest("button")) return;
@@ -10293,6 +10506,7 @@ function renderFormerMembersTable() {
   content.innerHTML = "";
   wrap.appendChild(table);
   content.appendChild(wrap);
+  content.appendChild(paginationEl);
 }
 
 async function openFormerMembersModal() {
@@ -10301,6 +10515,7 @@ async function openFormerMembersModal() {
     return;
   }
   showAdminMainView("former-members");
+  formerMembersPage = 1;
   try {
     var rows = await window.API.getFormerMembers();
     formerMembersBaseList = (rows || []).map(function (row) {
@@ -10413,6 +10628,9 @@ async function openListMembersModal() {
 
   let sortColumn = "name";
   let sortDir = "asc";
+  let page = 1;
+  let pageSize = DEFAULT_LIST_PAGE_SIZE;
+  let lastFilterText = getAdminListFilterText();
 
   function getMp(m) {
     return activePackages.find((p) => normId(p.memberId) === normId(m.id));
@@ -10437,6 +10655,10 @@ async function openListMembersModal() {
       pkgSessions,
       mp.lessonCount ?? mp.lesson_count ?? 0
     ).remaining;
+  }
+  function getTotal(m) {
+    const mp = getMp(m);
+    return mp ? Math.max(0, Number(mp.lessonCount ?? mp.lesson_count ?? 0)) : 0;
   }
   function sortMembers(list) {
     const arr = list.slice();
@@ -10467,14 +10689,11 @@ async function openListMembersModal() {
     return arr;
   }
 
-  const mobileToolbar = document.createElement("div");
-  mobileToolbar.className = "list-members-toolbar hidden";
-  mobileToolbar.innerHTML =
-    '<label class="label" for="listMembersSortSelect">Sırala</label>' +
-    '<select id="listMembersSortSelect" class="input list-members-sort-select"></select>';
-
   const cardsEl = document.createElement("div");
   cardsEl.className = "list-members-cards hidden";
+
+  const paginationEl = document.createElement("div");
+  paginationEl.className = "list-pagination";
 
   const tableWrap = document.createElement("div");
   tableWrap.className = "list-members-table-wrap";
@@ -10527,6 +10746,7 @@ async function openListMembersModal() {
   function onSortClick(col) {
     if (sortColumn === col) sortDir = sortDir === "asc" ? "desc" : "asc";
     else { sortColumn = col; sortDir = "asc"; }
+    page = 1;
     updateSortHeaders();
     applyAndRender();
   }
@@ -10556,9 +10776,9 @@ async function openListMembersModal() {
 
   function memberListActionButtonsHtml() {
     return (
-      '<button type="button" class="btn btn--xs btn--ghost" data-action="card">Kimlik Kartı</button>' +
-      '<button type="button" class="btn btn--xs btn--ghost" data-action="package">Paket</button>' +
-      '<button type="button" class="btn btn--xs btn--ghost" data-action="delete">Sil</button>'
+      '<button type="button" class="btn btn--xs btn--ghost btn--icon-action" data-action="card" title="Kimlik Kartı" aria-label="Kimlik Kartı">🪪</button>' +
+      '<button type="button" class="btn btn--xs btn--ghost btn--icon-action" data-action="package" title="Paket" aria-label="Paket">📦</button>' +
+      '<button type="button" class="btn btn--xs btn--ghost btn--icon-action" data-action="delete" title="Sil" aria-label="Sil">🗑️</button>'
     );
   }
 
@@ -10570,6 +10790,7 @@ async function openListMembersModal() {
       const startStr = getStartStr(m) || "–";
       const endStr = getEndStr(m) || "–";
       const remaining = getRemaining(m);
+      const total = getTotal(m);
       const row = document.createElement("tr");
       row.className = "list-members-table__row";
       row.title = "Aktif paket seanslarını görmek için tıklayın";
@@ -10580,7 +10801,7 @@ async function openListMembersModal() {
         <td>${escapeHtml(packageName)}</td>
         <td>${escapeHtml(startStr)}</td>
         <td>${escapeHtml(endStr)}</td>
-        <td>${remaining}</td>
+        <td>${remainingSessionsHtml(remaining, total)}</td>
         <td><span class="list-members-table__actions">${memberListActionButtonsHtml()}</span></td>
       `;
       bindListMemberActions(row, m, mp);
@@ -10596,13 +10817,14 @@ async function openListMembersModal() {
       const startStr = getStartStr(m) || "–";
       const endStr = getEndStr(m) || "–";
       const remaining = getRemaining(m);
+      const total = getTotal(m);
       const card = document.createElement("article");
       card.className = "list-members-card";
       card.title = "Aktif paket seanslarını görmek için tıklayın";
       card.innerHTML =
         '<div class="list-members-card__head">' +
         '<div class="list-members-card__name">' + escapeHtml(getMemberDisplayName(m)) + memberDeletionBadgeHtml(m) + "</div>" +
-        '<div class="list-members-card__no">' + escapeHtml(m.memberNo || "–") + "</div>" +
+        '<div class="list-members-card__head-actions">' + memberListActionButtonsHtml() + "</div>" +
         "</div>" +
         '<div class="list-members-card__meta">' +
         '<span class="list-members-card__phone">' + escapeHtml(displayPhone(m.phone) || "–") + "</span>" +
@@ -10610,60 +10832,39 @@ async function openListMembersModal() {
         "</div>" +
         '<div class="list-members-card__dates">' +
         '<span>' + escapeHtml(startStr) + " – " + escapeHtml(endStr) + "</span>" +
-        '<span class="list-members-card__remaining">Kalan: ' + remaining + "</span>" +
-        "</div>" +
-        '<div class="list-members-card__actions">' + memberListActionButtonsHtml() + "</div>";
+        '<span class="list-members-card__remaining">Kalan: ' + remainingSessionsHtml(remaining, total) + "</span>" +
+        "</div>";
       bindListMemberActions(card, m, mp);
       cardsEl.appendChild(card);
     }
   }
 
-  const sortSelect = mobileToolbar.querySelector("#listMembersSortSelect");
-  const sortOptions = [
-    { col: "name", asc: "Ad (A–Z)", desc: "Ad (Z–A)" },
-    { col: "start", asc: "Başlangıç (eskiden yeniye)", desc: "Başlangıç (yeniden eskiye)" },
-    { col: "end", asc: "Bitiş (eskiden yeniye)", desc: "Bitiş (yeniden eskiye)" },
-    { col: "remaining", asc: "Kalan seans (az–çok)", desc: "Kalan seans (çok–az)" },
-  ];
-  function updateSortSelect() {
-    if (!sortSelect) return;
-    sortSelect.innerHTML = "";
-    sortOptions.forEach(function (opt) {
-      ["asc", "desc"].forEach(function (dir) {
-        const option = document.createElement("option");
-        option.value = opt.col + ":" + dir;
-        option.textContent = dir === "asc" ? opt.asc : opt.desc;
-        if (sortColumn === opt.col && sortDir === dir) option.selected = true;
-        sortSelect.appendChild(option);
-      });
-    });
-  }
-  if (sortSelect) {
-    sortSelect.addEventListener("change", function () {
-      const parts = sortSelect.value.split(":");
-      sortColumn = parts[0] || "name";
-      sortDir = parts[1] === "desc" ? "desc" : "asc";
-      updateSortHeaders();
-      applyAndRender();
-    });
-  }
-
   function updateListMembersLayout() {
     const mobile = isMobileViewport();
-    mobileToolbar.classList.toggle("hidden", !mobile);
     cardsEl.classList.toggle("hidden", !mobile);
     tableWrap.classList.toggle("hidden", mobile);
-    if (mobile) updateSortSelect();
-    else updateSortHeaders();
+    if (!mobile) updateSortHeaders();
   }
 
   function applyAndRender() {
     const q = getAdminListFilterText();
+    if (q !== lastFilterText) {
+      lastFilterText = q;
+      page = 1;
+    }
     const filtered = q ? membersWithActive.filter((m) => memberMatchesListFilter(m, q)) : membersWithActive;
     const sorted = sortMembers(filtered);
+    page = renderPaginationBar(paginationEl, {
+      page,
+      pageSize,
+      total: sorted.length,
+      onPageChange: (p) => { page = p; applyAndRender(); },
+      onPageSizeChange: (size) => { pageSize = size; page = 1; applyAndRender(); },
+    });
+    const pageItems = sorted.slice((page - 1) * pageSize, page * pageSize);
     updateListMembersLayout();
-    if (isMobileViewport()) renderListMembersCards(sorted);
-    else renderListMembersRows(sorted);
+    if (isMobileViewport()) renderListMembersCards(pageItems);
+    else renderListMembersRows(pageItems);
   }
 
   content._listMembersApplyAndRender = applyAndRender;
@@ -10678,9 +10879,9 @@ async function openListMembersModal() {
 
   applyAndRender();
   tableWrap.appendChild(table);
-  content.appendChild(mobileToolbar);
   content.appendChild(cardsEl);
   content.appendChild(tableWrap);
+  content.appendChild(paginationEl);
 }
 
 function closeListMembersModal() {
@@ -10995,7 +11196,15 @@ function bindEvents() {
 
   els.addSessionBtn.addEventListener("click", () => openGroupSessionModal(null));
   if (els.openListMembersBtn) els.openListMembersBtn.addEventListener("click", openListMembersModal);
-  if (els.openCalendarBtn) els.openCalendarBtn.addEventListener("click", showAdminCalendarView);
+  if (els.openCalendarBtn) {
+    els.openCalendarBtn.addEventListener("click", function () {
+      if (isAdminPanelViewActive()) {
+        returnToAdminCalendarView();
+      } else {
+        showAdminCalendarView();
+      }
+    });
+  }
   bindAdminPanelSwipeBack();
   if (els.openExpiredMembershipsBtn) els.openExpiredMembershipsBtn.addEventListener("click", openExpiredMembershipsModal);
   if (els.openFormerMembersBtn) els.openFormerMembersBtn.addEventListener("click", openFormerMembersModal);
@@ -11492,9 +11701,7 @@ function bindEvents() {
       if (els.staffHoursModal && !els.staffHoursModal.classList.contains("hidden")) closeStaffHoursModal();
       if (!els.taskDistributionModal.classList.contains("hidden")) closeTaskDistributionModal();
       if (isAdminPanelViewActive()) {
-        clearPlannerFilters();
-        showAdminCalendarView();
-        render();
+        returnToAdminCalendarView();
       }
       if (!els.groupSessionModal.classList.contains("hidden")) closeGroupSessionModal();
       if (els.memberPortalSessionsModal && !els.memberPortalSessionsModal.classList.contains("hidden")) closeMemberPortalSessionsModal();
@@ -11726,6 +11933,7 @@ function bindLoginForm() {
     ev.preventDefault();
     const email = (document.getElementById("loginEmail") || {}).value.trim();
     const p = (document.getElementById("loginPassword") || {}).value;
+    const rememberMe = !!(document.getElementById("loginRememberMe") || {}).checked;
     if (!email || !p) return;
     if (errEl) {
       errEl.classList.add("hidden");
@@ -11733,7 +11941,7 @@ function bindLoginForm() {
     }
     if (btn) btn.disabled = true;
     try {
-      const data = await window.API.login(email, p);
+      const data = await window.API.login(email, p, rememberMe);
       if (data.user && data.user.role) {
         try {
           sessionStorage.setItem(LAST_ROLE_KEY, data.user.role);

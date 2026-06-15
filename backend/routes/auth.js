@@ -35,11 +35,11 @@ function buildUserProfile(row) {
 }
 
 // JWT token oluştur
-const generateToken = (userId, role) => {
+const generateToken = (userId, role, rememberMe) => {
   return jwt.sign(
     { userId, role },
     process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN || '24h' }
+    { expiresIn: rememberMe ? (process.env.JWT_REMEMBER_EXPIRES_IN || '30d') : (process.env.JWT_EXPIRES_IN || '24h') }
   );
 };
 
@@ -71,7 +71,7 @@ router.post('/login', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { email, password } = req.body;
+    const { email, password, rememberMe } = req.body;
     const loginEmail = String(email).trim();
 
     const result = await db.query(
@@ -104,7 +104,7 @@ router.post('/login', [
     }
 
     // Token oluştur
-    const token = generateToken(user.id, user.role);
+    const token = generateToken(user.id, user.role, !!rememberMe);
 
     await activityLog(req, {
       action: 'auth.login',

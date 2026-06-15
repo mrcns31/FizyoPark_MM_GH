@@ -36,8 +36,18 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(compression());
 app.use(helmet()); // Güvenlik başlıkları
+const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173')
+  .split(',')
+  .map((o) => o.trim());
+const localNetworkOriginRegex = /^https?:\/\/(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}):\d+$/;
+
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin)) return callback(null, true);
+    if (localNetworkOriginRegex.test(origin)) return callback(null, true);
+    return callback(new Error(`CORS engellendi: ${origin}`));
+  },
   credentials: true
 }));
 app.use(morgan('combined')); // Loglama
