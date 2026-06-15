@@ -195,10 +195,6 @@ body.login-screen-open{
   .topbar:not(.topbar--member) .topbar__filterSelect{
     display:none !important;
   }
-  /* Giriş listesi: günlük/haftalık/aylık topbar'dan */
-  .topbar--admin-mobile.topbar--entry-list-panel:not(.topbar--member) .topbar__viewGroup{
-    display:flex !important;
-  }
   .topbar:not(.topbar--member) .topbar__navRow{
     flex-wrap:nowrap;
   }
@@ -290,26 +286,6 @@ body.login-screen-open{
   .topbar--admin-mobile .topbar__navRow{
     flex-wrap:nowrap;
     gap:4px;
-  }
-  .topbar--admin-mobile.topbar--entry-list-panel .topbar__navRow{
-    flex-wrap:wrap;
-    row-gap:6px;
-  }
-  .topbar--admin-mobile.topbar--entry-list-panel .topbar__viewGroup{
-    order:1;
-    flex:1 1 100%;
-    width:100%;
-    justify-content:stretch;
-  }
-  .topbar--admin-mobile.topbar--entry-list-panel .topbar__viewBtn{
-    flex:1 1 0;
-    min-width:0;
-    padding:6px 4px;
-    font-size:11px;
-  }
-  .topbar--admin-mobile.topbar--entry-list-panel .topbar__dateNav{
-    order:2;
-    flex:1 1 100%;
   }
   .topbar--admin-mobile .topbar__dateNav{
     flex:1 1 auto;
@@ -1364,16 +1340,16 @@ body.login-screen-open{
   }
   .entry-list-table{
     width:100%;
-    min-width:300px;
-    font-size:12px;
+    min-width:0;
+    font-size:11px;
   }
   .entry-list-table th,
   .entry-list-table td{
-    padding:8px 5px;
+    padding:6px 3px;
     vertical-align:middle;
   }
   .entry-list-table th{
-    font-size:11px;
+    font-size:10px;
     font-weight:650;
     color:var(--muted);
     white-space:nowrap;
@@ -1388,7 +1364,7 @@ body.login-screen-open{
   }
   .entry-list-table td[data-label="Üye"],
   .entry-list-table td[data-label="Personel"]{
-    max-width:96px;
+    max-width:64px;
     overflow:hidden;
     text-overflow:ellipsis;
     white-space:nowrap;
@@ -1399,21 +1375,25 @@ body.login-screen-open{
   }
   .entry-list-table__actions,
   .entry-list-table__actions-head{
-    width:72px;
+    width:60px;
   }
-  .entry-list-action{
-    width:36px;
-    height:36px;
-    font-size:16px;
-  }
-  .entry-status{
-    font-size:11px;
+  .entry-list-actions{
     gap:4px;
   }
+  .entry-list-action{
+    width:28px;
+    height:28px;
+    font-size:13px;
+    border-radius:8px;
+  }
+  .entry-status{
+    font-size:10px;
+    gap:3px;
+  }
   .entry-status__icon{
-    width:18px;
-    height:18px;
-    font-size:11px;
+    width:16px;
+    height:16px;
+    font-size:10px;
   }
 }
 .app--admin-mobile #adminEntryListView .admin-main-panel__content--entry-list{

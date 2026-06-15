@@ -1503,7 +1503,7 @@ function openPlannerJumpDatePicker() {
 function onPlannerJumpDateSelected() {
   const v = els.plannerJumpDate && els.plannerJumpDate.value;
   if (!v || !isPlannerDatePickEnabled()) return;
-  if (ui.viewMode !== "day") {
+  if (ui.viewMode !== "day" && !isAdminMainViewActive("entry-list")) {
     ui.viewMode = "day";
     saveUi();
   }
@@ -6040,6 +6040,144 @@ function showAdminMainView(view) {
   if (isSidebarDrawerMode()) closeSidebar();
 }
 
+async function goToPrevPeriod() {
+  if (ui.viewMode === "day") {
+    await setCurrentDay(addDays(ui.currentDay, -1));
+  } else if (ui.viewMode === "month") {
+    ui.currentMonth = addMonths(ui.currentMonth || startOfMonth(ui.currentDay), -1);
+    saveUi();
+    render();
+    if (!isMemberUser() && await ensurePlannerSessionsLoaded()) {
+      render();
+    }
+    await refreshEntryListIfActive();
+  } else {
+    await setWeekStart(addDays(ui.weekStart, -7));
+  }
+}
+
+async function goToNextPeriod() {
+  if (ui.viewMode === "day") {
+    await setCurrentDay(addDays(ui.currentDay, 1));
+  } else if (ui.viewMode === "month") {
+    ui.currentMonth = addMonths(ui.currentMonth || startOfMonth(ui.currentDay), 1);
+    saveUi();
+    render();
+    if (!isMemberUser() && await ensurePlannerSessionsLoaded()) {
+      render();
+    }
+    await refreshEntryListIfActive();
+  } else {
+    await setWeekStart(addDays(ui.weekStart, 7));
+  }
+}
+
+/** Tarih navigasyonunun kaydırma (swipe) ile yapılabildiği durumlar: admin takvim/giriş listesi veya personel takvimi. */
+function isDateNavSwipeAllowed() {
+  if (isMemberUser() || !isAdminMobilePanel()) return false;
+  if (isAdminUser()) {
+    return ui.adminMainView === "calendar" || isAdminMainViewActive("entry-list");
+  }
+  return isStaffUser();
+}
+
+var dateNavSwipeStart = null;
+
+function bindDateNavSwipe() {
+  var el = els.weekLabelPickWrap;
+  if (!el || el.dataset.dateSwipeBound === "1") return;
+  el.dataset.dateSwipeBound = "1";
+  el.addEventListener(
+    "touchstart",
+    function (e) {
+      if (!isDateNavSwipeAllowed()) return;
+      if (e.touches.length !== 1) return;
+      var touch = e.touches[0];
+      dateNavSwipeStart = { x: touch.clientX, y: touch.clientY };
+    },
+    { passive: true }
+  );
+  el.addEventListener(
+    "touchend",
+    function (e) {
+      if (!dateNavSwipeStart) return;
+      var touch = e.changedTouches[0];
+      var dx = touch.clientX - dateNavSwipeStart.x;
+      var dy = touch.clientY - dateNavSwipeStart.y;
+      dateNavSwipeStart = null;
+      if (Math.abs(dx) < 40 || Math.abs(dx) <= Math.abs(dy) * 1.2) return;
+      if (dx < 0) {
+        goToNextPeriod();
+      } else {
+        goToPrevPeriod();
+      }
+    },
+    { passive: true }
+  );
+  el.addEventListener(
+    "touchcancel",
+    function () {
+      dateNavSwipeStart = null;
+    },
+    { passive: true }
+  );
+}
+
+var calendarDateSwipeStart = null;
+
+/** Randevuların/giriş listesinin gösterildiği alanda sola/sağa kaydırınca tarih ileri/geri gitsin. */
+function bindSwipeDateNav(el, scrollEl) {
+  if (!el || el.dataset.dateSwipeBound === "1") return;
+  el.dataset.dateSwipeBound = "1";
+  el.addEventListener(
+    "touchstart",
+    function (e) {
+      if (!isDateNavSwipeAllowed()) return;
+      if (e.touches.length !== 1) return;
+      var touch = e.touches[0];
+      calendarDateSwipeStart = {
+        x: touch.clientX,
+        y: touch.clientY,
+        scrollLeft: scrollEl ? scrollEl.scrollLeft : 0,
+      };
+    },
+    { passive: true }
+  );
+  el.addEventListener(
+    "touchend",
+    function (e) {
+      if (!calendarDateSwipeStart) return;
+      var touch = e.changedTouches[0];
+      var dx = touch.clientX - calendarDateSwipeStart.x;
+      var dy = touch.clientY - calendarDateSwipeStart.y;
+      var scrolledX = scrollEl
+        ? Math.abs(scrollEl.scrollLeft - calendarDateSwipeStart.scrollLeft)
+        : 0;
+      calendarDateSwipeStart = null;
+      if (scrolledX > 5) return;
+      if (Math.abs(dx) < 60 || Math.abs(dx) <= Math.abs(dy) * 1.2) return;
+      if (dx < 0) {
+        goToNextPeriod();
+      } else {
+        goToPrevPeriod();
+      }
+    },
+    { passive: true }
+  );
+  el.addEventListener(
+    "touchcancel",
+    function () {
+      calendarDateSwipeStart = null;
+    },
+    { passive: true }
+  );
+}
+
+function bindCalendarDateSwipe() {
+  bindSwipeDateNav(els.memberPlanner, els.plannerGridWrap);
+  bindSwipeDateNav(els.adminEntryListView, els.entryListTableWrap);
+}
+
 var adminPanelSwipeStart = null;
 
 function bindAdminPanelSwipeBack() {
@@ -6050,6 +6188,7 @@ function bindAdminPanelSwipeBack() {
     "touchstart",
     function (e) {
       if (!isAdminUser() || !isAdminPanelViewActive() || !isAdminMobilePanel()) return;
+      if (isAdminMainViewActive("entry-list")) return;
       if (e.touches.length !== 1) return;
       if (!e.target.closest(".admin-main-panel:not(.hidden)")) return;
       var touch = e.touches[0];
@@ -11128,37 +11267,11 @@ function bindEvents() {
   }
 
   // Navigasyon butonları
-  els.prevBtn.addEventListener("click", async () => {
-    if (ui.viewMode === "day") {
-      await setCurrentDay(addDays(ui.currentDay, -1));
-    } else if (ui.viewMode === "month") {
-      ui.currentMonth = addMonths(ui.currentMonth || startOfMonth(ui.currentDay), -1);
-      saveUi();
-      render();
-      if (!isMemberUser() && await ensurePlannerSessionsLoaded()) {
-        render();
-      }
-      await refreshEntryListIfActive();
-    } else {
-      await setWeekStart(addDays(ui.weekStart, -7));
-    }
-  });
-  els.nextBtn.addEventListener("click", async () => {
-    if (ui.viewMode === "day") {
-      await setCurrentDay(addDays(ui.currentDay, 1));
-    } else if (ui.viewMode === "month") {
-      ui.currentMonth = addMonths(ui.currentMonth || startOfMonth(ui.currentDay), 1);
-      saveUi();
-      render();
-      if (!isMemberUser() && await ensurePlannerSessionsLoaded()) {
-        render();
-      }
-      await refreshEntryListIfActive();
-    } else {
-      await setWeekStart(addDays(ui.weekStart, 7));
-    }
-  });
+  els.prevBtn.addEventListener("click", goToPrevPeriod);
+  els.nextBtn.addEventListener("click", goToNextPeriod);
   els.todayBtn.addEventListener("click", goToToday);
+  bindDateNavSwipe();
+  bindCalendarDateSwipe();
 
   function closeTopbarActionsMenu() {
     if (els.topbarActionsMenu) els.topbarActionsMenu.classList.add("hidden");
