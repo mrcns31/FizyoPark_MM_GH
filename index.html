@@ -524,6 +524,13 @@
                     </span>
                     <span class="sidebar-nav__label">Eski Üyeler</span>
                   </button>
+                  <button id="openNotificationsBtn" class="sidebar-nav__btn btn btn--ghost" type="button" title="Bildirimler">
+                    <span class="sidebar-nav__icon" aria-hidden="true">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg>
+                    </span>
+                    <span class="sidebar-nav__label">Bildirimler</span>
+                    <span id="notificationsNavBadge" class="sidebar-nav__badge hidden" aria-label="Okunmamış bildirim"></span>
+                  </button>
                 </nav>
               </section>
 
@@ -688,6 +695,20 @@
             </div>
           </header>
           <div id="formerMembersContent" class="admin-main-panel__content"></div>
+        </section>
+
+        <section class="admin-main-panel hidden" id="adminNotificationsView" aria-label="Bildirimler">
+          <header class="admin-main-panel__head">
+            <div class="admin-main-panel__head-row">
+              <h2 class="admin-main-panel__title">Bildirimler</h2>
+            </div>
+            <div class="entry-list-tabs" role="tablist" aria-label="Bildirim türü">
+              <button type="button" id="notificationsFilterAll" class="entry-list-tab is-active" role="tab" aria-selected="true" data-notification-filter="all">Tümü</button>
+              <button type="button" id="notificationsFilterCancel" class="entry-list-tab" role="tab" aria-selected="false" data-notification-filter="cancel">İptaller</button>
+              <button type="button" id="notificationsFilterCheckin" class="entry-list-tab" role="tab" aria-selected="false" data-notification-filter="checkin">Kapıdan Girişler</button>
+            </div>
+          </header>
+          <div id="notificationsContent" class="admin-main-panel__content"></div>
         </section>
 
         <section class="admin-main-panel hidden" id="adminEntryListView" aria-label="Giriş listesi">
@@ -1450,7 +1471,20 @@
     <div class="modal hidden" id="packageSessionsModal" role="dialog" aria-modal="true" aria-labelledby="packageSessionsTitle">
       <div class="modal__backdrop" data-close="packageSessionsModal"></div>
       <div class="modal__card package-sessions-modal modal__card--member-sheet">
-        <div class="modal__title" id="packageSessionsTitle">Paket Seansları</div>
+        <div class="modal__title package-sessions-modal__header">
+          <span id="packageSessionsTitle">Paket Seansları</span>
+          <div class="export-dropdown-wrap hidden" id="packageSessionsExportWrap">
+            <button type="button" id="packageSessionsExportBtn" class="btn btn--ghost btn--xs" aria-haspopup="true" aria-expanded="false">Yazdır</button>
+            <div id="packageSessionsExportMenu" class="export-dropdown hidden" role="menu">
+              <button type="button" role="menuitem" data-package-export="excel">Excel</button>
+              <button type="button" role="menuitem" data-package-export="pdf">PDF</button>
+              <button type="button" role="menuitem" data-package-export="print">Yazıcı</button>
+            </div>
+          </div>
+          <button type="button" id="packageSessionsShareBtn" class="btn btn--ghost btn--xs btn--icon hidden" aria-label="Paylaş" title="PDF olarak paylaş">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
+          </button>
+        </div>
         <div class="modal__body package-sessions-modal__body">
           <div class="package-sessions-modal__layout">
             <aside id="packageSessionsPackagePicker" class="package-sessions-modal__picker hidden" role="tablist" aria-label="Paket seçimi">

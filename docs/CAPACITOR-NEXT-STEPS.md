@@ -56,12 +56,12 @@ Bunları **tekrar tartışmaya açmayacağız**, zaman kaybettirir:
 `docs/MEMBER-PACKAGE-LOGIC.md` F grubu (**MP-17–22**) hâlâ işaretsiz. Bunlar paket/iptal/telafi
 iş kurallarının doğru çalıştığını doğrulayan manuel testler:
 
-- MP-17 — Sabit pakette üye iptali reddediliyor mu (API + UI)
-- MP-18 — Esnek pakette 2 saat kuralı sınırda doğru çalışıyor mu
-- MP-19 — İptal → telafi seansı paket sonuna ekleniyor mu, slot tekrar eklenmiyor mu
-- MP-20 — Admin silme aynı telafi mantığını izliyor mu
-- MP-21 — Aktif paket sonlandırma → yeni paket atanabiliyor mu, eski seanslar geçmişte mi
-- MP-22 — Admin ve üye aynı paket için seans sayıları eşleşiyor mu
+- ❌ MP-17 — Sabit pakette üye iptali reddediliyor mu (API + UI)
+- ❌ MP-18 — Esnek pakette 2 saat kuralı sınırda doğru çalışıyor mu
+- ❌ MP-19 — İptal → telafi seansı paket sonuna ekleniyor mu, slot tekrar eklenmiyor mu
+- ❌ MP-20 — Admin silme aynı telafi mantığını izliyor mu
+- ❌ MP-21 — Aktif paket sonlandırma → yeni paket atanabiliyor mu, eski seanslar geçmişte mi
+- ❌ MP-22 — Admin ve üye aynı paket için seans sayıları eşleşiyor mu
 
 **Neden önce bu?** Capacitor/mağaza sürecinde bir hata bulunursa düzeltme → yeni build → mağaza
 güncellemesi demek (saatler/günler). Şimdi (web'de) bulup düzeltmek bedava.

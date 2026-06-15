@@ -7,6 +7,8 @@ import { validateRoomForSession, placeSessionWithRebalance, rebalanceSlotRooms }
 import { cancelPackageSessionsAtSlot, resolveMemberPackageId } from '../utils/packageSessions.js';
 import { log as activityLog } from '../utils/activityLogger.js';
 import { isSessionAttendanceConfirmed } from '../utils/sessionAttendance.js';
+import { resolveLocalDateRangeMs } from '../utils/staffWorkingHours.js';
+import { localTodayDateStr } from '../utils/memberPackageStatus.js';
 
 const router = express.Router();
 
@@ -32,6 +34,20 @@ async function requireAdminPasswordIfSessionConfirmed(sessionRow, adminPassword)
   const pw = await verifyAdminPassword(adminPassword);
   if (!pw.ok) return pw;
   return null;
+}
+
+/** Üyenin aynı zaman aralığında (silinmemiş) başka bir randevusu var mı? */
+async function memberHasOverlappingSession(memberId, startTs, endTs, excludeSessionId = null) {
+  const params = [memberId, startTs, endTs];
+  let sql = `SELECT id FROM sessions
+    WHERE member_id = $1 AND start_ts < $3 AND end_ts > $2 AND deleted_at IS NULL`;
+  if (excludeSessionId != null) {
+    sql += ' AND id != $4';
+    params.push(excludeSessionId);
+  }
+  sql += ' LIMIT 1';
+  const r = await db.query(sql, params);
+  return r.rows.length > 0;
 }
 
 // Tüm route'lar için authentication gerekli
@@ -173,6 +189,87 @@ router.get('/', [
   }
 });
 
+// Üye iptalleri ve QR ile giriş yapılan bildirimler (personel/admin paneli polling ve bildirim listesi için)
+router.get('/notifications', [
+  query('since').optional().isInt(),
+  query('limit').optional().isInt({ min: 1, max: 100 }),
+], async (req, res) => {
+  try {
+    if (req.user.role === 'member') {
+      return res.json([]);
+    }
+
+    const hasSince = req.query.since !== undefined;
+    const since = hasSince ? Number(req.query.since) : Date.now() - 30 * 24 * 60 * 60 * 1000;
+    const limit = req.query.limit ? Number(req.query.limit) : 50;
+    const order = hasSince ? 'ASC' : 'DESC';
+
+    const params = [since];
+    let cancelFilter = '';
+    let checkinFilter = '';
+
+    if (req.user.role === 'staff') {
+      const staffResult = await db.query('SELECT id FROM staff WHERE user_id = $1', [req.user.userId]);
+      if (staffResult.rows.length === 0) return res.json([]);
+      // Personel sadece bugüne ait kendi seanslarına dair bildirimleri görür
+      const { start, end } = resolveLocalDateRangeMs({ dateStr: localTodayDateStr() });
+      params.push(staffResult.rows[0].id, start, end);
+      cancelFilter = ' AND s.staff_id = $2 AND s.start_ts >= $3 AND s.start_ts <= $4';
+      checkinFilter = ' AND s.staff_id = $2 AND al.created_at >= to_timestamp($3 / 1000.0) AND al.created_at <= to_timestamp($4 / 1000.0)';
+    }
+
+    params.push(limit);
+    const limitParam = `$${params.length}`;
+
+    const result = await db.query(
+      `SELECT * FROM (
+         SELECT al.id, 'cancel' AS type,
+                EXTRACT(EPOCH FROM al.created_at) * 1000 AS at_ts,
+                s.staff_id, s.start_ts,
+                COALESCE(NULLIF(TRIM(m.first_name || ' ' || m.last_name), ''), NULLIF(TRIM(m.name), '')) AS member_name,
+                TRIM(st.first_name || ' ' || st.last_name) AS staff_name
+         FROM activity_logs al
+         JOIN sessions s ON s.id::text = al.entity_id
+         LEFT JOIN members m ON m.id = s.member_id
+         LEFT JOIN staff st ON st.id = s.staff_id
+         WHERE al.action = 'session.cancel_by_member'
+           AND al.created_at > to_timestamp($1 / 1000.0)${cancelFilter}
+
+         UNION ALL
+
+         SELECT al.id, 'checkin' AS type,
+                EXTRACT(EPOCH FROM al.created_at) * 1000 AS at_ts,
+                s.staff_id, s.start_ts,
+                COALESCE(NULLIF(TRIM(m.first_name || ' ' || m.last_name), ''), NULLIF(TRIM(m.name), '')) AS member_name,
+                TRIM(st.first_name || ' ' || st.last_name) AS staff_name
+         FROM activity_logs al
+         JOIN sessions s ON s.id::text = al.entity_id
+         LEFT JOIN members m ON m.id = s.member_id
+         LEFT JOIN staff st ON st.id = s.staff_id
+         WHERE al.action = 'session.check_in_qr'
+           AND al.created_at > to_timestamp($1 / 1000.0)${checkinFilter}
+       ) combined
+       ORDER BY at_ts ${order}
+       LIMIT ${limitParam}`,
+      params
+    );
+
+    res.json(result.rows.map((r) => ({
+      id: r.id,
+      type: r.type,
+      at: Number(r.at_ts),
+      staffId: r.staff_id,
+      staffName: r.staff_name,
+      memberName: r.member_name,
+      startTs: Number(r.start_ts),
+    })));
+  } catch (error) {
+    if (error.code === '42P01') return res.json([]);
+    console.error('Bildirimler alınırken hata oluştu:', error);
+    res.status(500).json({ error: 'Bildirimler alınırken hata oluştu' });
+  }
+});
+
 // Yeni seans oluştur (toInt ile string sayılar kabul edilir)
 router.post('/', [
   body('staffId').toInt().isInt().withMessage('Personel ID gerekli'),
@@ -199,6 +296,10 @@ router.post('/', [
     }
     if (memberPackageId == null) {
       return res.status(400).json({ error: 'Bu üyenin bu tarihte aktif paketi yok. Sadece aktif paketi olan üyelere seans oluşturulabilir.' });
+    }
+
+    if (await memberHasOverlappingSession(memberId, startTs, endTs)) {
+      return res.status(409).json({ error: 'Bu üyenin bu saatte zaten bir randevusu var.' });
     }
 
     // Oda gönderilmediyse: çalışma saati kontrolü + gerekirse oda dengeleme ile yerleştir.
@@ -333,6 +434,10 @@ router.put('/:id', [
       // Yeni tarih paket aralığı dışındaysa (örn. paket başlangıcından önce) mevcut paketi koru;
       // böylece seans takvimde ve paket listesinde tutarlı görünür, sayı düşmez.
       updates.memberPackageId = resolved !== null ? resolved : current.member_package_id;
+    }
+
+    if (await memberHasOverlappingSession(finalMemberId, finalStartTs, finalEndTs, id)) {
+      return res.status(409).json({ error: 'Bu üyenin bu saatte zaten bir randevusu var.' });
     }
 
     // Güncelleme alanlarını oluştur

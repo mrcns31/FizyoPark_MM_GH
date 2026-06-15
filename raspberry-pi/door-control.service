@@ -1,0 +1,12 @@
+[Unit]
+Description=Kapi role kontrol servisi
+After=multi-user.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /home/fizyopark_mm_gh/door-control.py
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

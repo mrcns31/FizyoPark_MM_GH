@@ -124,6 +124,8 @@ export function sessionToDto(row, staffMap, packageType, packageStatus = 'active
     endTs,
     note: row.note || '',
     checkedIn,
+    checkedInAt: row.checked_in_at || null,
+    checkInMethod: row.check_in_method || null,
     isPast,
     isConsumed: consumed,
     canCancel,

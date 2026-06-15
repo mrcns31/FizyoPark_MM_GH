@@ -387,6 +387,13 @@
     return apiFetch('/member-portal/access-qr');
   }
 
+  async function verifyMemberAccess(token) {
+    return apiFetch('/member-portal/verify-access', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    });
+  }
+
   async function getDeletionRequests() {
     var rows = await apiFetch('/members/deletion-requests');
     return (rows || []).map(function (row) {
@@ -680,6 +687,13 @@
     return (rows || []).map(sessionFromApi);
   }
 
+  async function getNotifications(params) {
+    var qs = [];
+    if (params && params.since != null) qs.push('since=' + encodeURIComponent(params.since));
+    if (params && params.limit != null) qs.push('limit=' + encodeURIComponent(params.limit));
+    return apiFetch('/sessions/notifications' + (qs.length ? '?' + qs.join('&') : ''));
+  }
+
   async function exportPackagesCsv() {
     const url = API_BASE.replace(/\/$/, '') + '/packages/export/csv';
     const token = getToken();
@@ -865,6 +879,7 @@
     createClosurePeriod,
     deleteClosurePeriod,
     getMemberAccessQr,
+    verifyMemberAccess,
     getDeletionRequests,
     approveMemberDeletionRequest,
     rejectMemberDeletionRequest,
@@ -894,6 +909,7 @@
     endMemberPackage,
     getMemberPackageSessions,
     getSessions,
+    getNotifications,
     createSession,
     updateSession,
     deleteSession,

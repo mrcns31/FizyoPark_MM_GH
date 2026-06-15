@@ -41,6 +41,40 @@ function ensurePdfLibs() {
   return pdfLibsPromise;
 }
 
+var pdfTurkishFontPromise = null;
+
+function arrayBufferToBase64(buffer) {
+  var binary = "";
+  var bytes = new Uint8Array(buffer);
+  for (var i = 0; i < bytes.byteLength; i++) binary += String.fromCharCode(bytes[i]);
+  return window.btoa(binary);
+}
+
+function loadTurkishPdfFontBase64() {
+  if (!pdfTurkishFontPromise) {
+    pdfTurkishFontPromise = fetch("fonts/Roboto-Regular.ttf")
+      .then(function (res) {
+        if (!res.ok) throw new Error("font fetch failed");
+        return res.arrayBuffer();
+      })
+      .then(arrayBufferToBase64);
+  }
+  return pdfTurkishFontPromise;
+}
+
+/** jsPDF'in varsayılan fontları (Helvetica vb.) ş/ğ/ı/İ gibi Türkçe karakterleri desteklemez. */
+async function applyTurkishPdfFont(doc) {
+  try {
+    var base64 = await loadTurkishPdfFontBase64();
+    doc.addFileToVFS("Roboto-Regular.ttf", base64);
+    doc.addFont("Roboto-Regular.ttf", "Roboto", "normal");
+    doc.setFont("Roboto");
+    return "Roboto";
+  } catch (_) {
+    return undefined;
+  }
+}
+
 const DEFAULT_STATE = {
   settings: {
     slotMinutes: 60,
@@ -764,6 +798,8 @@ let ui = {
   memberPortal: null, // üye girişi: dashboard verisi
   packageRequests: [], // admin: bekleyen paket talepleri
   deletionRequests: [], // admin: bekleyen üyelik iptal talepleri
+  notifications: [], // admin: iptal/giriş bildirimleri
+  notificationsTypeFilter: "all", // all | cancel | checkin
   sidebarPackageRequestsOpen: false,
   sidebarCancellationRequestsOpen: false,
   adminHubSection: "working-hours",
@@ -772,7 +808,7 @@ let ui = {
   memberTab: "home", // home | packages | profile
   memberSessionsView: "upcoming", // upcoming | past
   memberPortalSessionsModalSuspended: false,
-  adminMainView: "calendar", // calendar | members-list (admin ana alan)
+  adminMainView: "calendar", // calendar | members-list | expired-memberships | former-members | entry-list | notifications (admin ana alan)
   sidebarOpen: false, // mobil drawer (MF-10)
   sidebarDesktopExpanded: false, // geniş ekran rail (< / >)
 };
@@ -837,6 +873,8 @@ function refreshAdminListPanels() {
     renderFormerMembersTable();
   } else if (view === "entry-list") {
     renderEntryListFromCache();
+  } else if (view === "notifications") {
+    renderNotificationsTable();
   }
 }
 
@@ -847,9 +885,10 @@ function updateTopbarFilterPlaceholder() {
       ui.adminMainView === "expired-memberships" ||
       ui.adminMainView === "former-members");
   var onEntryList = isAdminMainViewActive("entry-list");
+  var onNotifications = isAdminMainViewActive("notifications");
   var placeholder = onMemberList
     ? "Ad, soyad, telefon veya üye no ara..."
-    : onEntryList
+    : onEntryList || onNotifications
       ? "Ad, soyad veya personel ara..."
       : "Üye veya personel ara...";
   if (els.topbarMobileFilterInput) els.topbarMobileFilterInput.placeholder = placeholder;
@@ -857,7 +896,7 @@ function updateTopbarFilterPlaceholder() {
     els.plannerFilterInput.placeholder = placeholder;
     els.plannerFilterInput.title = onMemberList
       ? "Ad, soyad, telefon veya üye no ile filtrele"
-      : onEntryList
+      : onEntryList || onNotifications
         ? "Ad, soyad veya personel adı ile filtrele"
         : "Üye veya personel adı ile filtrele";
   }
@@ -1131,6 +1170,10 @@ function cacheEls() {
     "packageInconsistencyCancelBtn",
     "packageSessionsModal",
     "packageSessionsTitle",
+    "packageSessionsExportWrap",
+    "packageSessionsExportBtn",
+    "packageSessionsExportMenu",
+    "packageSessionsShareBtn",
     "packageSessionsSubtitle",
     "packageSessionsPackagePicker",
     "packageSessionsPackagePickerList",
@@ -1260,6 +1303,7 @@ function cacheEls() {
     "sidebarCancellationRequestsPanel",
     "openPackageRequestsBtn",
     "openCancellationRequestsBtn",
+    "openNotificationsBtn",
     "closePackageRequestsBtn",
     "closeCancellationRequestsBtn",
     "packageRequestsList",
@@ -1268,6 +1312,12 @@ function cacheEls() {
     "cancellationRequestsList",
     "cancellationRequestsEmpty",
     "cancellationRequestsNavBadge",
+    "notificationsNavBadge",
+    "adminNotificationsView",
+    "notificationsContent",
+    "notificationsFilterAll",
+    "notificationsFilterCancel",
+    "notificationsFilterCheckin",
     "memberPackageRequestCta",
     "memberOpenPackageRequestBtn",
     "memberPackageRequestPending",
@@ -4485,6 +4535,67 @@ var sessionsSyncInFlight = null;
 var SESSION_SYNC_INTERVAL_MS = 60000;
 var STALE_SESSION_MSG = "Bu seans artık geçerli değil (üye iptal etmiş veya silinmiş olabilir). Takvim güncellendi.";
 
+var notificationTimer = null;
+var notificationSince = 0;
+var NOTIFICATION_INTERVAL_MS = 20000;
+var NOTIFICATION_LIST_LIMIT = 50;
+var NOTIFICATION_SEEN_KEY = "lastSeenNotificationAt";
+
+function formatSessionDateTimeLabel(startTs) {
+  var d = new Date(Number(startTs));
+  return (
+    d.toLocaleDateString("tr-TR", { day: "2-digit", month: "2-digit" }) +
+    " " +
+    d.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" })
+  );
+}
+
+function showTopNotification(message) {
+  var container = document.getElementById("topNotificationContainer");
+  if (!container) {
+    container = document.createElement("div");
+    container.id = "topNotificationContainer";
+    container.className = "top-notification-container";
+    document.body.appendChild(container);
+  }
+  var toast = document.createElement("div");
+  toast.className = "top-notification";
+  toast.textContent = message;
+  container.appendChild(toast);
+  window.requestAnimationFrame(function () {
+    toast.classList.add("top-notification--visible");
+  });
+  setTimeout(function () {
+    toast.classList.remove("top-notification--visible");
+    setTimeout(function () {
+      toast.remove();
+    }, 300);
+  }, 6000);
+}
+
+function formatNotificationToast(row) {
+  var memberName = row.memberName || "Bir üye";
+  if (row.type === "checkin") {
+    return memberName + " Kapıdan Giriş Yaptı";
+  }
+  var when = formatSessionDateTimeLabel(row.startTs);
+  return memberName + " randevusunu iptal etti (" + when + ").";
+}
+
+async function pollNotifications() {
+  if (!window.API || !window.API.getNotifications) return;
+  if (isMemberUser()) return;
+  if (!notificationSince) notificationSince = Date.now();
+  try {
+    var rows = await window.API.getNotifications({ since: notificationSince });
+    (rows || []).forEach(function (row) {
+      showTopNotification(formatNotificationToast(row));
+      if (row.at > notificationSince) notificationSince = row.at;
+      if (isAdminUser()) addNotificationToList(row);
+    });
+  } catch (_) {}
+}
+
 function mergeSessionsIntoState(incoming) {
   if (!incoming || !incoming.length) return false;
   var map = new Map(state.sessions.map(function (s) { return [normId(s.id), s]; }));
@@ -4589,6 +4700,7 @@ function onSessionSyncVisibility() {
     return;
   }
   syncSessionsFromServer({ silent: true });
+  pollNotifications();
 }
 
 function startSessionAutoSync() {
@@ -4610,12 +4722,24 @@ function startSessionAutoSync() {
     }
     if (window.API.getSessions) syncSessionsFromServer({ silent: true });
   }, SESSION_SYNC_INTERVAL_MS);
+
+  if (!isMemberUser()) {
+    notificationSince = Date.now();
+    notificationTimer = setInterval(function () {
+      if (document.visibilityState !== "visible") return;
+      pollNotifications();
+    }, NOTIFICATION_INTERVAL_MS);
+  }
 }
 
 function stopSessionAutoSync() {
   if (sessionSyncTimer) {
     clearInterval(sessionSyncTimer);
     sessionSyncTimer = null;
+  }
+  if (notificationTimer) {
+    clearInterval(notificationTimer);
+    notificationTimer = null;
   }
 }
 
@@ -4723,6 +4847,28 @@ function applyMemberPortalState(loaded) {
   state.packages = [];
   state.memberPackages = [];
   if (isMemberUser()) renderMemberPortalPackageSummaries();
+  if (isMemberUser()) maybeShowCheckInAlert(ui.memberPortal);
+}
+
+function maybeShowCheckInAlert(portal) {
+  if (!portal || !portal.lastCheckIn || !portal.profile) return;
+  var lastCheckIn = portal.lastCheckIn;
+  var memberId = portal.profile.id;
+  var storageKey = "memberCheckInAlertAt_" + memberId;
+  var shownAt = null;
+  try {
+    shownAt = localStorage.getItem(storageKey);
+  } catch (_) {}
+  if (String(shownAt) === String(lastCheckIn.at)) return;
+  try {
+    localStorage.setItem(storageKey, String(lastCheckIn.at));
+  } catch (_) {}
+  var name = portal.profile.fullName || "";
+  var title = name ? "MERHABA " + name : "Giriş başarılı";
+  var message = lastCheckIn.ok
+    ? "Seansınıza giriş kaydedildi"
+    : "Bugün için planlı bir seansınız yok";
+  showAppAlert(message, { title: title, compactDialog: true });
 }
 
 function renderMemberPackagesInto(pastEl, notifEl) {
@@ -5025,6 +5171,7 @@ async function refreshAdminPackageRequests(markSeen) {
 function updateAdminRequestsNavBadges() {
   updatePackageRequestsNavBadge();
   updateCancellationRequestsNavBadge();
+  updateNotificationsNavBadge();
   updateAdminMobileMenuBadge();
 }
 
@@ -5197,6 +5344,157 @@ function renderCancellationRequestsSidebar() {
       if (SIDEBAR_DRAWER_MQ.matches) setSidebarOpen(false);
       openMemberCard(memberId);
     });
+  });
+}
+
+function getLastSeenNotificationAt() {
+  try {
+    return Number(localStorage.getItem(NOTIFICATION_SEEN_KEY)) || 0;
+  } catch (_) {
+    return 0;
+  }
+}
+
+function setLastSeenNotificationAt(ts) {
+  try {
+    localStorage.setItem(NOTIFICATION_SEEN_KEY, String(ts));
+  } catch (_) {}
+}
+
+async function loadAdminNotificationsList() {
+  if (!isAdminUser() || !window.API || !window.API.getNotifications) return;
+  try {
+    var rows = await window.API.getNotifications({ limit: NOTIFICATION_LIST_LIMIT });
+    ui.notifications = Array.isArray(rows) ? rows : [];
+    if (isAdminMainViewActive("notifications")) renderNotificationsTable();
+    updateNotificationsNavBadge();
+  } catch (e) {
+    console.warn("Bildirimler yüklenemedi:", e);
+  }
+}
+
+function addNotificationToList(row) {
+  ui.notifications = ui.notifications || [];
+  ui.notifications = ui.notifications.filter(function (n) {
+    return !(n.id === row.id && n.type === row.type);
+  });
+  ui.notifications.unshift(row);
+  if (ui.notifications.length > NOTIFICATION_LIST_LIMIT) {
+    ui.notifications = ui.notifications.slice(0, NOTIFICATION_LIST_LIMIT);
+  }
+  if (isAdminMainViewActive("notifications")) renderNotificationsTable();
+  updateNotificationsNavBadge();
+}
+
+function updateNotificationsNavBadge() {
+  if (!els.notificationsNavBadge) return;
+  var lastSeen = getLastSeenNotificationAt();
+  var unread = (ui.notifications || []).filter(function (n) { return n.at > lastSeen; }).length;
+  if (unread > 0) {
+    els.notificationsNavBadge.textContent = String(unread);
+    els.notificationsNavBadge.classList.remove("hidden");
+  } else {
+    els.notificationsNavBadge.textContent = "";
+    els.notificationsNavBadge.classList.add("hidden");
+  }
+}
+
+function formatNotificationTypeLabel(type) {
+  return type === "checkin" ? "Kapıdan Giriş" : "İptal";
+}
+
+var notificationsPage = 1;
+var notificationsPageSize = 20;
+
+function setNotificationsTypeFilter(type) {
+  ui.notificationsTypeFilter = type;
+  notificationsPage = 1;
+  if (els.notificationsFilterAll) {
+    els.notificationsFilterAll.classList.toggle("is-active", type === "all");
+    els.notificationsFilterAll.setAttribute("aria-selected", type === "all" ? "true" : "false");
+  }
+  if (els.notificationsFilterCancel) {
+    els.notificationsFilterCancel.classList.toggle("is-active", type === "cancel");
+    els.notificationsFilterCancel.setAttribute("aria-selected", type === "cancel" ? "true" : "false");
+  }
+  if (els.notificationsFilterCheckin) {
+    els.notificationsFilterCheckin.classList.toggle("is-active", type === "checkin");
+    els.notificationsFilterCheckin.setAttribute("aria-selected", type === "checkin" ? "true" : "false");
+  }
+  renderNotificationsTable();
+}
+
+function renderNotificationsTable() {
+  var content = els.notificationsContent;
+  if (!content) return;
+  var filterText = getAdminListFilterText();
+  var typeFilter = ui.notificationsTypeFilter || "all";
+  var list = (ui.notifications || []).filter(function (n) {
+    if (typeFilter !== "all" && n.type !== typeFilter) return false;
+    if (filterText) {
+      var haystack = ((n.memberName || "") + " " + (n.staffName || "")).toLowerCase();
+      if (!haystack.includes(filterText.toLowerCase())) return false;
+    }
+    return true;
+  });
+
+  if (!list.length) {
+    content.innerHTML = '<div class="admin-panel-empty admin-panel-empty--compact"><p>' +
+      ((ui.notifications || []).length === 0 ? "Henüz bildirim yok." : "Filtreye uyan bildirim yok.") +
+      "</p></div>";
+    return;
+  }
+
+  var lastSeen = getLastSeenNotificationAt();
+  var wrap = document.createElement("div");
+  wrap.className = "expired-memberships-table-wrap notifications-table-wrap";
+  var table = document.createElement("table");
+  table.className = "expired-memberships-table notifications-table";
+  table.innerHTML =
+    "<thead><tr><th>Tarih/Saat</th><th>Tür</th><th>Üye</th><th>Personel</th></tr></thead><tbody></tbody>";
+  var tbody = table.querySelector("tbody");
+
+  var paginationEl = document.createElement("div");
+  paginationEl.className = "list-pagination";
+  notificationsPage = renderPaginationBar(paginationEl, {
+    page: notificationsPage,
+    pageSize: notificationsPageSize,
+    total: list.length,
+    onPageChange: function (p) { notificationsPage = p; renderNotificationsTable(); },
+    onPageSizeChange: function (size) { notificationsPageSize = size; notificationsPage = 1; renderNotificationsTable(); },
+  });
+  var pageItems = list.slice(
+    (notificationsPage - 1) * notificationsPageSize,
+    notificationsPage * notificationsPageSize
+  );
+
+  pageItems.forEach(function (n) {
+    var row = document.createElement("tr");
+    row.className = "notifications-table__row";
+    if (n.at > lastSeen) row.classList.add("notifications-table__row--unread");
+    var when = new Date(n.at).toLocaleString("tr-TR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+    row.innerHTML =
+      "<td>" + escapeHtml(when) + "</td>" +
+      "<td>" + escapeHtml(formatNotificationTypeLabel(n.type)) + "</td>" +
+      "<td>" + escapeHtml(n.memberName || "—") + "</td>" +
+      "<td>" + escapeHtml(n.staffName || "—") + "</td>";
+    tbody.appendChild(row);
+  });
+
+  content.innerHTML = "";
+  wrap.appendChild(table);
+  content.appendChild(wrap);
+  content.appendChild(paginationEl);
+}
+
+function openNotificationsView() {
+  showAdminMainView("notifications");
+  notificationsPage = 1;
+  loadAdminNotificationsList().then(function () {
+    var maxAt = (ui.notifications || []).reduce(function (acc, n) { return Math.max(acc, n.at); }, 0);
+    if (maxAt > 0) setLastSeenNotificationAt(maxAt);
+    updateNotificationsNavBadge();
+    renderNotificationsTable();
   });
 }
 
@@ -5547,6 +5845,9 @@ function renderMemberHome() {
 var memberQrRefreshTimer = null;
 var memberQrCountdownTimer = null;
 var memberQrExpiresAt = 0;
+var memberQrCheckInPollTimer = null;
+var memberQrCheckInBaseline = 0;
+var MEMBER_QR_CHECKIN_POLL_MS = 2000;
 
 function stopMemberQrTimers() {
   if (memberQrRefreshTimer) {
@@ -5557,6 +5858,25 @@ function stopMemberQrTimers() {
     clearInterval(memberQrCountdownTimer);
     memberQrCountdownTimer = null;
   }
+}
+
+function stopMemberQrCheckInPoll() {
+  if (memberQrCheckInPollTimer) {
+    clearInterval(memberQrCheckInPollTimer);
+    memberQrCheckInPollTimer = null;
+  }
+}
+
+async function pollMemberQrCheckIn() {
+  if (!window.API || !window.API.getMemberDashboard) return;
+  try {
+    var dashboard = await window.API.getMemberDashboard();
+    var lastCheckIn = dashboard && dashboard.lastCheckIn;
+    if (lastCheckIn && lastCheckIn.at > memberQrCheckInBaseline) {
+      closeMemberQrModal();
+      await refreshMemberPortal();
+    }
+  } catch (_) {}
 }
 
 function updateMemberQrCountdownLabel() {
@@ -5595,11 +5915,16 @@ async function refreshMemberQrCode() {
 function openMemberQrModal() {
   if (!els.memberQrModal) return;
   els.memberQrModal.classList.remove("hidden");
+  var existingCheckIn = ui.memberPortal && ui.memberPortal.lastCheckIn;
+  memberQrCheckInBaseline = existingCheckIn ? existingCheckIn.at : 0;
   refreshMemberQrCode();
+  stopMemberQrCheckInPoll();
+  memberQrCheckInPollTimer = setInterval(pollMemberQrCheckIn, MEMBER_QR_CHECKIN_POLL_MS);
 }
 
 function closeMemberQrModal() {
   stopMemberQrTimers();
+  stopMemberQrCheckInPoll();
   if (els.memberQrModal) els.memberQrModal.classList.add("hidden");
 }
 
@@ -5991,6 +6316,7 @@ function updateAdminMainViewUI() {
     if (els.adminExpiredMembershipsView) els.adminExpiredMembershipsView.classList.add("hidden");
     if (els.adminFormerMembersView) els.adminFormerMembersView.classList.add("hidden");
     if (els.adminEntryListView) els.adminEntryListView.classList.add("hidden");
+    if (els.adminNotificationsView) els.adminNotificationsView.classList.add("hidden");
     if (els.memberPlanner) els.memberPlanner.classList.remove("hidden");
     return;
   }
@@ -6001,11 +6327,13 @@ function updateAdminMainViewUI() {
   if (els.adminExpiredMembershipsView) els.adminExpiredMembershipsView.classList.toggle("hidden", view !== "expired-memberships");
   if (els.adminFormerMembersView) els.adminFormerMembersView.classList.toggle("hidden", view !== "former-members");
   if (els.adminEntryListView) els.adminEntryListView.classList.toggle("hidden", view !== "entry-list");
+  if (els.adminNotificationsView) els.adminNotificationsView.classList.toggle("hidden", view !== "notifications");
   if (els.openCalendarBtn) els.openCalendarBtn.classList.toggle("sidebar-nav__btn--active", isCalendar);
   if (els.openListMembersBtn) els.openListMembersBtn.classList.toggle("sidebar-nav__btn--active", view === "members-list");
   if (els.openExpiredMembershipsBtn) els.openExpiredMembershipsBtn.classList.toggle("sidebar-nav__btn--active", view === "expired-memberships");
   if (els.openFormerMembersBtn) els.openFormerMembersBtn.classList.toggle("sidebar-nav__btn--active", view === "former-members");
   if (els.openEntryListBtn) els.openEntryListBtn.classList.toggle("sidebar-nav__btn--active", view === "entry-list");
+  if (els.openNotificationsBtn) els.openNotificationsBtn.classList.toggle("sidebar-nav__btn--active", view === "notifications");
   updateTopbarFilterPlaceholder();
   refreshAdminListPanels();
 }
@@ -8456,6 +8784,14 @@ function openPackageSessionsModal(mp, memberId, memberOverride, options) {
   packageSessionsCurrent.memberName = m ? (m.memberNo || packageSessionsCurrent.memberDisplayName) : "Üye";
   updatePackageSessionsModalHeader(mp);
   loadPackageSessionsForModal(mp);
+  if (els.packageSessionsExportWrap) {
+    els.packageSessionsExportWrap.classList.toggle("hidden", !(isAdminUser() && !isMobilePlanner()));
+    if (els.packageSessionsExportMenu) els.packageSessionsExportMenu.classList.add("hidden");
+    if (els.packageSessionsExportBtn) els.packageSessionsExportBtn.setAttribute("aria-expanded", "false");
+  }
+  if (els.packageSessionsShareBtn) {
+    els.packageSessionsShareBtn.classList.toggle("hidden", !(isAdminUser() && isMobilePlanner()));
+  }
   els.packageSessionsModal.classList.remove("hidden");
 }
 
@@ -8507,59 +8843,147 @@ function renderPackageSessionsCancelledSection(cancelled) {
 
 async function exportPackageSessionsExcel() {
   if (!packageSessionsCurrent || !packageSessionsCurrent.sessions.length) return;
-  const headers = ["Tarih", "Personel", "Ders Saati", "Giriş Saati", "Onay"];
-  const rows = packageSessionsToExportRows(packageSessionsCurrent.sessions);
+  const mp = packageSessionsCurrent.mp;
+  const title = mp.packageName || mp.package_name || "Paket";
+  const metaRows = [
+    ["Üye Adı :", packageSessionsCurrent.memberDisplayName, "", "Paket Adı :", title],
+    ["Başlangıç Tarihi :", fmtMemberPackagePeriodDate(mp.startDate)],
+    ["Bitiş Tarihi :", fmtMemberPackagePeriodDate(mp.endDate)],
+    [],
+  ];
+  const headers = ["Sıra No", "Tarih", "Personel", "Ders Saati", "Giriş Saati", "Onay"];
+  const active = (packageSessionsCurrent.sessions || []).filter((s) => !(s.isCancelled || s.is_cancelled));
+  const rows = packageSessionsToExportRows(active).map((r, i) => [i + 1, ...r]);
   try {
     await ensureXlsxLib();
   } catch (_) {
     /* CSV yedeğine düş */
   }
+  const base = "paket-seanslari-" + title.replace(/\s+/g, "-") + "-" + (mp.startDate || "").slice(0, 10);
   if (typeof XLSX !== "undefined") {
     const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    const ws = XLSX.utils.aoa_to_sheet([...metaRows, headers, ...rows]);
     XLSX.utils.book_append_sheet(wb, ws, "Paket Seansları");
-    const base = "paket-seanslari-" + (packageSessionsCurrent.mp.packageName || "paket").replace(/\s+/g, "-") + "-" + (packageSessionsCurrent.mp.startDate || "").slice(0, 10);
     XLSX.writeFile(wb, base + ".xlsx");
   } else {
-    const csv = [headers, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(";")).join("\n");
+    const csv = [...metaRows, headers, ...rows].map((r) => r.map((c) => `"${String(c).replace(/"/g, '""')}"`).join(";")).join("\n");
     const BOM = "\uFEFF";
     const blob = new Blob([BOM + csv], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = "paket-seanslari-" + (packageSessionsCurrent.mp.packageName || "paket").replace(/\s+/g, "-") + "-" + (packageSessionsCurrent.mp.startDate || "").slice(0, 10) + ".csv";
+    a.download = base + ".csv";
     a.click();
     URL.revokeObjectURL(a.href);
   }
 }
 
-async function exportPackageSessionsPdf() {
-  if (!packageSessionsCurrent || !packageSessionsCurrent.sessions.length) return;
+async function buildPackageSessionsPdfDoc() {
+  if (!packageSessionsCurrent || !packageSessionsCurrent.sessions.length) return null;
   try {
     await ensurePdfLibs();
   } catch (_) {
     await showAppAlert("PDF oluşturmak için jsPDF yüklenemedi. İnternet bağlantınızı kontrol edin.");
-    return;
+    return null;
   }
   if (typeof window.jspdf === "undefined" || !window.jspdf.jsPDF) {
     await showAppAlert("PDF oluşturmak için jsPDF yüklenemedi. İnternet bağlantınızı kontrol edin.");
-    return;
+    return null;
   }
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
-  const title = (packageSessionsCurrent.mp.packageName || "Paket") + " – Seanslar";
-  doc.setFontSize(14);
-  doc.text(title, 14, 16);
-  doc.setFontSize(10);
-  doc.text(packageSessionsCurrent.memberName + " • " + (packageSessionsCurrent.mp.startDate || "") + " – " + (packageSessionsCurrent.mp.endDate || ""), 14, 22);
-  const tableData = packageSessionsToExportRows(packageSessionsCurrent.sessions);
+  const fontName = await applyTurkishPdfFont(doc);
+  const mp = packageSessionsCurrent.mp;
+  const title = mp.packageName || mp.package_name || "Paket";
+  doc.setFontSize(11);
+  doc.text("Üye Adı : " + packageSessionsCurrent.memberDisplayName + "  -  Paket Adı : " + title, 14, 16);
+  doc.text("Başlangıç Tarihi : " + fmtMemberPackagePeriodDate(mp.startDate), 14, 23);
+  doc.text("Bitiş Tarihi : " + fmtMemberPackagePeriodDate(mp.endDate), 14, 30);
+  const active = (packageSessionsCurrent.sessions || []).filter((s) => !(s.isCancelled || s.is_cancelled));
+  const tableData = packageSessionsToExportRows(active);
+  const fontStyles = fontName ? { font: fontName, fontStyle: "normal" } : {};
   doc.autoTable({
-    head: [["Tarih", "Personel", "Ders Saati", "Giriş Saati", "Onay"]],
-    body: tableData,
-    startY: 28,
-    headStyles: { fillColor: [66, 66, 66] },
-    styles: { fontSize: 9 },
+    head: [["Sıra No", "Tarih", "Personel", "Ders Saati", "Giriş Saati", "Onay"]],
+    body: tableData.map((r, i) => [i + 1, ...r]),
+    startY: 36,
+    headStyles: Object.assign({ fillColor: [66, 66, 66] }, fontStyles),
+    styles: Object.assign({ fontSize: 9 }, fontStyles),
   });
-  doc.save("paket-seanslari-" + (packageSessionsCurrent.mp.packageName || "paket").replace(/\s+/g, "-") + ".pdf");
+  return { doc, filename: "paket-seanslari-" + title.replace(/\s+/g, "-") + ".pdf" };
+}
+
+async function exportPackageSessionsPdf() {
+  const result = await buildPackageSessionsPdfDoc();
+  if (!result) return;
+  result.doc.save(result.filename);
+}
+
+async function sharePackageSessionsPdf() {
+  const result = await buildPackageSessionsPdfDoc();
+  if (!result) return;
+  const { doc, filename } = result;
+  const blob = doc.output("blob");
+  const file = new File([blob], filename, { type: "application/pdf" });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: filename });
+      return;
+    } catch (err) {
+      if (err && err.name === "AbortError") return;
+    }
+  }
+  doc.save(filename);
+}
+
+function printPackageSessionsList() {
+  if (!packageSessionsCurrent || !packageSessionsCurrent.sessions.length) return;
+  const mp = packageSessionsCurrent.mp;
+  const title = mp.packageName || mp.package_name || "Paket";
+  const active = (packageSessionsCurrent.sessions || []).filter((s) => !(s.isCancelled || s.is_cancelled));
+  const rows = packageSessionsToExportRows(active);
+  const headers = ["Sıra No", "Tarih", "Personel", "Ders Saati", "Giriş Saati", "Onay"];
+
+  const html = `
+    <!DOCTYPE html>
+    <html lang="tr">
+    <head>
+      <meta charset="UTF-8">
+      <title>${escapeHtml(title)} – Seanslar</title>
+      <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body { font-family: Arial, sans-serif; padding:20px; }
+        .meta-row { font-size:13px; color:#222; margin-bottom:4px; }
+        table { width:100%; border-collapse:collapse; margin-top:16px; }
+        th, td { border:1px solid #ddd; padding:8px; text-align:left; font-size:13px; }
+        th { background:#f5f5f5; font-weight:bold; }
+      </style>
+    </head>
+    <body>
+      <div class="meta-row">Üye Adı : ${escapeHtml(packageSessionsCurrent.memberDisplayName)}  -  Paket Adı : ${escapeHtml(title)}</div>
+      <div class="meta-row">Başlangıç Tarihi : ${escapeHtml(fmtMemberPackagePeriodDate(mp.startDate))}</div>
+      <div class="meta-row">Bitiş Tarihi : ${escapeHtml(fmtMemberPackagePeriodDate(mp.endDate))}</div>
+      <table>
+        <thead>
+          <tr>${headers.map((h) => `<th>${escapeHtml(h)}</th>`).join("")}</tr>
+        </thead>
+        <tbody>
+          ${rows.map((r, i) => `<tr><td>${i + 1}</td>${r.map((c) => `<td>${escapeHtml(String(c))}</td>`).join("")}</tr>`).join("")}
+        </tbody>
+      </table>
+    </body>
+    </html>
+  `;
+
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const printWindow = window.open(url, "_blank");
+  if (!printWindow) {
+    URL.revokeObjectURL(url);
+    return;
+  }
+  printWindow.addEventListener("load", function () {
+    printWindow.print();
+    URL.revokeObjectURL(url);
+  });
 }
 
 function openMemberPackageModal(memberId, memberPackageId, options) {
@@ -9971,9 +10395,10 @@ async function saveSessionFromModal() {
 
 async function deleteSessionFromModal() {
   if (!ui.editingSessionId) return;
+  const sessionId = ui.editingSessionId;
   if (!(await showAppConfirm("Seansı silmek istiyor musunuz?"))) return;
   const existingSession = state.sessions.find(function (x) {
-    return normId(x.id) === normId(ui.editingSessionId);
+    return normId(x.id) === normId(sessionId);
   });
   if (window.API && window.API.getToken()) {
     try {
@@ -9983,10 +10408,10 @@ async function deleteSessionFromModal() {
       );
       if (delModalPwd.cancelled) return;
       await window.API.deleteSession(
-        ui.editingSessionId,
+        sessionId,
         delModalPwd.adminPassword ? { adminPassword: delModalPwd.adminPassword } : undefined
       );
-      removeSessionFromState(ui.editingSessionId);
+      removeSessionFromState(sessionId);
     } catch (e) {
       console.error("Seans silinemedi:", e);
       if (e.status === 404) {
@@ -10006,7 +10431,7 @@ async function deleteSessionFromModal() {
       return;
     }
   } else {
-    state.sessions = state.sessions.filter((s) => s.id !== ui.editingSessionId);
+    state.sessions = state.sessions.filter((s) => s.id !== sessionId);
   }
   closeSessionModal();
   render();
@@ -11307,6 +11732,43 @@ function bindEvents() {
     closeTopbarActionsMenu();
   });
 
+  function closePackageSessionsExportMenu() {
+    if (els.packageSessionsExportMenu) els.packageSessionsExportMenu.classList.add("hidden");
+    if (els.packageSessionsExportBtn) els.packageSessionsExportBtn.setAttribute("aria-expanded", "false");
+  }
+  if (els.packageSessionsExportBtn) {
+    els.packageSessionsExportBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      if (!els.packageSessionsExportMenu) return;
+      var isHidden = els.packageSessionsExportMenu.classList.contains("hidden");
+      els.packageSessionsExportMenu.classList.toggle("hidden", !isHidden);
+      els.packageSessionsExportBtn.setAttribute("aria-expanded", isHidden ? "true" : "false");
+    });
+  }
+  if (els.packageSessionsShareBtn) {
+    els.packageSessionsShareBtn.addEventListener("click", function (e) {
+      e.stopPropagation();
+      sharePackageSessionsPdf();
+    });
+  }
+  if (els.packageSessionsExportMenu) {
+    els.packageSessionsExportMenu.addEventListener("click", function (e) {
+      var btn = e.target.closest("[data-package-export]");
+      if (!btn) return;
+      var action = btn.getAttribute("data-package-export");
+      closePackageSessionsExportMenu();
+      if (action === "excel") exportPackageSessionsExcel();
+      else if (action === "pdf") exportPackageSessionsPdf();
+      else if (action === "print") printPackageSessionsList();
+    });
+  }
+  document.addEventListener("click", function (e) {
+    if (!els.packageSessionsExportMenu || els.packageSessionsExportMenu.classList.contains("hidden")) return;
+    if (e.target === els.packageSessionsExportBtn || (els.packageSessionsExportBtn && els.packageSessionsExportBtn.contains(e.target))) return;
+    if (e.target === els.packageSessionsExportMenu || els.packageSessionsExportMenu.contains(e.target)) return;
+    closePackageSessionsExportMenu();
+  });
+
   els.addSessionBtn.addEventListener("click", () => openGroupSessionModal(null));
   if (els.openListMembersBtn) els.openListMembersBtn.addEventListener("click", openListMembersModal);
   if (els.openCalendarBtn) {
@@ -11325,6 +11787,10 @@ function bindEvents() {
   if (els.closeCancellationRequestsBtn) els.closeCancellationRequestsBtn.addEventListener("click", closeRequestsSubPanel);
   if (els.openPackageRequestsBtn) els.openPackageRequestsBtn.addEventListener("click", showPackageRequestsPanel);
   if (els.openCancellationRequestsBtn) els.openCancellationRequestsBtn.addEventListener("click", showCancellationRequestsPanel);
+  if (els.openNotificationsBtn) els.openNotificationsBtn.addEventListener("click", openNotificationsView);
+  if (els.notificationsFilterAll) els.notificationsFilterAll.addEventListener("click", function () { setNotificationsTypeFilter("all"); });
+  if (els.notificationsFilterCancel) els.notificationsFilterCancel.addEventListener("click", function () { setNotificationsTypeFilter("cancel"); });
+  if (els.notificationsFilterCheckin) els.notificationsFilterCheckin.addEventListener("click", function () { setNotificationsTypeFilter("checkin"); });
   if (els.memberOpenPackageRequestBtn) els.memberOpenPackageRequestBtn.addEventListener("click", openMemberPackageRequestModal);
   if (els.memberPackageRequestSubmitBtn) {
     els.memberPackageRequestSubmitBtn.addEventListener("click", submitMemberPackageRequestFromModal);
@@ -11381,7 +11847,7 @@ function bindEvents() {
       if (e.target.closest("#openPackageRequestsBtn, #openCancellationRequestsBtn, #closePackageRequestsBtn, #closeCancellationRequestsBtn")) {
         return;
       }
-      if (e.target.closest(".sidebar-nav__btn, #openAdminHubBtn, #addMemberBtn, #openCalendarBtn, #openListMembersBtn, #openExpiredMembershipsBtn, #openFormerMembersBtn, #openEntryListBtn")) {
+      if (e.target.closest(".sidebar-nav__btn, #openAdminHubBtn, #addMemberBtn, #openCalendarBtn, #openListMembersBtn, #openExpiredMembershipsBtn, #openFormerMembersBtn, #openEntryListBtn, #openNotificationsBtn")) {
         closeSidebar();
       }
     });
@@ -11991,6 +12457,7 @@ function render() {
   if (isAdminUser() && !isStaffUser()) {
     refreshAdminPackageRequests(false);
     refreshAdminDeletionRequests();
+    loadAdminNotificationsList();
   }
 
   if (getEffectiveDayDisplayMode() === "list") {

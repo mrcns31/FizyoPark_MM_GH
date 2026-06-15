@@ -13,6 +13,7 @@ import {
 import { isMemberPackageActive, localTodayDateStr } from '../utils/memberPackageStatus.js';
 import { createMemberAccessToken, verifyMemberAccessToken } from '../utils/memberAccessQr.js';
 import { logWalkInQrAccess } from '../utils/facilityAccess.js';
+import { resolveLocalDateRangeMs } from '../utils/staffWorkingHours.js';
 import { getInstitutionWhatsApp } from '../utils/appSettings.js';
 import QRCode from 'qrcode';
 
@@ -35,18 +36,18 @@ router.post('/verify-access', async (req, res) => {
       console.warn('verify-access: checked_in_at sütunu yok; migration_sessions_check_in.sql çalıştırın');
     }
 
-    if (checkIn.checkedIn) {
-      let memberName = null;
-      let memberUserId = null;
-      try {
-        const memberRow = await db.query(
-          'SELECT name, user_id FROM members WHERE id = $1',
-          [result.memberId]
-        );
-        memberName = memberRow.rows[0]?.name || null;
-        memberUserId = memberRow.rows[0]?.user_id || null;
-      } catch (_) {}
+    let memberName = null;
+    let memberUserId = null;
+    try {
+      const memberRow = await db.query(
+        'SELECT name, user_id FROM members WHERE id = $1',
+        [result.memberId]
+      );
+      memberName = memberRow.rows[0]?.name || null;
+      memberUserId = memberRow.rows[0]?.user_id || null;
+    } catch (_) {}
 
+    if (checkIn.checkedIn) {
       await activityLog(req, {
         action: 'session.check_in_qr',
         entityType: 'session',
@@ -68,6 +69,7 @@ router.post('/verify-access', async (req, res) => {
     res.json({
       valid: true,
       memberId: result.memberId,
+      memberName,
       checkIn: checkIn.checkedIn
         ? { ok: true, sessionId: checkIn.sessionId, startTs: checkIn.startTs }
         : { ok: false, reason: checkIn.reason || 'no_session' },
@@ -139,6 +141,40 @@ router.get('/dashboard', requireMember, async (req, res) => {
 
     const staffMap = await loadStaffMap();
     const todayStr = localTodayDateStr();
+
+    let lastCheckIn = null;
+    try {
+      const { start, end } = resolveLocalDateRangeMs({ dateStr: todayStr });
+      const sessionCheckRes = await db.query(
+        `SELECT EXTRACT(EPOCH FROM checked_in_at) * 1000 AS checked_in_ts
+         FROM sessions
+         WHERE member_id = $1 AND check_in_method = 'qr' AND checked_in_at IS NOT NULL
+           AND checked_in_at >= to_timestamp($2 / 1000.0) AND checked_in_at <= to_timestamp($3 / 1000.0)
+         ORDER BY checked_in_at DESC LIMIT 1`,
+        [memberId, start, end]
+      );
+      if (sessionCheckRes.rows.length > 0) {
+        lastCheckIn = { at: Number(sessionCheckRes.rows[0].checked_in_ts), ok: true };
+      }
+
+      const walkInRes = await db.query(
+        `SELECT EXTRACT(EPOCH FROM accessed_at) * 1000 AS accessed_ts
+         FROM facility_access_logs
+         WHERE member_id = $1 AND source = 'qr'
+           AND accessed_at >= to_timestamp($2 / 1000.0) AND accessed_at <= to_timestamp($3 / 1000.0)
+         ORDER BY accessed_at DESC LIMIT 1`,
+        [memberId, start, end]
+      );
+      if (walkInRes.rows.length > 0) {
+        const walkInAt = Number(walkInRes.rows[0].accessed_ts);
+        if (!lastCheckIn || walkInAt > lastCheckIn.at) {
+          lastCheckIn = { at: walkInAt, ok: false };
+        }
+      }
+    } catch (checkInErr) {
+      if (checkInErr.code !== '42703' && checkInErr.code !== '42P01') throw checkInErr;
+    }
+
     const activeRows = packagesRes.rows.filter((r) => isMemberPackageActive(r, todayStr));
     const pastRows = packagesRes.rows.filter((r) => !isMemberPackageActive(r, todayStr));
 
@@ -237,6 +273,7 @@ router.get('/dashboard', requireMember, async (req, res) => {
       activePackage,
       pastPackages,
       notifications,
+      lastCheckIn,
       contactWhatsApp: await getInstitutionWhatsApp(),
       pendingPackageRequest,
       catalogPackages,
