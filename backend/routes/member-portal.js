@@ -12,6 +12,7 @@ import {
 } from '../utils/memberPackageDto.js';
 import { isMemberPackageActive, localTodayDateStr } from '../utils/memberPackageStatus.js';
 import { createMemberAccessToken, verifyMemberAccessToken } from '../utils/memberAccessQr.js';
+import { normalizePhoneFlexible } from '../utils/phone.js';
 import { logWalkInQrAccess } from '../utils/facilityAccess.js';
 import { resolveLocalDateRangeMs } from '../utils/staffWorkingHours.js';
 import { getInstitutionWhatsApp } from '../utils/appSettings.js';
@@ -76,6 +77,66 @@ router.post('/verify-access', async (req, res) => {
     });
   } catch (error) {
     console.error('Verify access error:', error);
+    res.status(500).json({ error: 'Doğrulama hatası' });
+  }
+});
+
+// Telefon numarasıyla kapı erişimi (auth gerektirmez — kiosk kullanacak)
+router.post('/verify-phone-access', async (req, res) => {
+  try {
+    const { phone } = req.body || {};
+    const normalized = normalizePhoneFlexible(phone);
+    if (!normalized) {
+      return res.status(401).json({ valid: false, reason: 'format' });
+    }
+
+    const memberRow = await db.query(
+      'SELECT id, name, user_id FROM members WHERE phone = $1 AND deleted_at IS NULL',
+      [normalized]
+    );
+    if (!memberRow.rows.length) {
+      return res.status(401).json({ valid: false, reason: 'not_found' });
+    }
+
+    const { id: memberId, name: memberName, user_id: memberUserId } = memberRow.rows[0];
+
+    let checkIn = { checkedIn: false, reason: 'no_session' };
+    try {
+      checkIn = await checkInSessionForMember(db, memberId);
+    } catch (checkInErr) {
+      if (checkInErr.code !== '42703') throw checkInErr;
+      console.warn('verify-phone-access: checked_in_at sütunu yok; migration_sessions_check_in.sql çalıştırın');
+    }
+
+    if (checkIn.checkedIn) {
+      await activityLog(req, {
+        action: 'session.check_in_qr',
+        entityType: 'session',
+        entityId: checkIn.sessionId,
+        ...(memberUserId
+          ? { actorId: memberUserId, actorType: 'user', actorName: memberName || undefined }
+          : { actorName: memberName ? `Üye: ${memberName}` : `Üye#${memberId}` }),
+        details: {
+          memberId,
+          memberName: memberName || undefined,
+          startTs: checkIn.startTs,
+          checkInMethod: 'phone',
+        },
+      }).catch(() => {});
+    } else {
+      await logWalkInQrAccess(db, memberId, 'phone');
+    }
+
+    res.json({
+      valid: true,
+      memberId,
+      memberName,
+      checkIn: checkIn.checkedIn
+        ? { ok: true, sessionId: checkIn.sessionId, startTs: checkIn.startTs }
+        : { ok: false, reason: checkIn.reason || 'no_session' },
+    });
+  } catch (error) {
+    console.error('Verify phone access error:', error);
     res.status(500).json({ error: 'Doğrulama hatası' });
   }
 });
