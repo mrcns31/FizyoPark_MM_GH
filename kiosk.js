@@ -20,8 +20,7 @@
   var MAX_PHONE_DIGITS = 11;
 
   var resetTimer = null;
-  var busy = false;      // genel "boşta değil" bayrağı — telefon butonunu gizler
-  var scanning = false;  // API çağrısı sürüyor — yeni QR okumasını engeller
+  var busy = false;
 
   var INVALID_REASON_MESSAGES = {
     expired: 'QR kodunun süresi doldu. Üye portalından kodu yenileyip tekrar deneyin.',
@@ -31,6 +30,7 @@
     invalid_sig: 'QR kodu geçersiz. Üye portalından yeni bir kod oluşturun.',
     member_mismatch: 'QR kodu geçersiz. Üye portalından yeni bir kod oluşturun.',
     not_found: 'Bu telefon numarasına kayıtlı üye bulunamadı.',
+    card_not_found: 'Bu karta kayıtlı üye bulunamadı.',
   };
 
   function updatePhoneDisplay() {
@@ -88,7 +88,6 @@
 
   function setBusy() {
     busy = true;
-    scanning = true;
     if (kioskPhoneBtn) kioskPhoneBtn.style.display = 'none';
     iconEl.className = 'kiosk__icon';
     iconEl.textContent = '⏳';
@@ -124,7 +123,6 @@
 
   function scheduleReset() {
     busy = true;
-    scanning = false;  // API bitti, yeni QR okutmaya izin ver
     if (resetTimer) clearTimeout(resetTimer);
     resetTimer = setTimeout(setIdle, RESET_DELAY_MS);
   }
@@ -168,15 +166,18 @@
   }
 
   async function handleScan(raw) {
+    var value = (raw || '').trim();
+    if (!value) { setFailure(INVALID_REASON_MESSAGES.empty || 'Lütfen tekrar deneyin'); return; }
+
     var token = extractToken(raw);
-    if (!token) {
-      scheduleReset();
-      focusInput();
-      return;
-    }
+    // JSON {"t":"..."} formatından çözümlendiyse QR, aksi halde kart numarası
+    var isQrToken = token !== value;
+
     setBusy();
     try {
-      var result = await window.API.verifyMemberAccess(token);
+      var result = isQrToken
+        ? await window.API.verifyMemberAccess(token)
+        : await window.API.verifyMemberCardAccess(value);
       if (result && result.valid) {
         triggerDoor();
         setSuccess(result.memberName, result.checkIn);
@@ -222,13 +223,9 @@
   inputEl.addEventListener('keydown', function (ev) {
     if (ev.key !== 'Enter') return;
     ev.preventDefault();
-    if (scanning) {
+    if (busy) {
       inputEl.value = '';
       return;
-    }
-    if (resetTimer) {
-      clearTimeout(resetTimer);
-      resetTimer = null;
     }
     var raw = inputEl.value;
     inputEl.value = '';

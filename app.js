@@ -580,6 +580,7 @@ function fmtEntryListStatusLabelMobile(r) {
   const label = String(r.attendanceLabel || "").trim();
   if (label.startsWith("QR")) return label;
   if (label.startsWith("Telefon")) return label;
+  if (label.startsWith("Kart")) return label;
   if (label.startsWith("Yönetici")) return label;
   if (label === "Planlandı" || label === "Onaylanmadı" || label === "—") return label;
   const m = label.match(/^(.+?)\s*-\s*(Geldi|Gelmedi|Katılındı)$/);
@@ -589,6 +590,7 @@ function fmtEntryListStatusLabelMobile(r) {
   if (r.statusKind === "scheduled") return "Planlandı";
   if (r.statusKind === "pending") return "Onaylanmadı";
   if (r.statusKind === "phone") return label || "Telefon - Geldi";
+  if (r.statusKind === "card") return label || "Kart - Geldi";
   if (r.statusKind === "qr") return label || "QR - Geldi";
   if (r.statusKind === "no_show") {
     const staff = getStaffById(r.staffId);
@@ -2071,6 +2073,8 @@ function buildClientAttendanceLabel(s) {
   if (!s) return "";
   var method = s.checkInMethod;
   if (s.checkedInAt && method === "qr") return "QR - Geldi";
+  if (s.checkedInAt && method === "phone") return "Telefon - Geldi";
+  if (s.checkedInAt && method === "card") return "Kart - Geldi";
   if (s.checkedInAt && (method === "admin" || method === "manual_admin")) return "Yönetici - Geldi";
   if (s.checkedInAt && method === "manual") {
     return (s.confirmerStaffName || "Personel") + " - Geldi";
@@ -5660,9 +5664,11 @@ function memberSessionStatusLabel(s, options) {
       var method = s.checkInMethod || s.check_in_method || null;
       var checkedInText = method === "phone"
         ? "Telefon ile giriş yapıldı."
-        : method === "qr"
-          ? "QR ile giriş yapıldı."
-          : "Katılındı";
+        : method === "card"
+          ? "Kart ile giriş yapıldı."
+          : method === "qr"
+            ? "QR ile giriş yapıldı."
+            : "Katılındı";
       return { text: checkedInText, cls: "member-session-status--done" };
     }
     return { text: "Yapıldı", cls: "member-session-status--done" };
@@ -6049,6 +6055,14 @@ function renderEntryListStatusCell(r) {
       '<span class="entry-status entry-status--ok">' +
       '<span class="entry-status__icon" aria-hidden="true">✓</span> ' +
       escapeHtml(statusText || "Telefon - Geldi") +
+      "</span>"
+    );
+  }
+  if (r.statusKind === "card") {
+    return (
+      '<span class="entry-status entry-status--ok">' +
+      '<span class="entry-status__icon" aria-hidden="true">✓</span> ' +
+      escapeHtml(statusText || "Kart - Geldi") +
       "</span>"
     );
   }

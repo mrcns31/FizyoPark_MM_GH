@@ -47,6 +47,7 @@ export function buildAttendanceLabel(row, now = Date.now()) {
   const confirmerRole = row.confirmer_role ?? row.confirmerRole ?? null;
 
   if (checkedIn && method === 'phone') return 'Telefon - Geldi';
+  if (checkedIn && method === 'card') return 'Kart - Geldi';
   if (checkedIn && method === 'qr') return 'QR - Geldi';
   if (checkedIn && isAdminCheckInMethod(method)) return 'Yönetici - Geldi';
   if (checkedIn && method === 'manual') {
@@ -83,6 +84,9 @@ export function buildPackageSessionApprovalInfo(row, now = Date.now()) {
 
   if (checkedInAt && method === 'phone') {
     return { label: 'Telefon - Geldi', kind: 'phone', checkInAt: checkedInAt };
+  }
+  if (checkedInAt && method === 'card') {
+    return { label: 'Kart - Geldi', kind: 'card', checkInAt: checkedInAt };
   }
   if (checkedInAt && method === 'qr') {
     return { label: 'QR', kind: 'qr', checkInAt: checkedInAt };
@@ -127,9 +131,11 @@ export function sessionRowToAttendanceDto(row, now = Date.now()) {
   let statusKind = 'pending';
   if (checkedIn && method === 'phone') {
     statusKind = 'phone';
+  } else if (checkedIn && method === 'card') {
+    statusKind = 'card';
   } else if (checkedIn && method === 'qr') {
     statusKind = 'qr';
-  } else if (outcome === 'no_show' || (confirmedAt && !checkedIn && method !== 'qr' && method !== 'phone')) {
+  } else if (outcome === 'no_show' || (confirmedAt && !checkedIn && method !== 'qr' && method !== 'phone' && method !== 'card')) {
     statusKind = 'no_show';
   } else if (checkedIn && isAdminCheckInMethod(method)) {
     statusKind = 'admin_present';
@@ -166,9 +172,9 @@ export function sessionRowToAttendanceDto(row, now = Date.now()) {
       outcome !== 'no_show' &&
       !confirmedAt &&
       startTs <= now,
-    canAdminApprove: !isConfirmed && method !== 'qr' && method !== 'phone' && startTs <= now,
-    canAdminEdit: isConfirmed && method !== 'qr' && method !== 'phone' && statusKind !== 'qr' && statusKind !== 'phone',
-    canAdminOverride: method !== 'qr' && method !== 'phone',
+    canAdminApprove: !isConfirmed && method !== 'qr' && method !== 'phone' && method !== 'card' && startTs <= now,
+    canAdminEdit: isConfirmed && method !== 'qr' && method !== 'phone' && method !== 'card' && statusKind !== 'qr' && statusKind !== 'phone' && statusKind !== 'card',
+    canAdminOverride: method !== 'qr' && method !== 'phone' && method !== 'card',
   };
 }
 

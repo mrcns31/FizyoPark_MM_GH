@@ -47,7 +47,7 @@ export async function listWalkInAccessForDate(db, opts = {}) {
       memberNo: row.member_no || '',
       accessedAt: Math.round(Number(row.accessed_ts)),
       source: row.source || 'qr',
-      label: row.source === 'phone' ? 'Telefon' : 'QR',
+      label: row.source === 'phone' ? 'Telefon' : row.source === 'card' ? 'Kart' : 'QR',
     }));
   } catch (err) {
     if (err.code === '42P01') {

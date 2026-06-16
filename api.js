@@ -401,6 +401,13 @@
     });
   }
 
+  async function verifyMemberCardAccess(card) {
+    return apiFetch('/member-portal/verify-card-access', {
+      method: 'POST',
+      body: JSON.stringify({ card }),
+    });
+  }
+
   async function getDeletionRequests() {
     var rows = await apiFetch('/members/deletion-requests');
     return (rows || []).map(function (row) {
@@ -888,6 +895,7 @@
     getMemberAccessQr,
     verifyMemberAccess,
     verifyMemberPhoneAccess,
+    verifyMemberCardAccess,
     getDeletionRequests,
     approveMemberDeletionRequest,
     rejectMemberDeletionRequest,

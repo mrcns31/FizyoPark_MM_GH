@@ -81,6 +81,66 @@ router.post('/verify-access', async (req, res) => {
   }
 });
 
+// RFID kart numarasıyla kapı erişimi (auth gerektirmez — kiosk kullanacak)
+router.post('/verify-card-access', async (req, res) => {
+  try {
+    const { card } = req.body || {};
+    const normalized = card ? String(card).trim() : null;
+    if (!normalized) {
+      return res.status(401).json({ valid: false, reason: 'format' });
+    }
+
+    const memberRow = await db.query(
+      'SELECT id, name, user_id FROM members WHERE card_no = $1 AND deleted_at IS NULL',
+      [normalized]
+    );
+    if (!memberRow.rows.length) {
+      return res.status(401).json({ valid: false, reason: 'card_not_found' });
+    }
+
+    const { id: memberId, name: memberName, user_id: memberUserId } = memberRow.rows[0];
+
+    let checkIn = { checkedIn: false, reason: 'no_session' };
+    try {
+      checkIn = await checkInSessionForMember(db, memberId, Date.now(), 'card');
+    } catch (checkInErr) {
+      if (checkInErr.code !== '42703') throw checkInErr;
+      console.warn('verify-card-access: checked_in_at sütunu yok; migration_sessions_check_in.sql çalıştırın');
+    }
+
+    if (checkIn.checkedIn) {
+      await activityLog(req, {
+        action: 'session.check_in_qr',
+        entityType: 'session',
+        entityId: checkIn.sessionId,
+        ...(memberUserId
+          ? { actorId: memberUserId, actorType: 'user', actorName: memberName || undefined }
+          : { actorName: memberName ? `Üye: ${memberName}` : `Üye#${memberId}` }),
+        details: {
+          memberId,
+          memberName: memberName || undefined,
+          startTs: checkIn.startTs,
+          checkInMethod: 'card',
+        },
+      }).catch(() => {});
+    } else {
+      await logWalkInQrAccess(db, memberId, 'card');
+    }
+
+    res.json({
+      valid: true,
+      memberId,
+      memberName,
+      checkIn: checkIn.checkedIn
+        ? { ok: true, sessionId: checkIn.sessionId, startTs: checkIn.startTs }
+        : { ok: false, reason: checkIn.reason || 'no_session' },
+    });
+  } catch (error) {
+    console.error('Verify card access error:', error);
+    res.status(500).json({ error: 'Doğrulama hatası' });
+  }
+});
+
 // Telefon numarasıyla kapı erişimi (auth gerektirmez — kiosk kullanacak)
 router.post('/verify-phone-access', async (req, res) => {
   try {
@@ -209,7 +269,7 @@ router.get('/dashboard', requireMember, async (req, res) => {
       const sessionCheckRes = await db.query(
         `SELECT EXTRACT(EPOCH FROM checked_in_at AT TIME ZONE 'Europe/Istanbul') * 1000 AS checked_in_ts
          FROM sessions
-         WHERE member_id = $1 AND check_in_method IN ('qr', 'phone') AND checked_in_at IS NOT NULL
+         WHERE member_id = $1 AND check_in_method IN ('qr', 'phone', 'card') AND checked_in_at IS NOT NULL
            AND checked_in_at >= to_timestamp($2 / 1000.0) AND checked_in_at <= to_timestamp($3 / 1000.0)
          ORDER BY checked_in_at DESC LIMIT 1`,
         [memberId, start, end]
@@ -221,7 +281,7 @@ router.get('/dashboard', requireMember, async (req, res) => {
       const walkInRes = await db.query(
         `SELECT EXTRACT(EPOCH FROM accessed_at) * 1000 AS accessed_ts
          FROM facility_access_logs
-         WHERE member_id = $1 AND source IN ('qr', 'phone')
+         WHERE member_id = $1 AND source IN ('qr', 'phone', 'card')
            AND accessed_at >= to_timestamp($2 / 1000.0) AND accessed_at <= to_timestamp($3 / 1000.0)
          ORDER BY accessed_at DESC LIMIT 1`,
         [memberId, start, end]
