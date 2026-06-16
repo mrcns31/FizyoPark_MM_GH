@@ -5367,7 +5367,7 @@ async function loadAdminNotificationsList() {
   if (!isAdminUser() || !window.API || !window.API.getNotifications) return;
   try {
     var rows = await window.API.getNotifications({ limit: NOTIFICATION_LIST_LIMIT });
-    ui.notifications = Array.isArray(rows) ? rows : [];
+    ui.notifications = Array.isArray(rows) ? rows.filter(function (r) { return r.type !== 'checkin'; }) : [];
     if (isAdminMainViewActive("notifications")) renderNotificationsTable();
     updateNotificationsNavBadge();
   } catch (e) {
@@ -5376,6 +5376,7 @@ async function loadAdminNotificationsList() {
 }
 
 function addNotificationToList(row) {
+  if (row.type === 'checkin') return;
   ui.notifications = ui.notifications || [];
   ui.notifications = ui.notifications.filter(function (n) {
     return !(n.id === row.id && n.type === row.type);
