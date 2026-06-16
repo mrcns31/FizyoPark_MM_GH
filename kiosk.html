@@ -136,6 +136,108 @@
         width:1px;
         height:1px;
       }
+      /* Telefon girişi butonu */
+      .kiosk__phone-btn{
+        margin-top:8px;
+        padding:10px 22px;
+        background:transparent;
+        border:1px solid var(--border);
+        border-radius:10px;
+        color:var(--muted);
+        font-size:14px;
+        cursor:pointer;
+        font-family:var(--font);
+        transition: border-color .2s, color .2s;
+        -webkit-user-select:none;
+        user-select:none;
+      }
+      .kiosk__phone-btn:hover, .kiosk__phone-btn:active{
+        border-color:var(--accent);
+        color:var(--text);
+      }
+      /* Telefon overlay */
+      .kiosk__phone-overlay{
+        position:fixed;
+        inset:0;
+        background:var(--bg);
+        display:flex;
+        flex-direction:column;
+        align-items:center;
+        justify-content:center;
+        gap:24px;
+        z-index:100;
+      }
+      .kiosk__phone-overlay[hidden]{ display:none; }
+      .kiosk__phone-title{
+        font-size:22px;
+        font-weight:700;
+        color:var(--muted);
+        margin:0;
+      }
+      .kiosk__phone-display{
+        font-size:42px;
+        font-weight:800;
+        letter-spacing:4px;
+        min-width:320px;
+        text-align:center;
+        background:var(--panel);
+        border:1px solid var(--border);
+        border-radius:14px;
+        padding:18px 28px;
+        min-height:80px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        font-variant-numeric:tabular-nums;
+      }
+      .kiosk__phone-pad{
+        display:grid;
+        grid-template-columns:repeat(3, 90px);
+        grid-template-rows:repeat(4, 80px);
+        gap:10px;
+      }
+      .kiosk__phone-pad button{
+        background:var(--panel);
+        border:1px solid var(--border);
+        border-radius:12px;
+        color:var(--text);
+        font-size:28px;
+        font-weight:700;
+        font-family:var(--font);
+        cursor:pointer;
+        transition: background .15s, border-color .15s;
+        -webkit-user-select:none;
+        user-select:none;
+      }
+      .kiosk__phone-pad button:active{
+        background:rgba(124,92,255,.25);
+        border-color:var(--accent);
+      }
+      .kiosk__phone-pad button:disabled{
+        opacity:.3;
+        pointer-events:none;
+      }
+      .kiosk__phone-pad .btn-confirm{
+        background:rgba(43,213,118,.15);
+        border-color:var(--ok);
+        color:var(--ok);
+      }
+      .kiosk__phone-pad .btn-confirm:active{
+        background:rgba(43,213,118,.35);
+      }
+      .kiosk__phone-cancel{
+        background:transparent;
+        border:1px solid var(--border);
+        border-radius:10px;
+        color:var(--muted);
+        font-size:16px;
+        font-family:var(--font);
+        padding:10px 32px;
+        cursor:pointer;
+        -webkit-user-select:none;
+        user-select:none;
+      }
+      .kiosk__phone-cancel:active{ border-color:var(--danger); color:var(--danger); }
     </style>
   </head>
   <body>
@@ -147,11 +249,31 @@
         <div class="kiosk__icon is-idle" id="kioskIcon">📷</div>
         <h1 class="kiosk__title" id="kioskTitle">QR kodunuzu okuyucuya gösterin</h1>
         <p class="kiosk__subtitle" id="kioskSubtitle">Üye portalındaki giriş kodunu okutucuya doğru tutun</p>
+        <button class="kiosk__phone-btn" id="kioskPhoneBtn">📱 Telefon ile Giriş</button>
       </main>
       <div class="kiosk__clock" id="kioskClock"></div>
     </div>
     <input class="kiosk__input" id="kioskInput" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" />
 
+    <div class="kiosk__phone-overlay" id="phoneOverlay" hidden>
+      <p class="kiosk__phone-title">Telefon Numaranız</p>
+      <div class="kiosk__phone-display" id="phoneDisplay">_ _ _ _ _ _ _ _ _ _</div>
+      <div class="kiosk__phone-pad" id="phonePad">
+        <button data-digit="1">1</button>
+        <button data-digit="2">2</button>
+        <button data-digit="3">3</button>
+        <button data-digit="4">4</button>
+        <button data-digit="5">5</button>
+        <button data-digit="6">6</button>
+        <button data-digit="7">7</button>
+        <button data-digit="8">8</button>
+        <button data-digit="9">9</button>
+        <button id="phoneBackspace">⌫</button>
+        <button data-digit="0">0</button>
+        <button class="btn-confirm" id="phoneConfirm" disabled>✓</button>
+      </div>
+      <button class="kiosk__phone-cancel" id="phoneCancelBtn">Vazgeç</button>
+    </div>
     <script src="./api.js"></script>
     <script src="./kiosk.js"></script>
   </body>
