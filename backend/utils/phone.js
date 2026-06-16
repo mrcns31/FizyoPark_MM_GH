@@ -60,3 +60,16 @@ export function phoneLast4(value) {
   const digits = phoneDigits(value);
   return digits ? digits.slice(-4) : null;
 }
+
+/**
+ * Kiosk girişi için esnek normalizasyon.
+ * 10 hane (sıfırsız) veya 11 hane (0 ile başlayan) kabul eder.
+ * Geçersizse null döner.
+ */
+export function normalizePhoneFlexible(raw) {
+  if (raw == null) return null;
+  let digits = String(raw).replace(/\D/g, '');
+  if (digits.length === 11 && digits.startsWith('0')) digits = digits.slice(1);
+  if (digits.length !== 10) return null;
+  return formatPhone(digits);
+}
