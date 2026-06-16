@@ -394,6 +394,13 @@
     });
   }
 
+  async function verifyMemberPhoneAccess(phone) {
+    return apiFetch('/member-portal/verify-phone-access', {
+      method: 'POST',
+      body: JSON.stringify({ phone }),
+    });
+  }
+
   async function getDeletionRequests() {
     var rows = await apiFetch('/members/deletion-requests');
     return (rows || []).map(function (row) {
@@ -880,6 +887,7 @@
     deleteClosurePeriod,
     getMemberAccessQr,
     verifyMemberAccess,
+    verifyMemberPhoneAccess,
     getDeletionRequests,
     approveMemberDeletionRequest,
     rejectMemberDeletionRequest,
