@@ -5657,7 +5657,13 @@ function memberSessionStatusLabel(s, options) {
   }
   if (s.isConsumed === true || isPackageSessionConsumed(s)) {
     if (s.checkedIn) {
-      return { text: "Katılındı", cls: "member-session-status--done" };
+      var method = s.checkInMethod || s.check_in_method || null;
+      var checkedInText = method === "phone"
+        ? "Telefon ile giriş yapıldı."
+        : method === "qr"
+          ? "QR ile giriş yapıldı."
+          : "Katılındı";
+      return { text: checkedInText, cls: "member-session-status--done" };
     }
     return { text: "Yapıldı", cls: "member-session-status--done" };
   }
@@ -5877,9 +5883,6 @@ async function pollMemberQrCheckIn() {
     var lastCheckIn = dashboard && dashboard.lastCheckIn;
     if (lastCheckIn && lastCheckIn.at > memberQrCheckInBaseline) {
       closeMemberQrModal();
-      if (lastCheckIn.ok === false) {
-        showTopNotification("Bugün için planlanmış seans bulunamadı.");
-      }
       await refreshMemberPortal();
     }
   } catch (_) {}
