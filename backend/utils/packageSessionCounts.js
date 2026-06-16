@@ -1,11 +1,11 @@
 /** Seans iptal kilidi — bu süreden sonra iptal edilemez, seans bitince hak düşer */
 export const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 
-/** Randevu saatinden kaç dk önce QR ile giriş kabul edilir */
-export const CHECK_IN_EARLY_MS = 30 * 60 * 1000;
+/** Randevu saatinden kaç dk önce QR/telefon ile giriş kabul edilir */
+export const CHECK_IN_EARLY_MS = 60 * 60 * 1000;
 
-/** Seans bitişinden kaç dk sonraya kadar QR kabul edilir */
-export const CHECK_IN_LATE_MS = 15 * 60 * 1000;
+/** Seans bitişinden kaç dk sonraya kadar QR/telefon kabul edilir */
+export const CHECK_IN_LATE_MS = 30 * 60 * 1000;
 
 function normalizeSessionRow(row) {
   return {
