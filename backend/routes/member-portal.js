@@ -207,7 +207,7 @@ router.get('/dashboard', requireMember, async (req, res) => {
     try {
       const { start, end } = resolveLocalDateRangeMs({ dateStr: todayStr });
       const sessionCheckRes = await db.query(
-        `SELECT EXTRACT(EPOCH FROM checked_in_at) * 1000 AS checked_in_ts
+        `SELECT EXTRACT(EPOCH FROM checked_in_at AT TIME ZONE 'Europe/Istanbul') * 1000 AS checked_in_ts
          FROM sessions
          WHERE member_id = $1 AND check_in_method IN ('qr', 'phone') AND checked_in_at IS NOT NULL
            AND checked_in_at >= to_timestamp($2 / 1000.0) AND checked_in_at <= to_timestamp($3 / 1000.0)
