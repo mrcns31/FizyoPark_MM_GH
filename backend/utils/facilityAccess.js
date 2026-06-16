@@ -1,13 +1,13 @@
 import { resolveLocalDateRangeMs } from './staffWorkingHours.js';
 
-/** Randevusuz kapı QR geçişi kaydı */
-export async function logWalkInQrAccess(db, memberId) {
+/** Randevusuz kapı girişi kaydı */
+export async function logWalkInQrAccess(db, memberId, source = 'qr') {
   if (!memberId) return false;
   try {
     await db.query(
       `INSERT INTO facility_access_logs (member_id, accessed_at, source)
-       VALUES ($1, CURRENT_TIMESTAMP, 'qr')`,
-      [memberId]
+       VALUES ($1, CURRENT_TIMESTAMP, $2)`,
+      [memberId, source]
     );
     return true;
   } catch (err) {
