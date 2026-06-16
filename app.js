@@ -6235,7 +6235,7 @@ function renderEntryListFromCache() {
     }
     els.entryListTableWrap.innerHTML =
       '<table class="entry-list-table entry-list-table--walk-ins">' +
-      "<thead><tr>" + dateHeader + "<th>Saat</th><th>Üye</th><th>Tür</th></tr></thead>" +
+      "<thead><tr>" + dateHeader + "<th>Saat</th><th>Üye</th><th>Giriş Türü</th></tr></thead>" +
       "<tbody>" +
       renderWalkInEntryListTableBody(walkRows, showDateCol) +
       "</tbody></table>";

@@ -46,6 +46,7 @@ export function buildAttendanceLabel(row, now = Date.now()) {
   ).trim();
   const confirmerRole = row.confirmer_role ?? row.confirmerRole ?? null;
 
+  if (checkedIn && method === 'phone') return 'Telefon - Geldi';
   if (checkedIn && method === 'qr') return 'QR - Geldi';
   if (checkedIn && isAdminCheckInMethod(method)) return 'Yönetici - Geldi';
   if (checkedIn && method === 'manual') {
@@ -124,9 +125,11 @@ export function sessionRowToAttendanceDto(row, now = Date.now()) {
   const startTs = Number(row.start_ts);
 
   let statusKind = 'pending';
-  if (checkedIn && method === 'qr') {
+  if (checkedIn && method === 'phone') {
+    statusKind = 'phone';
+  } else if (checkedIn && method === 'qr') {
     statusKind = 'qr';
-  } else if (outcome === 'no_show' || (confirmedAt && !checkedIn && method !== 'qr')) {
+  } else if (outcome === 'no_show' || (confirmedAt && !checkedIn && method !== 'qr' && method !== 'phone')) {
     statusKind = 'no_show';
   } else if (checkedIn && isAdminCheckInMethod(method)) {
     statusKind = 'admin_present';
@@ -163,9 +166,9 @@ export function sessionRowToAttendanceDto(row, now = Date.now()) {
       outcome !== 'no_show' &&
       !confirmedAt &&
       startTs <= now,
-    canAdminApprove: !isConfirmed && method !== 'qr' && startTs <= now,
-    canAdminEdit: isConfirmed && method !== 'qr' && statusKind !== 'qr',
-    canAdminOverride: method !== 'qr',
+    canAdminApprove: !isConfirmed && method !== 'qr' && method !== 'phone' && startTs <= now,
+    canAdminEdit: isConfirmed && method !== 'qr' && method !== 'phone' && statusKind !== 'qr' && statusKind !== 'phone',
+    canAdminOverride: method !== 'qr' && method !== 'phone',
   };
 }
 

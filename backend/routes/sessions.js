@@ -224,7 +224,7 @@ router.get('/notifications', [
     const result = await db.query(
       `SELECT * FROM (
          SELECT al.id, 'cancel' AS type,
-                EXTRACT(EPOCH FROM al.created_at) * 1000 AS at_ts,
+                EXTRACT(EPOCH FROM al.created_at AT TIME ZONE 'Europe/Istanbul') * 1000 AS at_ts,
                 s.staff_id, s.start_ts,
                 COALESCE(NULLIF(TRIM(m.first_name || ' ' || m.last_name), ''), NULLIF(TRIM(m.name), '')) AS member_name,
                 TRIM(st.first_name || ' ' || st.last_name) AS staff_name
@@ -238,7 +238,7 @@ router.get('/notifications', [
          UNION ALL
 
          SELECT al.id, 'checkin' AS type,
-                EXTRACT(EPOCH FROM al.created_at) * 1000 AS at_ts,
+                EXTRACT(EPOCH FROM al.created_at AT TIME ZONE 'Europe/Istanbul') * 1000 AS at_ts,
                 s.staff_id, s.start_ts,
                 COALESCE(NULLIF(TRIM(m.first_name || ' ' || m.last_name), ''), NULLIF(TRIM(m.name), '')) AS member_name,
                 TRIM(st.first_name || ' ' || st.last_name) AS staff_name

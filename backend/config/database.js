@@ -16,7 +16,8 @@ const pool = new Pool({
 });
 
 let dbConnectLogged = false;
-pool.on('connect', () => {
+pool.on('connect', (client) => {
+  client.query("SET timezone = 'Europe/Istanbul'");
   if (!dbConnectLogged) {
     console.log('✅ Veritabanına bağlandı');
     dbConnectLogged = true;
