@@ -5877,6 +5877,9 @@ async function pollMemberQrCheckIn() {
     var lastCheckIn = dashboard && dashboard.lastCheckIn;
     if (lastCheckIn && lastCheckIn.at > memberQrCheckInBaseline) {
       closeMemberQrModal();
+      if (lastCheckIn.ok === false) {
+        showTopNotification("Bugün için planlanmış seans bulunamadı.");
+      }
       await refreshMemberPortal();
     }
   } catch (_) {}

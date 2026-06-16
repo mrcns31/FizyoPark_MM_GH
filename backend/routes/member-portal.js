@@ -209,7 +209,7 @@ router.get('/dashboard', requireMember, async (req, res) => {
       const sessionCheckRes = await db.query(
         `SELECT EXTRACT(EPOCH FROM checked_in_at) * 1000 AS checked_in_ts
          FROM sessions
-         WHERE member_id = $1 AND check_in_method = 'qr' AND checked_in_at IS NOT NULL
+         WHERE member_id = $1 AND check_in_method IN ('qr', 'phone') AND checked_in_at IS NOT NULL
            AND checked_in_at >= to_timestamp($2 / 1000.0) AND checked_in_at <= to_timestamp($3 / 1000.0)
          ORDER BY checked_in_at DESC LIMIT 1`,
         [memberId, start, end]
@@ -221,7 +221,7 @@ router.get('/dashboard', requireMember, async (req, res) => {
       const walkInRes = await db.query(
         `SELECT EXTRACT(EPOCH FROM accessed_at) * 1000 AS accessed_ts
          FROM facility_access_logs
-         WHERE member_id = $1 AND source = 'qr'
+         WHERE member_id = $1 AND source IN ('qr', 'phone')
            AND accessed_at >= to_timestamp($2 / 1000.0) AND accessed_at <= to_timestamp($3 / 1000.0)
          ORDER BY accessed_at DESC LIMIT 1`,
         [memberId, start, end]

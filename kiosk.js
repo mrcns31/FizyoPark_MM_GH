@@ -20,7 +20,8 @@
   var MAX_PHONE_DIGITS = 11;
 
   var resetTimer = null;
-  var busy = false;
+  var busy = false;      // genel "boşta değil" bayrağı — telefon butonunu gizler
+  var scanning = false;  // API çağrısı sürüyor — yeni QR okumasını engeller
 
   var INVALID_REASON_MESSAGES = {
     expired: 'QR kodunun süresi doldu. Üye portalından kodu yenileyip tekrar deneyin.',
@@ -87,6 +88,7 @@
 
   function setBusy() {
     busy = true;
+    scanning = true;
     if (kioskPhoneBtn) kioskPhoneBtn.style.display = 'none';
     iconEl.className = 'kiosk__icon';
     iconEl.textContent = '⏳';
@@ -122,6 +124,7 @@
 
   function scheduleReset() {
     busy = true;
+    scanning = false;  // API bitti, yeni QR okutmaya izin ver
     if (resetTimer) clearTimeout(resetTimer);
     resetTimer = setTimeout(setIdle, RESET_DELAY_MS);
   }
@@ -219,9 +222,13 @@
   inputEl.addEventListener('keydown', function (ev) {
     if (ev.key !== 'Enter') return;
     ev.preventDefault();
-    if (busy) {
+    if (scanning) {
       inputEl.value = '';
       return;
+    }
+    if (resetTimer) {
+      clearTimeout(resetTimer);
+      resetTimer = null;
     }
     var raw = inputEl.value;
     inputEl.value = '';
