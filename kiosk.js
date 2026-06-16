@@ -7,6 +7,17 @@
   var subtitleEl = document.getElementById('kioskSubtitle');
   var clockEl = document.getElementById('kioskClock');
   var inputEl = document.getElementById('kioskInput');
+  var phoneOverlay = document.getElementById('phoneOverlay');
+  var phoneDisplay = document.getElementById('phoneDisplay');
+  var phonePad = document.getElementById('phonePad');
+  var phoneConfirm = document.getElementById('phoneConfirm');
+  var phoneBackspace = document.getElementById('phoneBackspace');
+  var phoneCancelBtn = document.getElementById('phoneCancelBtn');
+  var kioskPhoneBtn = document.getElementById('kioskPhoneBtn');
+
+  var phoneEntry = false;
+  var phoneDigitsBuf = [];
+  var MAX_PHONE_DIGITS = 11;
 
   var resetTimer = null;
   var busy = false;
@@ -18,7 +29,51 @@
     parse: 'QR kodu okunamadı. Lütfen tekrar deneyin.',
     invalid_sig: 'QR kodu geçersiz. Üye portalından yeni bir kod oluşturun.',
     member_mismatch: 'QR kodu geçersiz. Üye portalından yeni bir kod oluşturun.',
+    not_found: 'Bu telefon numarasına kayıtlı üye bulunamadı.',
   };
+
+  function updatePhoneDisplay() {
+    var digits = phoneDigitsBuf.join('');
+    var display = '';
+    var len = Math.min(digits.length, MAX_PHONE_DIGITS);
+    for (var i = 0; i < 10; i++) {
+      display += i < len ? digits[i] : '_';
+      if (i === 2 || i === 5 || i === 7) display += ' ';
+    }
+    phoneDisplay.textContent = display;
+    var count = phoneDigitsBuf.length;
+    phoneConfirm.disabled = !(count >= 10 && count <= MAX_PHONE_DIGITS);
+  }
+
+  function openPhoneOverlay() {
+    phoneDigitsBuf = [];
+    updatePhoneDisplay();
+    phoneEntry = true;
+    phoneOverlay.removeAttribute('hidden');
+  }
+
+  function closePhoneOverlay() {
+    phoneEntry = false;
+    phoneOverlay.setAttribute('hidden', '');
+    phoneDigitsBuf = [];
+  }
+
+  async function handlePhoneAccess(rawDigits) {
+    closePhoneOverlay();
+    setBusy();
+    try {
+      var result = await window.API.verifyMemberPhoneAccess(rawDigits);
+      if (result && result.valid) {
+        triggerDoor();
+        setSuccess(result.memberName, result.checkIn);
+      } else {
+        setFailure(INVALID_REASON_MESSAGES[result && result.reason] || 'Lütfen tekrar deneyin');
+      }
+    } catch (err) {
+      var reason = err && err.data && err.data.reason;
+      setFailure(INVALID_REASON_MESSAGES[reason] || 'Bağlantı hatası, tekrar deneyin');
+    }
+  }
 
   function setIdle() {
     busy = false;
@@ -26,11 +81,13 @@
     iconEl.textContent = '📷';
     titleEl.textContent = 'GİRİŞ İÇİN\nQR OKUTUNUZ';
     subtitleEl.textContent = '';
+    if (kioskPhoneBtn) kioskPhoneBtn.style.display = '';
     focusInput();
   }
 
   function setBusy() {
     busy = true;
+    if (kioskPhoneBtn) kioskPhoneBtn.style.display = 'none';
     iconEl.className = 'kiosk__icon';
     iconEl.textContent = '⏳';
     titleEl.textContent = 'Kontrol ediliyor…';
@@ -129,6 +186,36 @@
     }
   }
 
+  phonePad.addEventListener('click', function (ev) {
+    var btn = ev.target.closest('button[data-digit]');
+    if (btn && phoneDigitsBuf.length < MAX_PHONE_DIGITS) {
+      phoneDigitsBuf.push(btn.dataset.digit);
+      updatePhoneDisplay();
+    }
+  });
+
+  phoneBackspace.addEventListener('click', function () {
+    if (phoneDigitsBuf.length > 0) {
+      phoneDigitsBuf.pop();
+      updatePhoneDisplay();
+    }
+  });
+
+  phoneConfirm.addEventListener('click', function () {
+    if (phoneConfirm.disabled) return;
+    handlePhoneAccess(phoneDigitsBuf.join(''));
+  });
+
+  phoneCancelBtn.addEventListener('click', function () {
+    closePhoneOverlay();
+    setIdle();
+  });
+
+  kioskPhoneBtn.addEventListener('click', function (ev) {
+    ev.stopPropagation();
+    if (!busy) openPhoneOverlay();
+  });
+
   inputEl.addEventListener('keydown', function (ev) {
     if (ev.key !== 'Enter') return;
     ev.preventDefault();
@@ -142,10 +229,13 @@
   });
 
   inputEl.addEventListener('blur', function () {
+    if (phoneEntry) return;
     setTimeout(focusInput, 50);
   });
 
-  document.addEventListener('click', focusInput);
+  document.addEventListener('click', function () {
+    if (!phoneEntry) focusInput();
+  });
 
   function tickClock() {
     var now = new Date();
