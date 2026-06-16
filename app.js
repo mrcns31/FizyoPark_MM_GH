@@ -876,6 +876,8 @@ function refreshAdminListPanels() {
   } else if (view === "former-members") {
     renderFormerMembersTable();
   } else if (view === "entry-list") {
+    entryListPage = 1;
+    entryListWalkInPage = 1;
     renderEntryListFromCache();
   } else if (view === "notifications") {
     renderNotificationsTable();
@@ -1125,6 +1127,7 @@ function cacheEls() {
     "mcEmail",
     "mcBirthDate",
     "mcProfession",
+    "mcCardNo",
     "mcAddress",
     "mcContactName",
     "mcContactPhone",
@@ -1256,6 +1259,7 @@ function cacheEls() {
     "editStaffLastName",
     "editStaffPhone",
     "editStaffEmail",
+    "editStaffCardNo",
     "staffEditError",
     "saveStaffEditBtn",
     "deleteStaffEditBtn",
@@ -1347,7 +1351,9 @@ function cacheEls() {
     "adminMobileBar",
     "adminMobileSidebarBtn",
     "adminMobileMenuBadge",
+    "adminMobileDoorBtn",
     "adminMobileAddSessionBtn",
+    "topbarDoorBtn",
     "staffMobileBar",
     "staffMobileSidebarBtn",
     "memberHomeHeader",
@@ -1382,6 +1388,18 @@ function cacheEls() {
     "entryListRefreshBtn",
     "entryListEmpty",
     "entryListTableWrap",
+    "entryListPagination",
+    "entryListSessionFilters",
+    "entryListWalkInFilters",
+    "entryListFilterAll",
+    "entryListFilterPresent",
+    "entryListFilterNoShow",
+    "entryListFilterScheduled",
+    "entryListFilterPending",
+    "entryListWalkInFilterAll",
+    "entryListWalkInFilterQr",
+    "entryListWalkInFilterPhone",
+    "entryListWalkInFilterCard",
     "appDialogModal",
     "appDialogBackdrop",
     "appDialogModalTitle",
@@ -4491,6 +4509,9 @@ function updateUserBranding() {
         : fmtPersonShortName(profile.name);
       els.topbarBrand.textContent = shortName;
       els.topbarBrand.title = profile.name;
+    } else if (isAdminUser()) {
+      els.topbarBrand.textContent = "";
+      els.topbarBrand.title = "";
     } else {
       els.topbarBrand.textContent = ui.currentUser ? profile.name : "Seans Planlayıcı";
       els.topbarBrand.title = "";
@@ -4508,6 +4529,26 @@ function updateUserBranding() {
     els.memberProfileBtn.title = label + " — Profilim";
   }
   updateMemberSessionsBtn();
+  updateDoorBtnVisibility();
+}
+
+var doorBtnTimer = null;
+
+function triggerDoorOpen() {
+  window.API.openDoor().catch(function () {});
+  var btns = [els.topbarDoorBtn, els.adminMobileDoorBtn].filter(Boolean);
+  btns.forEach(function (btn) { btn.classList.add("door-btn--triggered"); });
+  if (doorBtnTimer) clearTimeout(doorBtnTimer);
+  doorBtnTimer = setTimeout(function () {
+    btns.forEach(function (btn) { btn.classList.remove("door-btn--triggered"); });
+    doorBtnTimer = null;
+  }, 3000);
+}
+
+function updateDoorBtnVisibility() {
+  var show = isAdminUser();
+  if (els.topbarDoorBtn) els.topbarDoorBtn.classList.toggle("hidden", !show);
+  if (els.adminMobileDoorBtn) els.adminMobileDoorBtn.classList.toggle("hidden", !show);
 }
 
 function updateMemberSessionsBtn() {
@@ -5979,6 +6020,12 @@ var entryListEditSessionId = null;
 var entryListRowsCache = [];
 var entryListWalkInCache = [];
 var entryListViewMode = "sessions";
+var entryListPage = 1;
+var entryListPageSize = 20;
+var entryListStatusFilter = "all";
+var entryListWalkInPage = 1;
+var entryListWalkInPageSize = 20;
+var entryListWalkInTypeFilter = "all";
 
 function getTopbarPlannerDateRange() {
   if (ui.viewMode === "week") {
@@ -6032,6 +6079,36 @@ function setEntryListViewMode(mode) {
     els.entryListTabWalkIns.classList.toggle("is-active", entryListViewMode === "walk_ins");
     els.entryListTabWalkIns.setAttribute("aria-selected", entryListViewMode === "walk_ins" ? "true" : "false");
   }
+  if (els.entryListSessionFilters) els.entryListSessionFilters.classList.toggle("hidden", entryListViewMode === "walk_ins");
+  if (els.entryListWalkInFilters) els.entryListWalkInFilters.classList.toggle("hidden", entryListViewMode === "sessions");
+}
+
+function setEntryListStatusFilter(filter) {
+  entryListStatusFilter = filter || "all";
+  entryListPage = 1;
+  var filters = ["all", "present", "no_show", "scheduled", "pending"];
+  filters.forEach(function (f) {
+    var key = "entryListFilter" + (f === "all" ? "All" : f === "present" ? "Present" : f === "no_show" ? "NoShow" : f === "scheduled" ? "Scheduled" : "Pending");
+    if (els[key]) {
+      els[key].classList.toggle("is-active", f === entryListStatusFilter);
+      els[key].setAttribute("aria-selected", f === entryListStatusFilter ? "true" : "false");
+    }
+  });
+  renderEntryListFromCache();
+}
+
+function setEntryListWalkInTypeFilter(filter) {
+  entryListWalkInTypeFilter = filter || "all";
+  entryListWalkInPage = 1;
+  var filters = ["all", "qr", "phone", "card"];
+  filters.forEach(function (f) {
+    var key = "entryListWalkInFilter" + (f === "all" ? "All" : f === "qr" ? "Qr" : f === "phone" ? "Phone" : "Card");
+    if (els[key]) {
+      els[key].classList.toggle("is-active", f === entryListWalkInTypeFilter);
+      els[key].setAttribute("aria-selected", f === entryListWalkInTypeFilter ? "true" : "false");
+    }
+  });
+  renderEntryListFromCache();
 }
 
 async function openEntryListModal() {
@@ -6050,27 +6127,20 @@ function closeEntryListModal() {
 
 function renderEntryListStatusCell(r) {
   var statusText = isAdminMobilePanel() ? fmtEntryListStatusLabelMobile(r) : (r.attendanceLabel || "").trim();
-  if (r.statusKind === "phone") {
+  if (r.statusKind === "phone" || r.statusKind === "card" || r.statusKind === "qr") {
+    var timeStr = "";
+    if (r.checkedInAt) {
+      var d = new Date(r.checkedInAt);
+      if (!isNaN(d.getTime())) {
+        timeStr = " · " + d.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit" });
+      }
+    }
+    var defaultLabel = r.statusKind === "phone" ? "Telefon - Geldi" : r.statusKind === "card" ? "Kart - Geldi" : "QR - Geldi";
     return (
       '<span class="entry-status entry-status--ok">' +
       '<span class="entry-status__icon" aria-hidden="true">✓</span> ' +
-      escapeHtml(statusText || "Telefon - Geldi") +
-      "</span>"
-    );
-  }
-  if (r.statusKind === "card") {
-    return (
-      '<span class="entry-status entry-status--ok">' +
-      '<span class="entry-status__icon" aria-hidden="true">✓</span> ' +
-      escapeHtml(statusText || "Kart - Geldi") +
-      "</span>"
-    );
-  }
-  if (r.statusKind === "qr") {
-    return (
-      '<span class="entry-status entry-status--ok">' +
-      '<span class="entry-status__icon" aria-hidden="true">✓</span> ' +
-      escapeHtml(statusText || "QR - Geldi") +
+      escapeHtml(statusText || defaultLabel) +
+      escapeHtml(timeStr) +
       "</span>"
     );
   }
@@ -6234,14 +6304,19 @@ function entryListWalkInRowMatchesFilter(r, filterText) {
   );
 }
 
+var PRESENT_STATUS_KINDS = { qr: true, phone: true, card: true, admin_present: true, staff_present: true };
+
 function renderEntryListFromCache() {
   if (!isAdminMainViewActive("entry-list")) return;
   var filterText = getAdminListFilterText();
   var showDateCol = entryListShowsDateColumn();
   var dateHeader = showDateCol ? "<th>Tarih</th>" : "";
+
   if (entryListViewMode === "walk_ins") {
     var walkRows = (entryListWalkInCache || []).filter(function (r) {
-      return entryListWalkInRowMatchesFilter(r, filterText);
+      if (!entryListWalkInRowMatchesFilter(r, filterText)) return false;
+      if (entryListWalkInTypeFilter !== "all" && r.source !== entryListWalkInTypeFilter) return false;
+      return true;
     });
     if (els.entryListEmpty) {
       els.entryListEmpty.textContent = getEntryListEmptyMessage(
@@ -6252,18 +6327,33 @@ function renderEntryListFromCache() {
     if (!els.entryListTableWrap) return;
     if (!walkRows.length) {
       els.entryListTableWrap.innerHTML = "";
+      if (els.entryListPagination) els.entryListPagination.classList.add("hidden");
       return;
     }
+    entryListWalkInPage = renderPaginationBar(els.entryListPagination, {
+      page: entryListWalkInPage,
+      pageSize: entryListWalkInPageSize,
+      total: walkRows.length,
+      onPageChange: function (p) { entryListWalkInPage = p; renderEntryListFromCache(); },
+      onPageSizeChange: function (s) { entryListWalkInPageSize = s; entryListWalkInPage = 1; renderEntryListFromCache(); },
+    });
+    var walkPage = walkRows.slice((entryListWalkInPage - 1) * entryListWalkInPageSize, entryListWalkInPage * entryListWalkInPageSize);
     els.entryListTableWrap.innerHTML =
       '<table class="entry-list-table entry-list-table--walk-ins">' +
       "<thead><tr>" + dateHeader + "<th>Saat</th><th>Üye</th><th>Giriş Türü</th></tr></thead>" +
       "<tbody>" +
-      renderWalkInEntryListTableBody(walkRows, showDateCol) +
+      renderWalkInEntryListTableBody(walkPage, showDateCol) +
       "</tbody></table>";
     return;
   }
+
   var rows = (entryListRowsCache || []).filter(function (r) {
-    return entryListSessionRowMatchesFilter(r, filterText);
+    if (!entryListSessionRowMatchesFilter(r, filterText)) return false;
+    if (entryListStatusFilter === "present" && !PRESENT_STATUS_KINDS[r.statusKind]) return false;
+    if (entryListStatusFilter === "no_show" && r.statusKind !== "no_show") return false;
+    if (entryListStatusFilter === "scheduled" && r.statusKind !== "scheduled") return false;
+    if (entryListStatusFilter === "pending" && r.statusKind !== "pending") return false;
+    return true;
   });
   if (entryListEditSessionId != null) {
     var stillThere = rows.some(function (r) {
@@ -6280,13 +6370,22 @@ function renderEntryListFromCache() {
   if (!els.entryListTableWrap) return;
   if (!rows.length) {
     els.entryListTableWrap.innerHTML = "";
+    if (els.entryListPagination) els.entryListPagination.classList.add("hidden");
     return;
   }
+  entryListPage = renderPaginationBar(els.entryListPagination, {
+    page: entryListPage,
+    pageSize: entryListPageSize,
+    total: rows.length,
+    onPageChange: function (p) { entryListPage = p; renderEntryListFromCache(); },
+    onPageSizeChange: function (s) { entryListPageSize = s; entryListPage = 1; renderEntryListFromCache(); },
+  });
+  var pageRows = rows.slice((entryListPage - 1) * entryListPageSize, entryListPage * entryListPageSize);
   els.entryListTableWrap.innerHTML =
     '<table class="entry-list-table entry-list-table--sessions">' +
     "<thead><tr>" + dateHeader + "<th>Saat</th><th>Üye</th><th>Personel</th><th>Durum</th><th class=\"entry-list-table__actions-head\" aria-label=\"İşlem\"></th></tr></thead>" +
     "<tbody>" +
-    renderEntryListTableBody(rows, showDateCol) +
+    renderEntryListTableBody(pageRows, showDateCol) +
     "</tbody></table>";
   bindEntryListTableInteractions();
 }
@@ -6299,6 +6398,7 @@ async function refreshEntryListModal() {
       if (!window.API.getWalkInAccessList) return;
       var walkData = await window.API.getWalkInAccessList(range);
       entryListWalkInCache = walkData.entries || [];
+      entryListWalkInPage = 1;
       renderEntryListFromCache();
       return;
     }
@@ -6306,6 +6406,7 @@ async function refreshEntryListModal() {
     if (!window.API.getAttendanceEntryList) return;
     var data = await window.API.getAttendanceEntryList(range);
     entryListRowsCache = data.sessions || [];
+    entryListPage = 1;
     renderEntryListFromCache();
   } catch (e) {
     await showAppAlert(
@@ -7561,6 +7662,20 @@ function bindMemberProfileActions() {
       refreshEntryListModal();
     });
   }
+  ["entryListFilterAll", "entryListFilterPresent", "entryListFilterNoShow", "entryListFilterScheduled", "entryListFilterPending"].forEach(function (id) {
+    if (els[id]) {
+      els[id].addEventListener("click", function () {
+        setEntryListStatusFilter(els[id].dataset.entryFilter);
+      });
+    }
+  });
+  ["entryListWalkInFilterAll", "entryListWalkInFilterQr", "entryListWalkInFilterPhone", "entryListWalkInFilterCard"].forEach(function (id) {
+    if (els[id]) {
+      els[id].addEventListener("click", function () {
+        setEntryListWalkInTypeFilter(els[id].dataset.walkinFilter);
+      });
+    }
+  });
   if (els.memberSessionCancelModal) {
     els.memberSessionCancelModal.addEventListener("click", function (e) {
       if (e.target && e.target.dataset && e.target.dataset.close === "memberSessionCancelModal") {
@@ -8205,6 +8320,7 @@ function openStaffEditModal(staffId) {
   els.editStaffLastName.value = staff.lastName || "";
   els.editStaffPhone.value = displayPhone(staff.phone) || "";
   if (els.editStaffEmail) els.editStaffEmail.value = staff.email || "";
+  if (els.editStaffCardNo) els.editStaffCardNo.value = staff.cardNo || "";
 
   if (els.editStaffPhone) {
     els.editStaffPhone.removeEventListener("blur", formatPhoneOnBlur);
@@ -8336,11 +8452,13 @@ function saveStaffEdit(staffId) {
   };
 
   if (window.API && window.API.getToken() && window.API.updateStaff) {
+    const cardNo = (els.editStaffCardNo && els.editStaffCardNo.value || "").trim() || null;
     window.API.updateStaff(staffId, {
       firstName,
       lastName,
       phone,
       email: email || undefined,
+      cardNo,
     }).then(applyUpdate).catch(function (e) {
       els.staffEditError.textContent = (e.data && e.data.error) || e.message || "Personel güncellenemedi.";
       els.staffEditError.classList.remove("hidden");
@@ -8441,6 +8559,7 @@ function openMemberCard(memberId) {
   if (els.mcEmail) els.mcEmail.value = m ? (m.email || "") : "";
   if (els.mcBirthDate) els.mcBirthDate.value = m && m.birthDate ? (m.birthDate.slice ? m.birthDate.slice(0, 10) : m.birthDate) : "";
   if (els.mcProfession) els.mcProfession.value = m ? (m.profession || "") : "";
+  if (els.mcCardNo) els.mcCardNo.value = m ? (m.cardNo || "") : "";
   if (els.mcAddress) els.mcAddress.value = m ? (m.address || "") : "";
   if (els.mcContactName) els.mcContactName.value = m ? (m.contactName || "") : "";
   if (els.mcContactPhone) els.mcContactPhone.value = m ? (displayPhone(m.contactPhone) || "") : "";
@@ -9448,6 +9567,7 @@ async function saveMemberCard() {
     email: (els.mcEmail && els.mcEmail.value || "").trim() || null,
     birthDate: (els.mcBirthDate && els.mcBirthDate.value) || null,
     profession: (els.mcProfession && els.mcProfession.value || "").trim() || null,
+    cardNo: (els.mcCardNo && els.mcCardNo.value || "").trim() || null,
     address: (els.mcAddress && els.mcAddress.value || "").trim() || null,
     contactName: (els.mcContactName && els.mcContactName.value || "").trim() || null,
     contactPhone,
@@ -11837,6 +11957,12 @@ function bindEvents() {
   if (els.logoutBtn) {
     els.logoutBtn.addEventListener("click", performLogout);
   }
+  if (els.topbarDoorBtn) {
+    els.topbarDoorBtn.addEventListener("click", triggerDoorOpen);
+  }
+  if (els.adminMobileDoorBtn) {
+    els.adminMobileDoorBtn.addEventListener("click", triggerDoorOpen);
+  }
   bindAdminProfileActions();
   bindMemberProfileActions();
   if (els.openWorkingHoursBtn) els.openWorkingHoursBtn.addEventListener("click", openWorkingHoursModal);
@@ -12559,15 +12685,17 @@ function bindLoginForm() {
         } catch (_) {}
         ui.currentUser = { role: data.user.role };
       }
-      hideLoginOverlay();
       const proceedAfterConsent = function () {
         if (data.user && data.user.mustChangePassword) {
+          hideLoginOverlay();
           showChangePasswordOverlay();
         } else {
+          showSplashScreen();
           location.reload();
         }
       };
       if (data.user && data.user.consentRequired) {
+        hideLoginOverlay();
         await loadLegalLinks();
         openLegalConsentScreen(proceedAfterConsent);
       } else {

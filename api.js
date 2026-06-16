@@ -72,6 +72,7 @@
       clinicalConditions: row.clinical_conditions || '',
       pastOperations: row.past_operations || '',
       notes: row.notes || '',
+      cardNo: row.card_no || null,
       deletionRequestedAt: row.deletion_requested_at || null,
       deletedAt: row.deleted_at || null,
     };
@@ -90,7 +91,8 @@
       systemic_diseases: m.systemicDiseases || m.systemic_diseases || null,
       clinical_conditions: m.clinicalConditions || m.clinical_conditions || null,
       past_operations: m.pastOperations || m.past_operations || null,
-      notes: m.notes || null
+      notes: m.notes || null,
+      card_no: m.cardNo !== undefined ? (m.cardNo || null) : undefined
     };
     // member_no sadece düzenlemede gönderilir (yeni üyede backend otomatik atar)
     if (m.memberNo || m.member_no) {
@@ -108,6 +110,7 @@
       email: row.user_email || row.email || '',
       workingHours: wh,
       loginUsername: row.login_username || null,
+      cardNo: row.card_no || null,
     };
   }
   function roomFromApi(row) {
@@ -562,6 +565,7 @@
         phone: body.phone,
         email: body.email,
         workingHours: body.workingHours,
+        cardNo: body.cardNo !== undefined ? (body.cardNo || null) : undefined,
       }),
     });
     return staffFromApi(row);
@@ -867,6 +871,10 @@
     return apiFetch('/sessions/attendance/shift-reminder', { method: 'POST' });
   }
 
+  async function openDoor() {
+    return apiFetch('/door/open', { method: 'POST' });
+  }
+
   window.API = {
     getToken,
     setToken,
@@ -946,6 +954,7 @@
     getStaffNotifications,
     markStaffNotificationRead,
     checkStaffShiftReminder,
+    openDoor,
   };
   window.__API_BASE__ = API_BASE;
 })();

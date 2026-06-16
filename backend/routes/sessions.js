@@ -24,7 +24,7 @@ async function verifyAdminPassword(adminPassword) {
   }
   const valid = await bcrypt.compare(String(adminPassword), adminResult.rows[0].password_hash);
   if (!valid) {
-    return { ok: false, status: 401, error: 'Admin şifresi hatalı.' };
+    return { ok: false, status: 403, error: 'Admin şifresi hatalı.' };
   }
   return { ok: true };
 }

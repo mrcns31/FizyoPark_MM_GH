@@ -13,12 +13,64 @@ import {
 import { isMemberPackageActive, localTodayDateStr } from '../utils/memberPackageStatus.js';
 import { createMemberAccessToken, verifyMemberAccessToken } from '../utils/memberAccessQr.js';
 import { normalizePhoneFlexible } from '../utils/phone.js';
-import { logWalkInQrAccess } from '../utils/facilityAccess.js';
+import { logWalkInQrAccess, logStaffAccess } from '../utils/facilityAccess.js';
 import { resolveLocalDateRangeMs } from '../utils/staffWorkingHours.js';
 import { getInstitutionWhatsApp } from '../utils/appSettings.js';
 import QRCode from 'qrcode';
 
 const router = express.Router();
+
+async function getActivePackageStats(db, memberId, sessionId) {
+  try {
+    // 1. member_package_id bul
+    let mpId = null;
+    if (sessionId) {
+      const r = await db.query(
+        'SELECT member_package_id FROM sessions WHERE id = $1 LIMIT 1',
+        [sessionId]
+      );
+      mpId = r.rows[0]?.member_package_id ?? null;
+    }
+    if (!mpId) {
+      const r = await db.query(
+        'SELECT id FROM member_packages WHERE member_id = $1 ORDER BY start_date DESC LIMIT 1',
+        [memberId]
+      );
+      mpId = r.rows[0]?.id ?? null;
+    }
+    if (!mpId) {
+      console.warn('[getActivePackageStats] member_package_id bulunamadı, memberId:', memberId);
+      return null;
+    }
+
+    // 2. Toplam seans sayısını packages tablosundan al
+    const pkgR = await db.query(
+      'SELECT p.lesson_count FROM member_packages mp JOIN packages p ON p.id = mp.package_id WHERE mp.id = $1 LIMIT 1',
+      [mpId]
+    );
+    const total = pkgR.rows[0]?.lesson_count ? Number(pkgR.rows[0].lesson_count) : null;
+    if (!total) {
+      console.warn('[getActivePackageStats] lesson_count alınamadı, mpId:', mpId);
+      return null;
+    }
+
+    // 3. Kullanılan seans sayısını say (giriş yapılmış + gelmedi)
+    const usedR = await db.query(
+      `SELECT COUNT(*)::int AS used_count
+       FROM sessions
+       WHERE member_package_id = $1
+         AND deleted_at IS NULL
+         AND (checked_in_at IS NOT NULL OR attendance_outcome = 'no_show')`,
+      [mpId]
+    );
+    const used = Number(usedR.rows[0]?.used_count ?? 0);
+
+    return { totalSessions: total, remainingSessions: Math.max(0, total - used) };
+  } catch (err) {
+    console.error('[getActivePackageStats] hata:', err.message, '| memberId:', memberId, '| sessionId:', sessionId);
+    return null;
+  }
+}
 
 // Kapı okuyucu doğrulama (auth gerektirmez — mikrodenetleyici kullanacak)
 router.post('/verify-access', async (req, res) => {
@@ -90,51 +142,72 @@ router.post('/verify-card-access', async (req, res) => {
       return res.status(401).json({ valid: false, reason: 'format' });
     }
 
+    // Önce üye tablosunu kontrol et
     const memberRow = await db.query(
       'SELECT id, name, user_id FROM members WHERE card_no = $1 AND deleted_at IS NULL',
       [normalized]
     );
-    if (!memberRow.rows.length) {
+
+    if (memberRow.rows.length) {
+      const { id: memberId, name: memberName, user_id: memberUserId } = memberRow.rows[0];
+
+      let checkIn = { checkedIn: false, reason: 'no_session' };
+      try {
+        checkIn = await checkInSessionForMember(db, memberId, Date.now(), 'card');
+      } catch (checkInErr) {
+        if (checkInErr.code !== '42703') throw checkInErr;
+        console.warn('verify-card-access: checked_in_at sütunu yok; migration_sessions_check_in.sql çalıştırın');
+      }
+
+      if (checkIn.checkedIn) {
+        await activityLog(req, {
+          action: 'session.check_in_qr',
+          entityType: 'session',
+          entityId: checkIn.sessionId,
+          ...(memberUserId
+            ? { actorId: memberUserId, actorType: 'user', actorName: memberName || undefined }
+            : { actorName: memberName ? `Üye: ${memberName}` : `Üye#${memberId}` }),
+          details: { memberId, memberName: memberName || undefined, startTs: checkIn.startTs, checkInMethod: 'card' },
+        }).catch(() => {});
+      } else {
+        await logWalkInQrAccess(db, memberId, 'card');
+      }
+
+      const packageStats = await getActivePackageStats(db, memberId, checkIn.checkedIn ? checkIn.sessionId : null);
+      return res.json({
+        valid: true,
+        memberId,
+        memberName,
+        checkIn: checkIn.checkedIn
+          ? { ok: true, sessionId: checkIn.sessionId, startTs: checkIn.startTs }
+          : { ok: false, reason: checkIn.reason || 'no_session' },
+        packageStats,
+      });
+    }
+
+    // Personel tablosunu kontrol et
+    const staffRow = await db.query(
+      `SELECT s.id, s.first_name, s.last_name, u.role
+       FROM staff s LEFT JOIN users u ON u.id = s.user_id
+       WHERE s.card_no = $1`,
+      [normalized]
+    );
+    if (!staffRow.rows.length) {
       return res.status(401).json({ valid: false, reason: 'card_not_found' });
     }
 
-    const { id: memberId, name: memberName, user_id: memberUserId } = memberRow.rows[0];
+    const sf = staffRow.rows[0];
+    const staffName = `${sf.first_name} ${sf.last_name}`.trim();
+    await logStaffAccess(db, sf.id, 'card');
+    await activityLog(req, {
+      action: 'facility.staff_access',
+      entityType: 'staff',
+      entityId: sf.id,
+      actorName: staffName,
+      details: { checkInMethod: 'card' },
+    }).catch(() => {});
 
-    let checkIn = { checkedIn: false, reason: 'no_session' };
-    try {
-      checkIn = await checkInSessionForMember(db, memberId, Date.now(), 'card');
-    } catch (checkInErr) {
-      if (checkInErr.code !== '42703') throw checkInErr;
-      console.warn('verify-card-access: checked_in_at sütunu yok; migration_sessions_check_in.sql çalıştırın');
-    }
-
-    if (checkIn.checkedIn) {
-      await activityLog(req, {
-        action: 'session.check_in_qr',
-        entityType: 'session',
-        entityId: checkIn.sessionId,
-        ...(memberUserId
-          ? { actorId: memberUserId, actorType: 'user', actorName: memberName || undefined }
-          : { actorName: memberName ? `Üye: ${memberName}` : `Üye#${memberId}` }),
-        details: {
-          memberId,
-          memberName: memberName || undefined,
-          startTs: checkIn.startTs,
-          checkInMethod: 'card',
-        },
-      }).catch(() => {});
-    } else {
-      await logWalkInQrAccess(db, memberId, 'card');
-    }
-
-    res.json({
-      valid: true,
-      memberId,
-      memberName,
-      checkIn: checkIn.checkedIn
-        ? { ok: true, sessionId: checkIn.sessionId, startTs: checkIn.startTs }
-        : { ok: false, reason: checkIn.reason || 'no_session' },
-    });
+    return res.json({ valid: true, memberId: null, memberName: staffName, isStaff: true, checkIn: { ok: true, isStaff: true }, packageStats: null });
   } catch (error) {
     console.error('Verify card access error:', error);
     res.status(500).json({ error: 'Doğrulama hatası' });
@@ -150,51 +223,72 @@ router.post('/verify-phone-access', async (req, res) => {
       return res.status(401).json({ valid: false, reason: 'format' });
     }
 
+    // Önce üye tablosunu kontrol et
     const memberRow = await db.query(
       'SELECT id, name, user_id FROM members WHERE phone = $1 AND deleted_at IS NULL',
       [normalized]
     );
-    if (!memberRow.rows.length) {
+
+    if (memberRow.rows.length) {
+      const { id: memberId, name: memberName, user_id: memberUserId } = memberRow.rows[0];
+
+      let checkIn = { checkedIn: false, reason: 'no_session' };
+      try {
+        checkIn = await checkInSessionForMember(db, memberId, Date.now(), 'phone');
+      } catch (checkInErr) {
+        if (checkInErr.code !== '42703') throw checkInErr;
+        console.warn('verify-phone-access: checked_in_at sütunu yok; migration_sessions_check_in.sql çalıştırın');
+      }
+
+      if (checkIn.checkedIn) {
+        await activityLog(req, {
+          action: 'session.check_in_qr',
+          entityType: 'session',
+          entityId: checkIn.sessionId,
+          ...(memberUserId
+            ? { actorId: memberUserId, actorType: 'user', actorName: memberName || undefined }
+            : { actorName: memberName ? `Üye: ${memberName}` : `Üye#${memberId}` }),
+          details: { memberId, memberName: memberName || undefined, startTs: checkIn.startTs, checkInMethod: 'phone' },
+        }).catch(() => {});
+      } else {
+        await logWalkInQrAccess(db, memberId, 'phone');
+      }
+
+      const packageStats = await getActivePackageStats(db, memberId, checkIn.checkedIn ? checkIn.sessionId : null);
+      return res.json({
+        valid: true,
+        memberId,
+        memberName,
+        checkIn: checkIn.checkedIn
+          ? { ok: true, sessionId: checkIn.sessionId, startTs: checkIn.startTs }
+          : { ok: false, reason: checkIn.reason || 'no_session' },
+        packageStats,
+      });
+    }
+
+    // Personel tablosunu kontrol et
+    const staffRow = await db.query(
+      `SELECT s.id, s.first_name, s.last_name, u.role
+       FROM staff s LEFT JOIN users u ON u.id = s.user_id
+       WHERE s.phone = $1`,
+      [normalized]
+    );
+    if (!staffRow.rows.length) {
       return res.status(401).json({ valid: false, reason: 'not_found' });
     }
 
-    const { id: memberId, name: memberName, user_id: memberUserId } = memberRow.rows[0];
+    const sf = staffRow.rows[0];
+    const staffName = `${sf.first_name} ${sf.last_name}`.trim();
+    await logStaffAccess(db, sf.id, 'phone');
+    await activityLog(req, {
+      action: 'facility.staff_access',
+      entityType: 'staff',
+      entityId: sf.id,
+      actorName: staffName,
+      details: { checkInMethod: 'phone' },
+    }).catch(() => {});
 
-    let checkIn = { checkedIn: false, reason: 'no_session' };
-    try {
-      checkIn = await checkInSessionForMember(db, memberId, Date.now(), 'phone');
-    } catch (checkInErr) {
-      if (checkInErr.code !== '42703') throw checkInErr;
-      console.warn('verify-phone-access: checked_in_at sütunu yok; migration_sessions_check_in.sql çalıştırın');
-    }
-
-    if (checkIn.checkedIn) {
-      await activityLog(req, {
-        action: 'session.check_in_qr',
-        entityType: 'session',
-        entityId: checkIn.sessionId,
-        ...(memberUserId
-          ? { actorId: memberUserId, actorType: 'user', actorName: memberName || undefined }
-          : { actorName: memberName ? `Üye: ${memberName}` : `Üye#${memberId}` }),
-        details: {
-          memberId,
-          memberName: memberName || undefined,
-          startTs: checkIn.startTs,
-          checkInMethod: 'phone',
-        },
-      }).catch(() => {});
-    } else {
-      await logWalkInQrAccess(db, memberId, 'phone');
-    }
-
-    res.json({
-      valid: true,
-      memberId,
-      memberName,
-      checkIn: checkIn.checkedIn
-        ? { ok: true, sessionId: checkIn.sessionId, startTs: checkIn.startTs }
-        : { ok: false, reason: checkIn.reason || 'no_session' },
-    });
+    return res.json({ valid: true, memberId: null, memberName: staffName, isStaff: true, checkIn: { ok: true, isStaff: true }, packageStats: null });
   } catch (error) {
     console.error('Verify phone access error:', error);
     res.status(500).json({ error: 'Doğrulama hatası' });

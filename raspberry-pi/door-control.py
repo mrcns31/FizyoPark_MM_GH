@@ -16,7 +16,7 @@ from gpiozero import OutputDevice
 RELAY_PIN = 17          # Röle IN/SIG kablosunun bağlı olduğu GPIO (BCM) pini
 ACTIVE_LOW = True        # Çoğu röle modülü "active low"dur (sinyal LOW -> röle çeker)
 OPEN_DURATION = 3        # Kapının açık kalma süresi (saniye)
-LISTEN_HOST = "127.0.0.1"
+LISTEN_HOST = "0.0.0.0"
 LISTEN_PORT = 7000
 # ----------------------------------------------------------------------------
 

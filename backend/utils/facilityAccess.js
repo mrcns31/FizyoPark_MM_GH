@@ -1,6 +1,6 @@
 import { resolveLocalDateRangeMs } from './staffWorkingHours.js';
 
-/** Randevusuz kapı girişi kaydı */
+/** Randevusuz kapı girişi kaydı (üye) */
 export async function logWalkInQrAccess(db, memberId, source = 'qr') {
   if (!memberId) return false;
   try {
@@ -20,6 +20,26 @@ export async function logWalkInQrAccess(db, memberId, source = 'qr') {
   }
 }
 
+/** Personel kapı girişi kaydı */
+export async function logStaffAccess(db, staffId, source = 'phone') {
+  if (!staffId) return false;
+  try {
+    await db.query(
+      `INSERT INTO facility_access_logs (staff_id, accessed_at, source)
+       VALUES ($1, CURRENT_TIMESTAMP, $2)`,
+      [staffId, source]
+    );
+    return true;
+  } catch (err) {
+    if (err.code === '42P01') {
+      console.warn('[facilityAccess] facility_access_logs tablosu yok; migration_facility_access_logs.sql çalıştırın');
+    } else {
+      console.error('[facilityAccess] personel giriş log hatası:', err.message);
+    }
+    return false;
+  }
+}
+
 /** Seçilen tarih aralığındaki randevusuz QR girişleri */
 export async function listWalkInAccessForDate(db, opts = {}) {
   const { start, end } = resolveLocalDateRangeMs(typeof opts === 'string' ? { dateStr: opts } : opts);
@@ -29,22 +49,27 @@ export async function listWalkInAccessForDate(db, opts = {}) {
     const res = await db.query(
       `SELECT fal.id,
               fal.member_id,
+              fal.staff_id,
               fal.source,
               EXTRACT(EPOCH FROM fal.accessed_at) * 1000 AS accessed_ts,
               COALESCE(NULLIF(TRIM(m.first_name || ' ' || m.last_name), ''), NULLIF(TRIM(m.name), '')) AS member_name,
-              m.member_no
+              m.member_no,
+              TRIM(s.first_name || ' ' || s.last_name) AS staff_name
        FROM facility_access_logs fal
-       JOIN members m ON m.id = fal.member_id
+       LEFT JOIN members m ON m.id = fal.member_id
+       LEFT JOIN staff s ON s.id = fal.staff_id
        WHERE fal.accessed_at >= to_timestamp($1 / 1000.0)
          AND fal.accessed_at <= to_timestamp($2 / 1000.0)
-       ORDER BY fal.accessed_at ASC, m.name ASC`,
+       ORDER BY fal.accessed_at ASC`,
       [start, end]
     );
     return res.rows.map((row) => ({
       id: row.id,
-      memberId: row.member_id,
-      memberName: row.member_name || '',
-      memberNo: row.member_no || '',
+      memberId: row.member_id || null,
+      staffId: row.staff_id || null,
+      memberName: row.member_name || row.staff_name || '',
+      memberNo: row.member_no || (row.staff_id ? 'Personel' : ''),
+      isStaff: !!row.staff_id,
       accessedAt: Math.round(Number(row.accessed_ts)),
       source: row.source || 'qr',
       label: row.source === 'phone' ? 'Telefon' : row.source === 'card' ? 'Kart' : 'QR',

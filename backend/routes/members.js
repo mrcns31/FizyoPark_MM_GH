@@ -203,7 +203,8 @@ router.post('/', [
       systemic_diseases: (req.body.systemic_diseases || '').trim() || null,
       clinical_conditions: (req.body.clinical_conditions || '').trim() || null,
       past_operations: (req.body.past_operations || '').trim() || null,
-      notes: (req.body.notes || '').trim() || null
+      notes: (req.body.notes || '').trim() || null,
+      card_no: (req.body.card_no || '').trim() || null
     };
     const name = `${row.first_name} ${row.last_name}`.trim();
     if (!name) {
@@ -214,13 +215,13 @@ router.post('/', [
       `INSERT INTO members (
         member_no, first_name, last_name, name, phone, email,
         birth_date, profession, address, contact_name, contact_phone,
-        systemic_diseases, clinical_conditions, past_operations, notes
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+        systemic_diseases, clinical_conditions, past_operations, notes, card_no
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
       RETURNING *`,
       [
         row.member_no, row.first_name, row.last_name, name, row.phone, row.email,
         row.birth_date, row.profession, row.address, row.contact_name, row.contact_phone,
-        row.systemic_diseases, row.clinical_conditions, row.past_operations, row.notes
+        row.systemic_diseases, row.clinical_conditions, row.past_operations, row.notes, row.card_no
       ]
     );
     let created = result.rows[0];
@@ -316,6 +317,7 @@ router.put('/:id', [
     if (updates.clinical_conditions !== undefined) set('clinical_conditions', (updates.clinical_conditions || '').trim() || null);
     if (updates.past_operations !== undefined) set('past_operations', (updates.past_operations || '').trim() || null);
     if (updates.notes !== undefined) set('notes', (updates.notes || '').trim() || null);
+    if (updates.card_no !== undefined) set('card_no', (updates.card_no || '').trim() || null);
 
     if (fields.length === 0) {
       return res.status(400).json({ error: 'Güncellenecek alan yok' });
@@ -624,6 +626,7 @@ router.post('/:id/reactivate', async (req, res) => {
       if (body.systemic_diseases !== undefined) setField('systemic_diseases', String(body.systemic_diseases || '').trim() || null);
       if (body.clinical_conditions !== undefined) setField('clinical_conditions', String(body.clinical_conditions || '').trim() || null);
       if (body.past_operations !== undefined) setField('past_operations', String(body.past_operations || '').trim() || null);
+      if (body.card_no !== undefined) setField('card_no', String(body.card_no || '').trim() || null);
 
       if (body.first_name !== undefined || body.last_name !== undefined) {
         const fn = body.first_name !== undefined ? body.first_name : member.first_name;

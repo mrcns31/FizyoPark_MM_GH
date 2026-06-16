@@ -368,6 +368,9 @@
               </svg>
             </button>
             <div class="brand" id="topbarBrand">Seans Planlayıcı</div>
+            <button type="button" id="topbarDoorBtn" class="btn topbar__door-btn hidden" title="Kapıyı aç" aria-label="Kapıyı aç">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><rect x="3" y="2" width="13" height="20" rx="2"/><path d="M16 12h5m-2-2 2 2-2 2"/><circle cx="13" cy="12" r="1" fill="currentColor" stroke="none"/></svg>
+            </button>
           </div>
           <div class="topbar__right">
             <div class="topbar__actions-inline" id="topbarActionsInline">
@@ -721,8 +724,24 @@
             </div>
           </div>
           <div class="admin-main-panel__content admin-main-panel__content--entry-list" id="entryListPanel">
+            <div id="entryListFilterBar" class="entry-list-filter-bar">
+              <div id="entryListSessionFilters" class="entry-list-tabs" role="tablist" aria-label="Durum filtresi">
+                <button type="button" id="entryListFilterAll" class="entry-list-tab is-active" data-entry-filter="all">Tümü</button>
+                <button type="button" id="entryListFilterPresent" class="entry-list-tab" data-entry-filter="present">Geldi</button>
+                <button type="button" id="entryListFilterNoShow" class="entry-list-tab" data-entry-filter="no_show">Gelmedi</button>
+                <button type="button" id="entryListFilterScheduled" class="entry-list-tab" data-entry-filter="scheduled">Planlandı</button>
+                <button type="button" id="entryListFilterPending" class="entry-list-tab" data-entry-filter="pending">Onaylanmadı</button>
+              </div>
+              <div id="entryListWalkInFilters" class="entry-list-tabs hidden" role="tablist" aria-label="Giriş türü filtresi">
+                <button type="button" id="entryListWalkInFilterAll" class="entry-list-tab is-active" data-walkin-filter="all">Tümü</button>
+                <button type="button" id="entryListWalkInFilterQr" class="entry-list-tab" data-walkin-filter="qr">QR</button>
+                <button type="button" id="entryListWalkInFilterPhone" class="entry-list-tab" data-walkin-filter="phone">Telefon</button>
+                <button type="button" id="entryListWalkInFilterCard" class="entry-list-tab" data-walkin-filter="card">Kart</button>
+              </div>
+            </div>
             <div id="entryListEmpty" class="hint hidden">Bu tarihte kayıt yok.</div>
             <div id="entryListTableWrap" class="entry-list-table-wrap"></div>
+            <div id="entryListPagination" class="list-pagination hidden"></div>
           </div>
         </section>
 
@@ -811,14 +830,19 @@
       </main>
 
       <nav class="admin-mobile-bar hidden" id="adminMobileBar" aria-label="Admin kısayolları">
-        <button type="button" id="adminMobileSidebarBtn" class="admin-mobile-bar__btn btn btn--ghost" title="Menü" aria-label="Menüyü aç" aria-expanded="false" aria-controls="sidebar">
+        <button type="button" id="adminMobileSidebarBtn" class="admin-mobile-bar__btn admin-mobile-bar__btn--menu btn btn--ghost" title="Menü" aria-label="Menüyü aç" aria-expanded="false" aria-controls="sidebar">
           <span class="admin-mobile-bar__icon-wrap">
             <span class="admin-mobile-bar__icon" aria-hidden="true">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
             </span>
             <span id="adminMobileMenuBadge" class="admin-mobile-bar__badge hidden" aria-hidden="true"></span>
           </span>
           <span class="admin-mobile-bar__label">Menü</span>
+        </button>
+        <button type="button" id="adminMobileDoorBtn" class="admin-mobile-bar__btn btn btn--ghost admin-mobile-bar__btn--door" title="Kapıyı aç" aria-label="Kapıyı aç">
+          <span class="admin-mobile-bar__icon" aria-hidden="true">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="2" width="13" height="20" rx="2"/><path d="M16 12h5m-2-2 2 2-2 2"/><circle cx="13" cy="12" r="1" fill="currentColor" stroke="none"/></svg>
+          </span>
         </button>
         <button type="button" id="adminMobileAddSessionBtn" class="admin-mobile-bar__btn admin-mobile-bar__btn--primary btn btn--primary" title="Seans Ekle">
           <span class="admin-mobile-bar__icon" aria-hidden="true">
@@ -1285,6 +1309,10 @@
               <label class="label" for="mcProfession">Mesleği</label>
               <input id="mcProfession" class="input" />
             </div>
+            <div class="formRow">
+              <label class="label" for="mcCardNo">Kart No</label>
+              <input id="mcCardNo" class="input" placeholder="RFID kart numarası" />
+            </div>
             <div class="formRow formRow--full">
               <label class="label" for="mcEmail">E-Posta (üye girişi için)</label>
               <input id="mcEmail" class="input" type="email" placeholder="Giriş kullanıcı adı olarak kullanılır" />
@@ -1671,6 +1699,10 @@
             <div class="formRow formRow--full">
               <label class="label" for="editStaffEmail">E-posta</label>
               <input id="editStaffEmail" class="input" type="email" placeholder="ornek@email.com" autocomplete="email" />
+            </div>
+            <div class="formRow formRow--full">
+              <label class="label" for="editStaffCardNo">Kart No</label>
+              <input id="editStaffCardNo" class="input" placeholder="RFID kart numarası" />
             </div>
           </div>
           <div id="staffEditError" class="error hidden modal-form-error"></div>

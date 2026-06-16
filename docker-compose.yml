@@ -1,0 +1,77 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: fp_postgres
+    environment:
+      POSTGRES_DB: fizyopark_mm_gh
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: fizyopark2024
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/database/schema.sql:/docker-entrypoint-initdb.d/01_schema.sql
+      - ./docker/init-migrations.sh:/docker-entrypoint-initdb.d/02_migrations.sh
+      - ./backend/database:/migrations
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d fizyopark_mm_gh"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: fp_backend
+    environment:
+      PORT: 3000
+      NODE_ENV: production
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: fizyopark_mm_gh
+      DB_USER: postgres
+      DB_PASSWORD: fizyopark2024
+      JWT_SECRET: fizyopark_jwt_secret_2024_degistir
+      JWT_EXPIRES_IN: 24h
+      CORS_ORIGIN: http://192.168.9.182,http://192.168.9.101
+      DOOR_RASPI_URL: http://192.168.9.126:7000/open
+      RATE_LIMIT_DISABLED: "1"
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    image: nginx:alpine
+    container_name: fp_frontend
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      - .:/usr/share/nginx/html:ro
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: fp_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: fizyoparkankara@gmail.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  pgadmin_data:

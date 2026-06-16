@@ -208,6 +208,10 @@ router.put('/:id', [
       updateFields.push(`working_hours = $${paramIndex++}`);
       values.push(JSON.stringify(updates.workingHours));
     }
+    if (updates.cardNo !== undefined) {
+      updateFields.push(`card_no = $${paramIndex++}`);
+      values.push(updates.cardNo ? String(updates.cardNo).trim() || null : null);
+    }
 
     let updated;
     if (updateFields.length === 0) {

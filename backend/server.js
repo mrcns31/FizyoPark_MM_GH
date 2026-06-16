@@ -24,6 +24,7 @@ import sessionAttendanceRoutes from './routes/session-attendance.js';
 import bootstrapRoutes from './routes/bootstrap.js';
 import packageRequestsRoutes from './routes/package-requests.js';
 import closurePeriodsRoutes from './routes/closure-periods.js';
+import doorRoutes from './routes/door.js';
 
 dotenv.config();
 
@@ -91,6 +92,7 @@ app.use('/api/sessions/attendance', sessionAttendanceRoutes);
 app.use('/api/bootstrap', bootstrapRoutes);
 app.use('/api/package-requests', packageRequestsRoutes);
 app.use('/api/closure-periods', closurePeriodsRoutes);
+app.use('/api/door', doorRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
