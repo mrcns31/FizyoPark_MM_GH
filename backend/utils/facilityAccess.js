@@ -29,6 +29,7 @@ export async function listWalkInAccessForDate(db, opts = {}) {
     const res = await db.query(
       `SELECT fal.id,
               fal.member_id,
+              fal.source,
               EXTRACT(EPOCH FROM fal.accessed_at) * 1000 AS accessed_ts,
               COALESCE(NULLIF(TRIM(m.first_name || ' ' || m.last_name), ''), NULLIF(TRIM(m.name), '')) AS member_name,
               m.member_no
@@ -45,7 +46,8 @@ export async function listWalkInAccessForDate(db, opts = {}) {
       memberName: row.member_name || '',
       memberNo: row.member_no || '',
       accessedAt: Math.round(Number(row.accessed_ts)),
-      label: 'Randevusuz QR',
+      source: row.source || 'qr',
+      label: row.source === 'phone' ? 'Telefon' : 'Randevusuz QR',
     }));
   } catch (err) {
     if (err.code === '42P01') {

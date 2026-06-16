@@ -579,6 +579,7 @@ function fmtEntryListStaffCell(r) {
 function fmtEntryListStatusLabelMobile(r) {
   const label = String(r.attendanceLabel || "").trim();
   if (label.startsWith("QR")) return label;
+  if (label.startsWith("Telefon")) return label;
   if (label.startsWith("Yönetici")) return label;
   if (label === "Planlandı" || label === "Onaylanmadı" || label === "—") return label;
   const m = label.match(/^(.+?)\s*-\s*(Geldi|Gelmedi|Katılındı)$/);
@@ -587,6 +588,7 @@ function fmtEntryListStatusLabelMobile(r) {
   }
   if (r.statusKind === "scheduled") return "Planlandı";
   if (r.statusKind === "pending") return "Onaylanmadı";
+  if (r.statusKind === "phone") return label || "Telefon - Geldi";
   if (r.statusKind === "qr") return label || "QR - Geldi";
   if (r.statusKind === "no_show") {
     const staff = getStaffById(r.staffId);
@@ -6035,6 +6037,14 @@ function closeEntryListModal() {
 
 function renderEntryListStatusCell(r) {
   var statusText = isAdminMobilePanel() ? fmtEntryListStatusLabelMobile(r) : (r.attendanceLabel || "").trim();
+  if (r.statusKind === "phone") {
+    return (
+      '<span class="entry-status entry-status--ok">' +
+      '<span class="entry-status__icon" aria-hidden="true">✓</span> ' +
+      escapeHtml(statusText || "Telefon - Geldi") +
+      "</span>"
+    );
+  }
   if (r.statusKind === "qr") {
     return (
       '<span class="entry-status entry-status--ok">' +

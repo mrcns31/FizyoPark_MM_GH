@@ -56,7 +56,7 @@ export function computePackageSessionCounts(sessions, lessonCount, now = Date.no
 }
 
 /** Kapı QR: randevu penceresindeki uygun seansı işaretle */
-export async function checkInSessionForMember(db, memberId, now = Date.now()) {
+export async function checkInSessionForMember(db, memberId, now = Date.now(), method = 'qr') {
   const res = await db.query(
     `SELECT s.id, s.start_ts, s.end_ts, s.member_package_id
      FROM sessions s
@@ -77,9 +77,9 @@ export async function checkInSessionForMember(db, memberId, now = Date.now()) {
 
   const session = res.rows[0];
   await db.query(
-    `UPDATE sessions SET checked_in_at = CURRENT_TIMESTAMP, check_in_method = 'qr',
+    `UPDATE sessions SET checked_in_at = CURRENT_TIMESTAMP, check_in_method = $2,
      attendance_outcome = 'present', updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
-    [session.id]
+    [session.id, method]
   );
 
   return {

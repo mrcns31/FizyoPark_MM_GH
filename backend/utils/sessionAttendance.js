@@ -80,6 +80,9 @@ export function buildPackageSessionApprovalInfo(row, now = Date.now()) {
   const startTs = Number(row.start_ts ?? row.startTs);
   const endTs = Number(row.end_ts ?? row.endTs);
 
+  if (checkedInAt && method === 'phone') {
+    return { label: 'Telefon - Geldi', kind: 'phone', checkInAt: checkedInAt };
+  }
   if (checkedInAt && method === 'qr') {
     return { label: 'QR', kind: 'qr', checkInAt: checkedInAt };
   }

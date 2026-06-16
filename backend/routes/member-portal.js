@@ -102,7 +102,7 @@ router.post('/verify-phone-access', async (req, res) => {
 
     let checkIn = { checkedIn: false, reason: 'no_session' };
     try {
-      checkIn = await checkInSessionForMember(db, memberId);
+      checkIn = await checkInSessionForMember(db, memberId, Date.now(), 'phone');
     } catch (checkInErr) {
       if (checkInErr.code !== '42703') throw checkInErr;
       console.warn('verify-phone-access: checked_in_at sütunu yok; migration_sessions_check_in.sql çalıştırın');
