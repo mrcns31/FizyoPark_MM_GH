@@ -155,11 +155,11 @@
       // personel/admin girişi — ek mesaj yok
     } else if (checkIn && checkIn.ok) {
       lines.push('Seansınıza giriş kaydedildi');
-      if ((source === 'phone' || source === 'card') && packageStats && packageStats.totalSessions) {
-        lines.push(packageStats.totalSessions + ' Seans Paketinizden Kalan : ' + packageStats.remainingSessions);
-      }
     } else {
       lines.push('Bugün için planlı bir seansınız yok');
+    }
+    if ((source === 'phone' || source === 'card') && packageStats && packageStats.totalSessions) {
+      lines.push(packageStats.totalSessions + ' Seans Paketinizden Kalan : ' + packageStats.remainingSessions);
     }
     if (lines.length > 0) {
       subtitleEl.textContent = lines.join('\n');

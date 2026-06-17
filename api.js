@@ -437,6 +437,49 @@
     return apiFetch('/members/' + id + '/reset-password', { method: 'POST', body: JSON.stringify({}) });
   }
 
+  // Nadiren değişen veriler (personel, oda, paket tanımları, çalışma saatleri) — localStorage, 24 saat
+  var RARE_CACHE_KEY  = 'fp_rare_v1';
+  var RARE_CACHE_TTL  = 24 * 60 * 60 * 1000;
+  // Sık değişen veriler (üyeler, üye paketleri) — localStorage, 30 dakika
+  var FREQ_CACHE_KEY  = 'fp_freq_v1';
+  var FREQ_CACHE_TTL  = 30 * 60 * 1000;
+
+  function readCache(key, ttl) {
+    try {
+      var raw = localStorage.getItem(key);
+      if (!raw) return null;
+      var entry = JSON.parse(raw);
+      if (Date.now() - entry.ts > ttl) { localStorage.removeItem(key); return null; }
+      return entry.data;
+    } catch (e) { return null; }
+  }
+
+  function writeCache(key, data) {
+    try { localStorage.setItem(key, JSON.stringify({ ts: Date.now(), data: data })); } catch (e) {}
+  }
+
+  function getStaticCache() {
+    var rare = readCache(RARE_CACHE_KEY, RARE_CACHE_TTL);
+    var freq = readCache(FREQ_CACHE_KEY, FREQ_CACHE_TTL);
+    if (!rare || !freq) return null;
+    return Object.assign({}, rare, freq);
+  }
+
+  function setStaticCache(data) {
+    writeCache(RARE_CACHE_KEY, { staff: data.staff, rooms: data.rooms,
+                                  packages: data.packages, workingHours: data.workingHours });
+    writeCache(FREQ_CACHE_KEY, { members: data.members, memberPackages: data.memberPackages });
+  }
+
+  function invalidateStaticCache() {
+    // Sadece sık değişen veriyi sıfırla; personel/oda/paket tanımları geçerliliğini korur
+    try { localStorage.removeItem(FREQ_CACHE_KEY); } catch (e) {}
+  }
+
+  function invalidateRareCache() {
+    try { localStorage.removeItem(RARE_CACHE_KEY); } catch (e) {}
+  }
+
   async function loadFullState(opts) {
     opts = opts || {};
     var sessionStart = opts.sessionStartDate || opts.sessionStart || opts.startDate;
@@ -444,6 +487,22 @@
     if (!sessionStart || !sessionEnd) {
       throw new Error('loadFullState requires startDate and endDate (or sessionStartDate/sessionEndDate)');
     }
+
+    var staticData = getStaticCache();
+    var sessionsUrl = '/sessions?startDate=' + encodeURIComponent(sessionStart) +
+      '&endDate=' + encodeURIComponent(sessionEnd);
+
+    if (staticData) {
+      // Sadece sessions'ı çek, static veri önbellekten
+      try {
+        var sessions = await apiFetch(sessionsUrl);
+        return mapBootstrapToState(Object.assign({}, staticData, { sessions: sessions }));
+      } catch (e) {
+        // Sessions başarısız olursa full bootstrap'a düş
+      }
+    }
+
+    // İlk yükleme veya önbellek süresi dolmuş: tam bootstrap
     var bootstrapUrl = '/bootstrap?startDate=' + encodeURIComponent(sessionStart) +
       '&endDate=' + encodeURIComponent(sessionEnd);
     var data;
@@ -453,6 +512,11 @@
       console.warn('bootstrap fallback:', bootstrapErr.message || bootstrapErr);
       return loadFullStateLegacy(sessionStart, sessionEnd);
     }
+    // Static kısmı önbelleğe al (sessions hariç)
+    var toCache = { members: data.members, staff: data.staff, rooms: data.rooms,
+                    packages: data.packages, memberPackages: data.memberPackages,
+                    workingHours: data.workingHours };
+    setStaticCache(toCache);
     return mapBootstrapToState(data);
   }
 
@@ -511,6 +575,7 @@
   // CRUD – frontend state güncellemesi için API yanıtını döndürür
   async function createMember(body) {
     var row = await apiFetch('/members', { method: 'POST', body: JSON.stringify(memberToApi(body)) });
+    invalidateStaticCache();
     return memberFromApi(row);
   }
   async function getFormerMembers() {
@@ -534,6 +599,7 @@
   }
   async function updateMember(id, body) {
     var row = await apiFetch('/members/' + id, { method: 'PUT', body: JSON.stringify(memberToApi(body)) });
+    invalidateStaticCache();
     return memberFromApi(row);
   }
   async function deleteMember(id, body) {
@@ -541,6 +607,7 @@
       method: 'DELETE',
       body: body ? JSON.stringify(body) : undefined
     });
+    invalidateStaticCache();
   }
 
   async function createStaff(body) {
@@ -554,6 +621,7 @@
         workingHours: body.workingHours || {},
       }),
     });
+    invalidateRareCache();
     return staffFromApi(row);
   }
   async function updateStaff(id, body) {
@@ -568,10 +636,12 @@
         cardNo: body.cardNo !== undefined ? (body.cardNo || null) : undefined,
       }),
     });
+    invalidateRareCache();
     return staffFromApi(row);
   }
-  async function deleteStaff(id) {
-    await apiFetch('/staff/' + id, { method: 'DELETE' });
+  async function deleteStaff(id, body) {
+    await apiFetch('/staff/' + id, { method: 'DELETE', body: JSON.stringify(body || {}) });
+    invalidateRareCache();
   }
 
   async function resetStaffPassword(id) {
@@ -580,14 +650,17 @@
 
   async function createRoom(body) {
     const row = await apiFetch('/rooms', { method: 'POST', body: JSON.stringify({ name: body.name, devices: body.devices || 1 }) });
+    invalidateRareCache();
     return roomFromApi(row);
   }
   async function updateRoom(id, body) {
     const row = await apiFetch('/rooms/' + id, { method: 'PUT', body: JSON.stringify(body) });
+    invalidateRareCache();
     return roomFromApi(row);
   }
   async function deleteRoom(id) {
     await apiFetch('/rooms/' + id, { method: 'DELETE' });
+    invalidateRareCache();
   }
 
   async function createPackage(body) {
@@ -600,6 +673,7 @@
     const wlc = body.weeklyLessonCount ?? body.weekly_lesson_count;
     if (wlc != null && wlc !== '') payload.weekly_lesson_count = Number(wlc);
     const row = await apiFetch('/packages', { method: 'POST', body: JSON.stringify(payload) });
+    invalidateRareCache();
     return packageFromApi(row);
   }
   async function updatePackage(id, body) {
@@ -610,10 +684,12 @@
     if (body.weeklyLessonCount !== undefined) payload.weekly_lesson_count = body.weeklyLessonCount;
     if (body.packageType !== undefined) payload.package_type = body.packageType;
     const row = await apiFetch('/packages/' + id, { method: 'PUT', body: JSON.stringify(payload) });
+    invalidateRareCache();
     return packageFromApi(row);
   }
   async function deletePackage(id) {
     await apiFetch('/packages/' + id, { method: 'DELETE' });
+    invalidateRareCache();
   }
 
   async function getMemberPackages(memberId) {
@@ -648,6 +724,7 @@
       }),
     };
     const row = await apiFetch('/member-packages', { method: 'POST', body: JSON.stringify(payload) });
+    invalidateStaticCache();
     return memberPackageFromApi(row);
   }
   async function updateMemberPackage(id, body) {
@@ -661,11 +738,13 @@
       return { day_of_week: s.dayOfWeek, start_time: s.startTime, staff_id: s.staffId };
     });
     const row = await apiFetch('/member-packages/' + id, { method: 'PUT', body: JSON.stringify(payload) });
+    invalidateStaticCache();
     return memberPackageFromApi(row);
   }
   async function endMemberPackage(id, endDate) {
     const body = endDate ? { end_date: endDate } : {};
     const row = await apiFetch('/member-packages/' + id + '/end', { method: 'POST', body: JSON.stringify(body) });
+    invalidateStaticCache();
     return row ? memberPackageFromApi(row) : null;
   }
   async function getMemberPackageSessions(id) {
@@ -778,6 +857,7 @@
       payload[k] = workingHours[k];
     });
     await apiFetch('/settings/working-hours', { method: 'PUT', body: JSON.stringify(payload) });
+    invalidateRareCache();
   }
 
   async function getInstitutionWhatsapp() {
@@ -888,6 +968,8 @@
     updateAccountProfile,
     logout,
     loadFullState,
+    invalidateStaticCache,
+    invalidateRareCache,
     loadMemberPortalState,
     getMemberDashboard,
     cancelMemberSession,

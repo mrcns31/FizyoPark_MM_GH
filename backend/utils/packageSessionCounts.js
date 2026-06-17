@@ -55,6 +55,42 @@ export function computePackageSessionCounts(sessions, lessonCount, now = Date.no
   };
 }
 
+/**
+ * Aktif paketteki tüketilen seans sayısı >= lesson_count ise paketi 'completed' yapar.
+ * memberPackageId verilirse yalnızca o paketi kontrol eder; null ise tüm aktif paketleri tarar.
+ * Returns: tamamlanan paket id'lerinin listesi
+ */
+export async function autoCompletePackageIfExhausted(db, memberPackageId = null) {
+  let sql = `
+    UPDATE member_packages mp
+    SET status = 'completed', updated_at = CURRENT_TIMESTAMP
+    FROM packages p
+    WHERE mp.package_id = p.id
+      AND mp.status = 'active'
+  `;
+  const params = [];
+  if (memberPackageId != null) {
+    params.push(memberPackageId);
+    sql += ` AND mp.id = $${params.length}`;
+  }
+  sql += `
+      AND (
+        SELECT COUNT(*)
+        FROM sessions s
+        WHERE s.member_package_id = mp.id
+          AND s.deleted_at IS NULL
+          AND (
+            s.checked_in_at IS NOT NULL
+            OR s.attendance_outcome = 'no_show'
+            OR s.end_ts < EXTRACT(EPOCH FROM NOW()) * 1000
+          )
+      ) >= p.lesson_count
+    RETURNING mp.id
+  `;
+  const result = await db.query(sql, params);
+  return result.rows.map((r) => r.id);
+}
+
 /** Kapı QR: randevu penceresindeki uygun seansı işaretle */
 export async function checkInSessionForMember(db, memberId, now = Date.now(), method = 'qr') {
   const res = await db.query(
@@ -81,6 +117,8 @@ export async function checkInSessionForMember(db, memberId, now = Date.now(), me
      attendance_outcome = 'present', updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
     [session.id, method]
   );
+
+  await autoCompletePackageIfExhausted(db, session.member_package_id);
 
   return {
     checkedIn: true,

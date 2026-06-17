@@ -471,10 +471,12 @@ function removeSessionsFromState(sessionIds) {
 }
 
 async function goToToday() {
+  if (isAdminUser() && ui.adminMainView && ui.adminMainView !== "calendar") showAdminCalendarView();
   const now = new Date();
   ui.currentDay = startOfDay(now);
   ui.currentMonth = startOfMonth(now);
   ui.weekStart = startOfWeekMonday(now);
+  ui.viewMode = "day";
   saveUi();
   render();
   if (!isMemberUser() && await ensurePlannerSessionsLoaded()) {
@@ -656,10 +658,9 @@ function getSessionMemberDisplayName(s) {
 
 function getSessionMemberShortName(s) {
   const m = getMemberById(getSessionMemberId(s));
-  if (m) return getMemberShortName(m);
+  if (m) return getMemberDisplayName(m);
   const fromSession = getSessionMemberNameFromRow(s);
-  if (fromSession) return getMemberShortName({ name: fromSession });
-  return "Üye";
+  return fromSession || "Üye";
 }
 
 /** Ad/soyad araması: tam ad, tek kelime veya «ad soyad» (her parça eşleşmeli). */
@@ -1139,14 +1140,12 @@ function cacheEls() {
     "resetMemberPasswordBtn",
     "deleteMemberCardBtn",
     "deleteMemberModal",
+    "deleteMemberName",
     "deleteMemberPassword",
-    "deleteMemberStep1",
-    "deleteMemberStep2",
     "deleteMemberHistoryYes",
     "deleteMemberHistoryNo",
     "deleteMemberError",
     "deleteMemberCancelBtn",
-    "deleteMemberNextBtn",
     "deleteMemberConfirmBtn",
     "adminPasswordModal",
     "adminPasswordModalTitle",
@@ -1220,20 +1219,6 @@ function cacheEls() {
     "openPackagesBtn",
     "packagesSummary",
     "openActivityLogsBtn",
-    "openDevResetBtn",
-    "devResetCheckboxes",
-    "devResetWarnings",
-    "devResetAdminPassword",
-    "devResetError",
-    "devResetConfirmBtn",
-    "openDevSeedBtn",
-    "adminHubDevSeedNav",
-    "devSeedStatus",
-    "devSeedCount",
-    "devSeedAdminPassword",
-    "devSeedError",
-    "devSeedSuccess",
-    "devSeedConfirmBtn",
     "packagesList",
     "packagesTable",
     "packagesExportExcelBtn",
@@ -1263,6 +1248,12 @@ function cacheEls() {
     "staffEditError",
     "saveStaffEditBtn",
     "deleteStaffEditBtn",
+    "deleteStaffModal",
+    "deleteStaffName",
+    "deleteStaffPassword",
+    "deleteStaffError",
+    "deleteStaffCancelBtn",
+    "deleteStaffConfirmBtn",
     "resetStaffPasswordBtn",
     "staffHoursModal",
     "staffHoursTitle",
@@ -1273,6 +1264,7 @@ function cacheEls() {
     "taskDistributionModal",
     "taskDistributionContent",
     "openListMembersBtn",
+    "refreshListMembersBtn",
     "openCalendarBtn",
     "adminMembersListView",
     "listMembersContent",
@@ -1497,6 +1489,9 @@ async function setCurrentDay(d) {
 async function setViewMode(mode) {
   const prevMode = ui.viewMode;
   if (isMemberUser()) clearMemberCalendarPackageFilter();
+  if (isAdminUser() && ui.adminMainView && ui.adminMainView !== "calendar") {
+    showAdminCalendarView();
+  }
   if (mode === "day") {
     if (prevMode === "week") {
       ui.currentDay = startOfDay(ui.weekStart);
@@ -1552,7 +1547,7 @@ function handleMobileEventTap(ev, onOpen) {
 }
 
 function isPlannerDatePickEnabled() {
-  return !isMemberUser() && isAdminMobilePanel();
+  return !isMemberUser() && isAdminUser();
 }
 
 function syncPlannerJumpDateInput() {
@@ -1680,6 +1675,9 @@ function updateAdminMobileTopbarClass() {
   }
   if (els.adminMobileBar) els.adminMobileBar.classList.toggle("hidden", !showAdminBar);
   if (els.staffMobileBar) els.staffMobileBar.classList.toggle("hidden", !showStaffBar);
+  // Mobil personel filtre satırı
+  const staffMobileRow = document.getElementById("staffFilterMobileRow");
+  if (staffMobileRow) staffMobileRow.classList.add("hidden");
   if (els.topbarActionsMenuWrap && isAdminUser()) {
     els.topbarActionsMenuWrap.classList.toggle("hidden", adminMobile);
   }
@@ -1700,7 +1698,8 @@ function updateTopbarForViewMode() {
   const adminMobile = isAdminMobilePanel();
   updateAdminMobileTopbarClass();
   if (els.todayBtn) {
-    els.todayBtn.classList.toggle("hidden", adminMobile || viewingToday);
+    const showToday = !adminMobile && (ui.viewMode === "week" || ui.viewMode === "month");
+    els.todayBtn.classList.toggle("hidden", !showToday);
   }
   if (els.viewDayListBtn) {
     els.viewDayListBtn.classList.toggle("btn--primary", getEffectiveDayDisplayMode() === "list");
@@ -1731,7 +1730,6 @@ function updateTopbarForViewMode() {
       saveUi();
     }
   } else {
-    if (els.viewDayBtn) els.viewDayBtn.classList.toggle("hidden", !showTopbarViewModes);
     if (els.viewWeekBtn) els.viewWeekBtn.classList.toggle("hidden", !showTopbarViewModes);
     if (els.viewMonthBtn) els.viewMonthBtn.classList.toggle("hidden", !showTopbarViewModes);
     if (els.viewDayListBtn) {
@@ -1739,17 +1737,10 @@ function updateTopbarForViewMode() {
     }
   }
   updatePlannerFiltersToggleState();
-  ["day", "week", "month"].forEach(function (mode) {
-    const btn = mode === "day" ? els.viewDayBtn : mode === "week" ? els.viewWeekBtn : els.viewMonthBtn;
+  ["week", "month"].forEach(function (mode) {
+    const btn = mode === "week" ? els.viewWeekBtn : els.viewMonthBtn;
     if (!btn) return;
-    if (mode === "day") {
-      btn.classList.toggle(
-        "btn--primary",
-        ui.viewMode === "day" && (mobilePlanner || getEffectiveDayDisplayMode() !== "list")
-      );
-    } else {
-      btn.classList.toggle("btn--primary", ui.viewMode === mode);
-    }
+    btn.classList.toggle("btn--primary", ui.viewMode === mode);
   });
   updateDateNavLabel();
 }
@@ -1771,49 +1762,64 @@ function updateWorkingHoursSummary() {
   }
 }
 
+function buildStaffInitialsBar(className) {
+  if (!isAdminUser() || !state.staff || !state.staff.length) return null;
+  const bar = document.createElement("div");
+  bar.className = className || "staff-initials-bar";
+  for (const s of state.staff) {
+    const fn = (s.firstName || s.first_name || "").trim();
+    const ln = (s.lastName || s.last_name || "").trim();
+    const initials = (fn.charAt(0) + ln.charAt(0)).toUpperCase();
+    const color = staffColor(s.id);
+    const isActive = ui.filterStaffId && normId(ui.filterStaffId) === normId(s.id);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "staff-initials-btn" + (isActive ? " staff-initials-btn--active" : "");
+    btn.title = getStaffFullName(s);
+    btn.textContent = initials;
+    btn.style.background = isActive ? color.border : color.bg;
+    btn.style.borderColor = color.border;
+    btn.style.color = isActive ? "#fff" : color.border;
+    btn.addEventListener("click", () => {
+      ui.filterStaffId = isActive ? "" : String(s.id);
+      render();
+    });
+    bar.appendChild(btn);
+  }
+  return bar;
+}
+
 function renderHeader() {
   const header = els.plannerHeader;
   header.innerHTML = "";
 
   if (ui.viewMode === "day") {
-    // Günlük görünüm: Sadece seçili gün
     const d = ui.currentDay;
     const dayOfWeek = d.getDay();
-    if (!isDayEnabled(dayOfWeek)) {
-      header.style.gridTemplateColumns = "74px 1fr";
-      const blank = document.createElement("div");
-      blank.className = "headCell";
-      blank.textContent = "Saat";
-      header.appendChild(blank);
-      const cell = document.createElement("div");
-      cell.className = "headCell headCell--day";
-      cell.innerHTML = calendarHeadCellHtml(d, { closed: true });
-      header.appendChild(cell);
-      return;
-    }
-
     header.style.gridTemplateColumns = "74px 1fr";
+
     const blank = document.createElement("div");
     blank.className = "headCell";
     blank.textContent = "Saat";
     header.appendChild(blank);
 
     const cell = document.createElement("div");
-    cell.className = "headCell headCell--day";
-    cell.innerHTML = calendarHeadCellHtml(d);
-    header.appendChild(cell);
-  } else if (ui.viewMode === "week") {
-    // Haftalık görünüm
+    cell.className = "headCell headCell--day headCell--day-flex";
+    const dateInfo = document.createElement("div");
+    dateInfo.innerHTML = calendarHeadCellHtml(d, isDayEnabled(dayOfWeek) ? {} : { closed: true });
+    cell.appendChild(dateInfo);
 
-    // Açık günleri say
+    const staffBar = buildStaffInitialsBar("staff-initials-bar staff-initials-bar--inline");
+    if (staffBar) cell.appendChild(staffBar);
+    header.appendChild(cell);
+
+    if (!isDayEnabled(dayOfWeek)) return;
+
+  } else if (ui.viewMode === "week") {
     let enabledCount = 0;
     for (let i = 0; i < 7; i++) {
-      const d = addDays(ui.weekStart, i);
-      const dayOfWeek = d.getDay();
-      if (isDayEnabled(dayOfWeek)) enabledCount++;
+      if (isDayEnabled(addDays(ui.weekStart, i).getDay())) enabledCount++;
     }
-
-    // Grid column sayısını dinamik yap; gün sütunları min 180px (aynı saatte 2 randevu yan yana sığsın)
     header.style.gridTemplateColumns = `74px repeat(${enabledCount}, minmax(180px, 1fr))`;
 
     const blank = document.createElement("div");
@@ -1821,17 +1827,18 @@ function renderHeader() {
     blank.textContent = "Saat";
     header.appendChild(blank);
 
-    // Sadece açık günleri göster
     for (let i = 0; i < 7; i++) {
       const d = addDays(ui.weekStart, i);
-      const dayOfWeek = d.getDay();
-      if (!isDayEnabled(dayOfWeek)) continue; // Kapalı günleri atla
-
+      if (!isDayEnabled(d.getDay())) continue;
       const cell = document.createElement("div");
       cell.className = "headCell headCell--day";
       cell.innerHTML = calendarHeadCellHtml(d);
       header.appendChild(cell);
     }
+
+    // Haftalık görünümde spanning satır olarak ekle
+    const staffBar = buildStaffInitialsBar("staff-initials-bar");
+    if (staffBar) header.appendChild(staffBar);
   }
 }
 
@@ -1897,7 +1904,7 @@ function clearMemberCalendarPackageFilter() {
 }
 
 function fmtCalendarHeaderDate(d) {
-  return `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()}`;
+  return `${pad2(d.getDate())}-${pad2(d.getMonth() + 1)}-${d.getFullYear()}`;
 }
 
 function fmtCalendarHeaderDayName(d) {
@@ -2886,9 +2893,9 @@ function renderAdminStaffSlotCardHtml(group, entryIdx) {
   const color = staffColor(group.staffId);
   const memberLines = group.sessions
     .map(function (sess) {
-      return escapeHtml(getSessionMemberShortName(sess));
+      return '<div class="event__member-name">' + escapeHtml(getSessionMemberShortName(sess)) + '</div>';
     })
-    .join("<br>");
+    .join("");
   const cardStyle =
     "--staff-card-border:" + color.border + ";--staff-card-bg:" + color.bg + ";";
   const deleteBtnHtml = canManageSessions()
@@ -2945,9 +2952,9 @@ function renderAdminPlannerListCardHtml(entry, entryIdx) {
     const staff = getStaffById(group.staffId);
     const memberLines = group.sessions
       .map(function (sess) {
-        return escapeHtml(getSessionMemberShortName(sess));
+        return '<div class="event__member-name">' + escapeHtml(getSessionMemberShortName(sess)) + '</div>';
       })
-      .join("<br>");
+      .join("");
     return (
       '<article class="planner-session-card planner-session-card--admin" tabindex="0" data-entry-idx="' +
       entryIdx +
@@ -2982,7 +2989,7 @@ function renderAdminPlannerListCardHtml(entry, entryIdx) {
     escapeHtml(fmtStaffLabelWithRoomRemaining(staff, s.roomId, s.startTs, s.endTs)) +
     "</div>" +
     '<div class="planner-session-card__members">' +
-    escapeHtml(getSessionMemberShortName(s)) +
+    '<div class="event__member-name">' + escapeHtml(getSessionMemberShortName(s)) + '</div>' +
     "</div>" +
     (note ? '<div class="planner-session-card__detail">' + escapeHtml(note) + "</div>" : "") +
     "</div></article>"
@@ -3737,7 +3744,7 @@ function renderEvents({ startMin, slotMin, slotsCount }) {
           <div class="event__title" title="${escapeHtml(fullTitle)}">${escapeHtml(staffShort)}</div>
           ${groupDeleteBtn}
         </div>
-        <div class="event__members">${memberShortNames.map((n) => escapeHtml(n)).join("<br>")}</div>
+        <div class="event__members">${memberShortNames.map((n) => `<div class="event__member-name">${escapeHtml(n)}</div>`).join("")}</div>
       `;
     } else {
       ev.innerHTML = `
@@ -3745,7 +3752,7 @@ function renderEvents({ startMin, slotMin, slotsCount }) {
           <div class="event__title" title="${escapeHtml(fullTitle)}">${escapeHtml(staffShort)}</div>
           ${groupDeleteBtn}
         </div>
-        <div class="event__members">${memberShortNames.map((n) => escapeHtml(n)).join("<br>")}</div>
+        <div class="event__members">${memberShortNames.map((n) => `<div class="event__member-name">${escapeHtml(n)}</div>`).join("")}</div>
       `;
     }
 
@@ -3890,7 +3897,7 @@ function renderEvents({ startMin, slotMin, slotsCount }) {
           <div class="event__title" title="${escapeHtml(fullTitle)}">${escapeHtml(staffShort)}</div>
           ${singleDeleteBtnHtml}
         </div>
-        <div class="event__members">${escapeHtml(memberShort)}</div>
+        <div class="event__members"><div class="event__member-name">${escapeHtml(memberShort)}</div></div>
       `;
     } else {
       ev.innerHTML = `
@@ -3898,7 +3905,7 @@ function renderEvents({ startMin, slotMin, slotsCount }) {
           <div class="event__title" title="${escapeHtml(fullTitle)}">${escapeHtml(staffShort)}</div>
           ${singleDeleteBtnHtml}
         </div>
-        <div class="event__members">${escapeHtml(memberShort)}</div>
+        <div class="event__members"><div class="event__member-name">${escapeHtml(memberShort)}</div></div>
       `;
     }
 
@@ -4088,7 +4095,7 @@ function formatDateTR(dateStr) {
   if (!dateStr) return "";
   var parts = String(dateStr).slice(0, 10).split("-");
   if (parts.length !== 3) return dateStr;
-  return parts[2] + "." + parts[1] + "." + parts[0];
+  return parts[2] + "-" + parts[1] + "-" + parts[0];
 }
 
 /** Her personel için kendine özgü, birbirinden ayrışan renk paleti (HSL) */
@@ -4338,8 +4345,6 @@ function openPackagesModal() {
   openAdminHubModal("packages");
 }
 
-var devResetMeta = null;
-var devResetPreviewTimer = null;
 
 function openActivityLogsPage() {
   window.open("./activity-logs.html", "_blank", "noopener,noreferrer");
@@ -4349,21 +4354,6 @@ function openActivityLogsModal() {
   openActivityLogsPage();
 }
 
-function updateDevResetVisibility() {
-  var isAdmin = isAdminUser();
-  if (els.openDevResetBtn) {
-    els.openDevResetBtn.classList.toggle("hidden", !isAdmin);
-  }
-  if (els.openDevSeedBtn) {
-    els.openDevSeedBtn.classList.toggle("hidden", !isAdmin);
-  }
-  if (els.adminHubDevResetNav) {
-    els.adminHubDevResetNav.classList.toggle("hidden", !isAdmin);
-  }
-  if (els.adminHubDevSeedNav) {
-    els.adminHubDevSeedNav.classList.toggle("hidden", !isAdmin);
-  }
-}
 
 function isAdminUser() {
   return !!(ui.currentUser && ui.currentUser.role === "admin");
@@ -4794,7 +4784,7 @@ function updateSidebarForRole() {
   var isAdmin = isAdminUser();
   var isStaff = isStaffUser();
   var isMember = isMemberUser();
-  updateDevResetVisibility();
+
   if (els.sidebarStaffSettings) {
     els.sidebarStaffSettings.classList.add("hidden");
   }
@@ -5046,7 +5036,7 @@ async function approveMemberDeletionRequest(memberId) {
     applyStateFromApi(loaded, fetchRange);
     closeMemberCardModal();
     closeRequestsSubPanel();
-    if (isAdminMembersListViewActive()) await openListMembersModal();
+    if (isAdminMembersListViewActive()) await openListMembersModal({ resetFilters: false });
     else render();
     await refreshAdminDeletionRequests();
     await showAppAlert("Üyelik iptali onaylandı.");
@@ -5070,7 +5060,7 @@ async function rejectMemberDeletionRequest(memberId) {
       openMemberCard(memberId);
     } else {
       closeRequestsSubPanel();
-      if (isAdminMembersListViewActive()) await openListMembersModal();
+      if (isAdminMembersListViewActive()) await openListMembersModal({ resetFilters: false });
     }
     render();
     await refreshAdminDeletionRequests();
@@ -6501,6 +6491,7 @@ function showAdminMainView(view) {
 }
 
 async function goToPrevPeriod() {
+  if (isAdminUser() && ui.adminMainView && ui.adminMainView !== "calendar") showAdminCalendarView();
   if (ui.viewMode === "day") {
     await setCurrentDay(addDays(ui.currentDay, -1));
   } else if (ui.viewMode === "month") {
@@ -6517,6 +6508,7 @@ async function goToPrevPeriod() {
 }
 
 async function goToNextPeriod() {
+  if (isAdminUser() && ui.adminMainView && ui.adminMainView !== "calendar") showAdminCalendarView();
   if (ui.viewMode === "day") {
     await setCurrentDay(addDays(ui.currentDay, 1));
   } else if (ui.viewMode === "month") {
@@ -7222,7 +7214,7 @@ function updateAdminHubNavVisibility() {
   if (els.adminHubModal) {
     els.adminHubModal.classList.toggle("admin-hub-modal--profile-only", profileOnlyMobile);
   }
-  updateDevResetVisibility();
+
 }
 
 function refreshAdminHubSection(section) {
@@ -7231,8 +7223,6 @@ function refreshAdminHubSection(section) {
   else if (section === "packages") preparePackagesPanel();
   else if (section === "staff-list") prepareStaffListPanel();
   else if (section === "closure-days") prepareClosureDaysPanel();
-  else if (section === "dev-reset") prepareDevResetPanel();
-  else if (section === "dev-seed") prepareDevSeedPanel();
   else if (section === "profile") fillAdminProfileModal();
 }
 
@@ -7264,10 +7254,6 @@ function openAdminHubModal(section) {
 
 function closeAdminHubModal() {
   if (els.adminHubModal) els.adminHubModal.classList.add("hidden");
-  if (devResetPreviewTimer) {
-    clearTimeout(devResetPreviewTimer);
-    devResetPreviewTimer = null;
-  }
 }
 
 
@@ -7771,284 +7757,7 @@ function bindAdminProfileActions() {
   }
 }
 
-function getSelectedDevResetTargets() {
-  if (!els.devResetCheckboxes) return [];
-  var checked = els.devResetCheckboxes.querySelectorAll('input[type="checkbox"][data-target]:checked');
-  var targets = [];
-  checked.forEach(function (cb) {
-    if (cb.dataset.target) targets.push(cb.dataset.target);
-  });
-  return targets;
-}
 
-function renderDevResetWarnings(preview) {
-  if (!els.devResetWarnings) return;
-  var parts = [];
-  if (preview && preview.autoAdded && preview.autoAdded.length) {
-    var labels = (devResetMeta && devResetMeta.groups || []).reduce(function (acc, g) {
-      acc[g.id] = g.label;
-      return acc;
-    }, {});
-    var autoLabels = preview.autoAdded.map(function (id) { return labels[id] || id; });
-    parts.push("<strong>Otomatik eklenecek:</strong> " + escapeHtml(autoLabels.join(", ")));
-  }
-  if (preview && preview.warnings && preview.warnings.length) {
-    preview.warnings.forEach(function (w) {
-      var msgs = (w.messages || []).map(function (m) { return escapeHtml(m); }).join("<br>");
-      parts.push("<strong>" + escapeHtml(w.label || w.group) + ":</strong><br>" + msgs);
-    });
-  }
-  if (parts.length === 0) {
-    els.devResetWarnings.style.display = "none";
-    els.devResetWarnings.innerHTML = "";
-    return;
-  }
-  els.devResetWarnings.style.display = "block";
-  els.devResetWarnings.innerHTML = "<div style=\"font-size:13px; line-height:1.45;\">⚠ " + parts.join("<br><br>") + "</div>";
-}
-
-function refreshDevResetPreview() {
-  if (devResetPreviewTimer) clearTimeout(devResetPreviewTimer);
-  devResetPreviewTimer = setTimeout(function () {
-    devResetPreviewTimer = null;
-    var targets = getSelectedDevResetTargets();
-    if (!targets.length) {
-      renderDevResetWarnings(null);
-      return;
-    }
-    if (!window.API || !window.API.previewDevReset) return;
-    window.API.previewDevReset(targets).then(function (preview) {
-      renderDevResetWarnings(preview);
-    }).catch(function () {
-      renderDevResetWarnings(null);
-    });
-  }, 200);
-}
-
-function renderDevResetCheckboxes() {
-  if (!els.devResetCheckboxes || !devResetMeta) return;
-  els.devResetCheckboxes.innerHTML = "";
-  var groups = devResetMeta.groups || [];
-  var counts = devResetMeta.counts || {};
-  groups.forEach(function (g) {
-    var cnt = counts[g.id];
-    var cntStr;
-    if (cnt == null) cntStr = " (sayı alınamadı)";
-    else cntStr = " (" + cnt + " kayıt)";
-    var row = document.createElement("label");
-    row.className = "checkboxRow";
-    row.style.cssText = "display:flex; align-items:flex-start; gap:10px; padding:10px 0; border-bottom:1px solid rgba(255,255,255,.06); cursor:pointer;";
-    row.innerHTML =
-      '<input type="checkbox" data-target="' + escapeHtml(g.id) + '" style="margin-top:3px;" />' +
-      '<span><strong>' + escapeHtml(g.label) + '</strong>' + escapeHtml(cntStr) +
-      '<br><span class="hint" style="font-size:12px;">' + escapeHtml(g.description || "") + '</span></span>';
-    var cb = row.querySelector("input");
-    cb.addEventListener("change", refreshDevResetPreview);
-    els.devResetCheckboxes.appendChild(row);
-  });
-}
-
-function prepareDevResetPanel() {
-  if (!window.API || !window.API.getDevResetMeta) return;
-  if (els.devResetError) {
-    els.devResetError.classList.add("hidden");
-    els.devResetError.textContent = "";
-  }
-  if (els.devResetAdminPassword) els.devResetAdminPassword.value = "";
-  if (els.devResetCheckboxes) {
-    els.devResetCheckboxes.innerHTML = "<div class=\"hint\" style=\"padding:12px 0;\">Yükleniyor…</div>";
-  }
-  renderDevResetWarnings(null);
-  window.API.getDevResetMeta().then(function (meta) {
-    devResetMeta = meta;
-    renderDevResetCheckboxes();
-  }).catch(function (err) {
-    if (els.devResetError) {
-      els.devResetError.textContent = (err && (err.message || err.error)) || "Sıfırlama bilgisi alınamadı.";
-      els.devResetError.classList.remove("hidden");
-    }
-    if (els.devResetCheckboxes) els.devResetCheckboxes.innerHTML = "";
-  });
-}
-
-function openDevResetModal() {
-  openAdminHubModal("dev-reset");
-}
-
-function renderDevSeedStatus(meta) {
-  if (!els.devSeedStatus) return;
-  if (!meta) {
-    els.devSeedStatus.textContent = "Durum yüklenemedi.";
-    return;
-  }
-  var parts = [
-    "Mevcut test üyesi: " + (meta.seedMemberCount != null ? meta.seedMemberCount : "—"),
-    "Personel: " + (meta.staffCount != null ? meta.staffCount : "—"),
-    "Slot (personel×gün×saat): " + (meta.slotCount != null ? meta.slotCount : "—"),
-    "Paket: " + (meta.packageCount != null ? meta.packageCount : "—"),
-    "Oda: " + (meta.roomCount != null ? meta.roomCount : "—"),
-  ];
-  if (meta.staffWithSlots != null && meta.staffCount != null) {
-    parts.push("Çalışma saati tanımlı personel: " + meta.staffWithSlots + "/" + meta.staffCount);
-  }
-  if (!meta.ready && meta.missing && meta.missing.length) {
-    parts.push("Eksik: " + meta.missing.join(", "));
-  }
-  els.devSeedStatus.textContent = parts.join(" · ");
-  if (els.devSeedConfirmBtn) {
-    els.devSeedConfirmBtn.disabled = !meta.ready;
-  }
-  if (els.devSeedCount && meta.defaultCount && !els.devSeedCount.dataset.userEdited) {
-    els.devSeedCount.value = String(meta.defaultCount);
-  }
-}
-
-function prepareDevSeedPanel() {
-  if (els.devSeedError) {
-    els.devSeedError.classList.add("hidden");
-    els.devSeedError.textContent = "";
-  }
-  if (els.devSeedSuccess) {
-    els.devSeedSuccess.classList.add("hidden");
-    els.devSeedSuccess.textContent = "";
-  }
-  if (els.devSeedAdminPassword) els.devSeedAdminPassword.value = "";
-  if (els.devSeedCount) {
-    if (!els.devSeedCount.dataset.userEdited) els.devSeedCount.value = "110";
-  }
-  if (els.devSeedStatus) els.devSeedStatus.textContent = "Yükleniyor…";
-  if (!window.API || !window.API.getDevSeedMeta) return;
-  window.API.getDevSeedMeta().then(function (meta) {
-    renderDevSeedStatus(meta);
-  }).catch(function (err) {
-    if (els.devSeedError) {
-      els.devSeedError.textContent = (err && (err.message || err.error)) || "Test üye bilgisi alınamadı.";
-      els.devSeedError.classList.remove("hidden");
-    }
-    renderDevSeedStatus(null);
-  });
-}
-
-function openDevSeedModal() {
-  openAdminHubModal("dev-seed");
-}
-
-async function confirmDevSeed() {
-  if (!window.API || !window.API.seedTestMembers) return;
-  if (els.devSeedError) {
-    els.devSeedError.classList.add("hidden");
-    els.devSeedError.textContent = "";
-  }
-  if (els.devSeedSuccess) {
-    els.devSeedSuccess.classList.add("hidden");
-    els.devSeedSuccess.textContent = "";
-  }
-  var count = parseInt((els.devSeedCount && els.devSeedCount.value) || "110", 10);
-  if (!count || count < 1) count = 110;
-  if (count > 200) count = 200;
-  var password = (els.devSeedAdminPassword && els.devSeedAdminPassword.value) || "";
-  if (!password) {
-    if (els.devSeedError) {
-      els.devSeedError.textContent = "Onay için admin şifrenizi girin.";
-      els.devSeedError.classList.remove("hidden");
-    }
-    return;
-  }
-  if (!(await showAppConfirm(count + " test üyesi oluşturulsun mu?\n\nHer üyeye farklı gün/saat/personel/paket atanır. Mevcut @seed.local üyeler atlanır."))) {
-    return;
-  }
-  if (els.devSeedConfirmBtn) els.devSeedConfirmBtn.disabled = true;
-  try {
-    var result = await window.API.seedTestMembers(count, password);
-    if (els.devSeedSuccess) {
-      var msg = (result && result.message) || "Test üyeleri oluşturuldu.";
-      if (result && result.staffAssigned != null) {
-        msg += " (" + result.staffAssigned + " personele atama yapıldı.)";
-      }
-      if (result && result.sessionConflicts > 0) {
-        msg += " (" + result.sessionConflicts + " seans günü oda dolu olduğu için atlanamadı.)";
-      }
-      els.devSeedSuccess.textContent = msg;
-      els.devSeedSuccess.classList.remove("hidden");
-    }
-    if (els.devSeedAdminPassword) els.devSeedAdminPassword.value = "";
-    if (window.API.loadFullState) {
-      var fetchRange = getPlannerFetchRange();
-      var loaded = await window.API.loadFullState(fetchRange);
-      applyStateFromApi(loaded, fetchRange);
-      render();
-    }
-    if (window.API.getDevSeedMeta) {
-      var meta = await window.API.getDevSeedMeta();
-      renderDevSeedStatus(meta);
-    }
-  } catch (err) {
-    if (els.devSeedError) {
-      els.devSeedError.textContent = (err && (err.data && err.data.error) || err.message || err.error) || "Test üyeleri oluşturulamadı.";
-      els.devSeedError.classList.remove("hidden");
-    }
-  } finally {
-    if (window.API && window.API.getDevSeedMeta) {
-      window.API.getDevSeedMeta().then(renderDevSeedStatus).catch(function () {
-        if (els.devSeedConfirmBtn) els.devSeedConfirmBtn.disabled = false;
-      });
-    } else if (els.devSeedConfirmBtn) {
-      els.devSeedConfirmBtn.disabled = false;
-    }
-  }
-}
-
-async function confirmDevReset() {
-  if (!window.API || !window.API.executeDevReset) return;
-  var targets = getSelectedDevResetTargets();
-  if (els.devResetError) {
-    els.devResetError.classList.add("hidden");
-    els.devResetError.textContent = "";
-  }
-  if (!targets.length) {
-    if (els.devResetError) {
-      els.devResetError.textContent = "En az bir veri grubu seçin.";
-      els.devResetError.classList.remove("hidden");
-    }
-    return;
-  }
-  var password = (els.devResetAdminPassword && els.devResetAdminPassword.value) || "";
-  if (!password) {
-    if (els.devResetError) {
-      els.devResetError.textContent = "Onay için admin şifrenizi girin.";
-      els.devResetError.classList.remove("hidden");
-    }
-    return;
-  }
-  var labels = (devResetMeta && devResetMeta.groups || []).reduce(function (acc, g) {
-    acc[g.id] = g.label;
-    return acc;
-  }, {});
-  var labelList = targets.map(function (id) { return labels[id] || id; }).join(", ");
-  if (!(await showAppConfirm(
-    "Seçilen veriler kalıcı olarak silinecek:\n\n" + labelList +
-    "\n\nBu işlem geri alınamaz. Devam edilsin mi?"
-  ))) return;
-
-  if (els.devResetConfirmBtn) els.devResetConfirmBtn.disabled = true;
-  try {
-    await window.API.executeDevReset(targets, password);
-    closeAdminHubModal();
-    closeListMembersModal();
-    var fetchRange = getPlannerFetchRange();
-    var loaded = await window.API.loadFullState(fetchRange);
-    applyStateFromApi(loaded, fetchRange);
-    render();
-    await showAppAlert("Seçilen veriler sıfırlandı.");
-  } catch (err) {
-    if (els.devResetError) {
-      els.devResetError.textContent = (err && (err.data && err.data.error) || err.message || err.error) || "Sıfırlama başarısız.";
-      els.devResetError.classList.remove("hidden");
-    }
-  } finally {
-    if (els.devResetConfirmBtn) els.devResetConfirmBtn.disabled = false;
-  }
-}
 
 function clearPackageForm() {
   if (!els.packageName) return;
@@ -8503,10 +8212,17 @@ function saveStaffHours(staffId) {
   applyUpdate({ workingHours: newWorkingHours });
 }
 
-async function deleteStaff(staffId) {
+function deleteStaff(staffId) {
+  if (window.API && window.API.getToken()) {
+    openDeleteStaffModal(staffId);
+  } else {
+    _deleteStaffLocal(staffId);
+  }
+}
+
+async function _deleteStaffLocal(staffId) {
   const staff = getStaffById(staffId);
   if (!staff) return;
-
   const fullName = getStaffFullName(staff);
   const hasSessions = state.sessions.some((sess) => sess.staffId === staffId);
   if (hasSessions) {
@@ -8514,8 +8230,48 @@ async function deleteStaff(staffId) {
   } else if (!(await showAppConfirm(`"${fullName}" personelini silmek istiyor musunuz?`))) {
     return;
   }
-
   state.staff = state.staff.filter((x) => x.id !== staffId);
+  closeStaffEditModal();
+  updateStaffSummary();
+  renderStaff();
+  render();
+}
+
+function openDeleteStaffModal(staffId) {
+  const staff = getStaffById(staffId);
+  if (!staff) return;
+  ui.deleteStaffId = staffId;
+  if (els.deleteStaffName) els.deleteStaffName.textContent = `"${getStaffFullName(staff)}" personelini silmek istiyor musunuz?`;
+  if (els.deleteStaffPassword) els.deleteStaffPassword.value = "";
+  if (els.deleteStaffError) { els.deleteStaffError.textContent = ""; els.deleteStaffError.classList.add("hidden"); }
+  if (els.deleteStaffModal) els.deleteStaffModal.classList.remove("hidden");
+  setTimeout(() => els.deleteStaffPassword && els.deleteStaffPassword.focus(), 80);
+}
+
+function closeDeleteStaffModal() {
+  ui.deleteStaffId = null;
+  if (els.deleteStaffModal) els.deleteStaffModal.classList.add("hidden");
+}
+
+async function confirmDeleteStaff() {
+  const staffId = ui.deleteStaffId;
+  if (!staffId) return;
+  const password = els.deleteStaffPassword ? els.deleteStaffPassword.value.trim() : "";
+  if (!password) {
+    if (els.deleteStaffError) { els.deleteStaffError.textContent = "Admin şifresi girin."; els.deleteStaffError.classList.remove("hidden"); }
+    return;
+  }
+  if (els.deleteStaffError) { els.deleteStaffError.textContent = ""; els.deleteStaffError.classList.add("hidden"); }
+  if (els.deleteStaffConfirmBtn) els.deleteStaffConfirmBtn.disabled = true;
+  try {
+    await window.API.deleteStaff(staffId, { adminPassword: password });
+  } catch (e) {
+    if (els.deleteStaffError) { els.deleteStaffError.textContent = (e.data && e.data.error) || e.message || "Silinemedi."; els.deleteStaffError.classList.remove("hidden"); }
+    if (els.deleteStaffConfirmBtn) els.deleteStaffConfirmBtn.disabled = false;
+    return;
+  }
+  state.staff = state.staff.filter((x) => x.id !== staffId);
+  closeDeleteStaffModal();
   closeStaffEditModal();
   updateStaffSummary();
   renderStaff();
@@ -8830,8 +8586,8 @@ function renderPackageSessionsPackagePicker(packages, selectedMpId) {
       (Number(mp.id) === Number(selectedMpId) ? " package-sessions-picker__chip--active" : "");
     btn.setAttribute("role", "tab");
     btn.setAttribute("aria-selected", Number(mp.id) === Number(selectedMpId) ? "true" : "false");
-    var start = String(mp.startDate || mp.start_date || "").slice(0, 10);
-    var end = String(mp.endDate || mp.end_date || "").slice(0, 10);
+    var start = formatDateTR(String(mp.startDate || mp.start_date || "").slice(0, 10));
+    var end = formatDateTR(String(mp.endDate || mp.end_date || "").slice(0, 10));
     var range = start && end ? start + " – " + end : start || end || "";
     btn.innerHTML =
       '<span class="package-sessions-picker__chip-name">' +
@@ -9521,7 +9277,7 @@ async function endMemberPackageFromModal() {
   closeMemberPackageModal();
   render();
   if (ui.editingMemberId) renderMemberPackageHistory(normId(ui.editingMemberId));
-  if (isAdminMembersListViewActive()) openListMembersModal();
+  if (isAdminMembersListViewActive()) openListMembersModal({ resetFilters: false });
 }
 
 async function saveMemberCard() {
@@ -9658,23 +9414,22 @@ async function saveMemberCard() {
   }
   closeMemberCardModal();
   render();
-  if (isAdminMembersListViewActive()) openListMembersModal();
-  if (isAdminExpiredMembershipsViewActive()) openExpiredMembershipsModal();
+  if (isAdminMembersListViewActive()) openListMembersModal({ resetFilters: false });
+  if (isAdminExpiredMembershipsViewActive()) openExpiredMembershipsModal({ resetFilters: false });
 }
 
 /** Üye silme modalını açar (admin şifresi + geçmiş silinsin mi?). API yoksa veya token yoksa eski onay ile yerel siler. */
 function openDeleteMemberModal(memberId) {
   if (!memberId) return;
   ui.deleteMemberId = memberId;
-  if (els.deleteMemberStep1) els.deleteMemberStep1.classList.remove("hidden");
-  if (els.deleteMemberStep2) els.deleteMemberStep2.classList.add("hidden");
-  if (els.deleteMemberNextBtn) { els.deleteMemberNextBtn.classList.remove("hidden"); els.deleteMemberNextBtn.disabled = false; }
-  if (els.deleteMemberConfirmBtn) els.deleteMemberConfirmBtn.classList.add("hidden");
+  const memberForDelete = state.members.find((x) => x.id === normId(memberId));
+  if (els.deleteMemberName) els.deleteMemberName.textContent = memberForDelete ? `"${getMemberFullName(memberForDelete)}" üyesini silmek istiyor musunuz?` : "";
   if (els.deleteMemberPassword) els.deleteMemberPassword.value = "";
   if (els.deleteMemberHistoryNo) els.deleteMemberHistoryNo.checked = true;
   if (els.deleteMemberHistoryYes) els.deleteMemberHistoryYes.checked = false;
   if (els.deleteMemberError) { els.deleteMemberError.textContent = ""; els.deleteMemberError.classList.add("hidden"); }
   if (els.deleteMemberModal) els.deleteMemberModal.classList.remove("hidden");
+  setTimeout(() => els.deleteMemberPassword && els.deleteMemberPassword.focus(), 80);
 }
 
 function closeDeleteMemberModal() {
@@ -9710,8 +9465,8 @@ async function confirmDeleteMember() {
   closeDeleteMemberModal();
   if (els.memberCardModal && !els.memberCardModal.classList.contains("hidden")) closeMemberCardModal();
   render();
-  if (isAdminMembersListViewActive()) openListMembersModal();
-  if (isAdminExpiredMembershipsViewActive()) openExpiredMembershipsModal();
+  if (isAdminMembersListViewActive()) openListMembersModal({ resetFilters: false });
+  if (isAdminExpiredMembershipsViewActive()) openExpiredMembershipsModal({ resetFilters: false });
 }
 
 async function deleteMemberFromList(memberId) {
@@ -9722,7 +9477,7 @@ async function deleteMemberFromList(memberId) {
   if (!(await showAppConfirm("Bu üyeyi silmek istiyor musunuz?"))) return;
   state.members = state.members.filter((x) => x.id !== normId(memberId));
   render();
-  if (isAdminMembersListViewActive()) openListMembersModal();
+  if (isAdminMembersListViewActive()) openListMembersModal({ resetFilters: false });
 }
 
 async function deleteMemberCardFromModal() {
@@ -9952,7 +9707,6 @@ function getGroupForSession(session) {
   const same = state.sessions.filter(
     (s) =>
       s.staffId === session.staffId &&
-      s.roomId === session.roomId &&
       overlaps(s.startTs, s.endTs, session.startTs, session.endTs)
   );
   return {
@@ -10886,6 +10640,8 @@ function renderPaginationBar(container, opts) {
   return page;
 }
 
+let listMembersActiveLetter = null;
+
 /** Üyeliği bitmiş (bitiş tarihi geçmiş) paket listesi – modal açıldığında bir kez hesaplanır */
 let expiredMembershipsBaseList = [];
 /** Tıklanarak seçilen sıralama: { column: 'start'|'end', dir: 'asc'|'desc' } */
@@ -10893,6 +10649,7 @@ let expiredMembershipsSort = { column: "end", dir: "desc" };
 let expiredMembershipsPage = 1;
 let expiredMembershipsPageSize = DEFAULT_LIST_PAGE_SIZE;
 let expiredMembershipsFilterText = "";
+let expiredMembershipsLetter = null;
 
 /** Filtre ve sıralamaya göre tabloyu günceller (Üyeleri Listele ile aynı mantık: ad/soyad/telefon tek kutu) */
 function renderExpiredMembershipsTable() {
@@ -10914,21 +10671,44 @@ function renderExpiredMembershipsTable() {
     });
   }
 
-  const startStr = (mp) => (mp.startDate || "").toString().slice(0, 10);
-  const endStr = (mp) => (mp.endDate || "").toString().slice(0, 10);
-  const nameForMp = (mp) => getMemberDisplayName(state.members.find((x) => normId(x.id) === normId(mp.memberId)) || {});
-  if (expiredMembershipsSort.column === "start") {
-    list.sort((a, b) => expiredMembershipsSort.dir === "asc" ? startStr(a).localeCompare(startStr(b)) : startStr(b).localeCompare(startStr(a)));
-  } else if (expiredMembershipsSort.column === "name") {
-    list.sort((a, b) => {
-      const cmp = nameForMp(a).localeCompare(nameForMp(b), "tr");
-      return expiredMembershipsSort.dir === "asc" ? cmp : -cmp;
+  syncAlphaFilterBarUI(document.getElementById('expiredAlphaFilter'), expiredMembershipsLetter);
+  if (expiredMembershipsLetter) {
+    list = list.filter((mp) => {
+      const m = state.members.find((x) => normId(x.id) === normId(mp.memberId));
+      return m && memberStartsWithLetter(m, expiredMembershipsLetter);
     });
-  } else {
-    list.sort((a, b) => expiredMembershipsSort.dir === "asc" ? endStr(a).localeCompare(endStr(b)) : endStr(b).localeCompare(endStr(a)));
   }
 
-  if (list.length === 0) {
+  // Üye başına grupla — her üye için en son paket (max endDate)
+  const memberPkgsMap = new Map();
+  for (const mp of list) {
+    const mid = normId(mp.memberId);
+    if (!memberPkgsMap.has(mid)) memberPkgsMap.set(mid, []);
+    memberPkgsMap.get(mid).push(mp);
+  }
+  const hasActivePackage = (memberId) => (state.memberPackages || []).some(
+    (p) => normId(p.memberId) === normId(memberId) && isMemberPackageActive(p)
+  );
+  const endStrRaw = (mp) => (mp.endDate || "").toString().slice(0, 10);
+  const startStrRaw = (mp) => (mp.startDate || "").toString().slice(0, 10);
+
+  let memberRows = [];
+  for (const [mid, pkgs] of memberPkgsMap) {
+    const m = state.members.find((x) => normId(x.id) === mid);
+    pkgs.sort((a, b) => endStrRaw(b).localeCompare(endStrRaw(a))); // en son paket önce
+    memberRows.push({ m, latestPkg: pkgs[0], pkgCount: pkgs.length });
+  }
+
+  const dir = expiredMembershipsSort.dir === "asc" ? 1 : -1;
+  if (expiredMembershipsSort.column === "name") {
+    memberRows.sort((a, b) => dir * getMemberDisplayName(a.m || {}).localeCompare(getMemberDisplayName(b.m || {}), "tr"));
+  } else if (expiredMembershipsSort.column === "start") {
+    memberRows.sort((a, b) => dir * startStrRaw(a.latestPkg).localeCompare(startStrRaw(b.latestPkg)));
+  } else {
+    memberRows.sort((a, b) => dir * endStrRaw(a.latestPkg).localeCompare(endStrRaw(b.latestPkg)));
+  }
+
+  if (memberRows.length === 0) {
     content.innerHTML =
       '<div class="admin-panel-empty"><p>' +
       (expiredMembershipsBaseList.length === 0
@@ -10941,7 +10721,7 @@ function renderExpiredMembershipsTable() {
   const sort = expiredMembershipsSort;
   const nameLabel = "Ad Soy." + (sort.column === "name" ? (sort.dir === "asc" ? " ▲" : " ▼") : "");
   const startLabel = "Baş.Tar." + (sort.column === "start" ? (sort.dir === "asc" ? " ▲" : " ▼") : "");
-  const endLabel = "Bit.Tar." + (sort.column === "end" ? (sort.dir === "asc" ? " ▲" : " ▼") : "");
+  const endLabel = "Son Bit.Tar." + (sort.column === "end" ? (sort.dir === "asc" ? " ▲" : " ▼") : "");
 
   const wrap = document.createElement("div");
   wrap.className = "expired-memberships-table-wrap";
@@ -10955,106 +10735,83 @@ function renderExpiredMembershipsTable() {
         <th>Tel</th>
         <th data-sort="start" title="Tıklayın: küçükten büyüğe / büyükten küçüğe">${startLabel}</th>
         <th data-sort="end" title="Tıklayın: küçükten büyüğe / büyükten küçüğe">${endLabel}</th>
-        <th>Paket</th>
+        <th>Son Paket</th>
         <th></th>
       </tr>
     </thead>
-    <tbody>
+    <tbody></tbody>
   `;
 
   table.querySelector("th[data-sort='name']").addEventListener("click", () => {
     if (expiredMembershipsSort.column === "name") expiredMembershipsSort.dir = expiredMembershipsSort.dir === "asc" ? "desc" : "asc";
     else { expiredMembershipsSort.column = "name"; expiredMembershipsSort.dir = "asc"; }
-    expiredMembershipsPage = 1;
-    renderExpiredMembershipsTable();
+    expiredMembershipsPage = 1; renderExpiredMembershipsTable();
   });
   table.querySelector("th[data-sort='start']").addEventListener("click", () => {
     if (expiredMembershipsSort.column === "start") expiredMembershipsSort.dir = expiredMembershipsSort.dir === "asc" ? "desc" : "asc";
     else { expiredMembershipsSort.column = "start"; expiredMembershipsSort.dir = "asc"; }
-    expiredMembershipsPage = 1;
-    renderExpiredMembershipsTable();
+    expiredMembershipsPage = 1; renderExpiredMembershipsTable();
   });
   table.querySelector("th[data-sort='end']").addEventListener("click", () => {
     if (expiredMembershipsSort.column === "end") expiredMembershipsSort.dir = expiredMembershipsSort.dir === "asc" ? "desc" : "asc";
     else { expiredMembershipsSort.column = "end"; expiredMembershipsSort.dir = "asc"; }
-    expiredMembershipsPage = 1;
-    renderExpiredMembershipsTable();
+    expiredMembershipsPage = 1; renderExpiredMembershipsTable();
   });
-
-  // Her üyenin son paketi (bitiş tarihi en geç olan) – Yeni Paket sadece üyenin aktif paketi yoksa ve son paket satırındaysa gösterilir
-  const hasActivePackage = (memberId) => (state.memberPackages || []).some(
-    (p) => normId(p.memberId) === normId(memberId) && isMemberPackageActive(p)
-  );
-  const endStrForCmp = (mp) => (mp.endDate || "").toString().slice(0, 10);
-  const lastPackageByMember = {};
-  for (const mp of list) {
-    const mid = normId(mp.memberId);
-    const end = endStrForCmp(mp);
-    if (!(mid in lastPackageByMember) || end > endStrForCmp(lastPackageByMember[mid])) lastPackageByMember[mid] = mp;
-  }
 
   const paginationEl = document.createElement("div");
   paginationEl.className = "list-pagination";
   expiredMembershipsPage = renderPaginationBar(paginationEl, {
     page: expiredMembershipsPage,
     pageSize: expiredMembershipsPageSize,
-    total: list.length,
+    total: memberRows.length,
     onPageChange: (p) => { expiredMembershipsPage = p; renderExpiredMembershipsTable(); },
     onPageSizeChange: (size) => { expiredMembershipsPageSize = size; expiredMembershipsPage = 1; renderExpiredMembershipsTable(); },
   });
-  const pageItems = list.slice(
+  const pageItems = memberRows.slice(
     (expiredMembershipsPage - 1) * expiredMembershipsPageSize,
     expiredMembershipsPage * expiredMembershipsPageSize
   );
+  const tbody = table.querySelector("tbody");
 
-  for (const mp of pageItems) {
-    const m = state.members.find((x) => normId(x.id) === normId(mp.memberId));
+  for (const { m, latestPkg, pkgCount } of pageItems) {
+    const memberId = latestPkg.memberId;
     const memberNo = m ? (m.memberNo || "–") : "–";
     const memberName = getMemberDisplayName(m || {});
     const phone = m ? displayPhone(m.phone) || "–" : "–";
-    const startStrVal = (mp.startDate || "").toString().slice(0, 10);
-    const endStrVal = (mp.endDate || "").toString().slice(0, 10);
-    const packageName = mp.packageName || "Paket";
-    const isLastPackage = lastPackageByMember[normId(mp.memberId)] && lastPackageByMember[normId(mp.memberId)].id === mp.id;
-    const showNewPackageBtn = isLastPackage && !hasActivePackage(mp.memberId);
+    const startStrVal = formatDateTR(startStrRaw(latestPkg)) || "–";
+    const endStrVal = formatDateTR(endStrRaw(latestPkg)) || "–";
+    const packageLabel = latestPkg.packageName || "Paket";
+    const showNewPackageBtn = !hasActivePackage(memberId);
 
     const row = document.createElement("tr");
     row.className = "expired-memberships-table__row";
-    row.title = "Seansları görmek için satıra dokunun";
+    row.title = "Tüm paketleri görmek için tıklayın";
     row.innerHTML = `
       <td>${escapeHtml(memberNo)}</td>
       <td class="expired-memberships-table__name">${escapeHtml(memberName)}</td>
       <td>${escapeHtml(phone)}</td>
       <td>${escapeHtml(startStrVal)}</td>
       <td>${escapeHtml(endStrVal)}</td>
-      <td class="expired-memberships-table__package">${escapeHtml(packageName)}</td>
+      <td class="expired-memberships-table__package">${escapeHtml(packageLabel)}${pkgCount > 1 ? ' <span class="hint">(+' + (pkgCount - 1) + ')</span>' : ""}</td>
       <td>
         <span class="expired-memberships-table__actions">
-          <button type="button" class="btn btn--xs btn--ghost btn--icon-action" data-action="member-card" data-member-id="${mp.memberId || ""}" title="Kimlik Kartı" aria-label="Kimlik Kartı">🪪</button>
-          ${showNewPackageBtn ? `<button type="button" class="btn btn--xs btn--ghost btn--icon-action" data-action="new-package" data-member-id="${mp.memberId || ""}" title="Yeni Paket" aria-label="Yeni Paket">➕</button>` : ""}
+          <button type="button" class="btn btn--xs btn--ghost btn--icon-action" data-action="member-card" title="Kimlik Kartı" aria-label="Kimlik Kartı">🪪</button>
+          ${showNewPackageBtn ? '<button type="button" class="btn btn--xs btn--ghost btn--icon-action" data-action="new-package" title="Yeni Paket" aria-label="Yeni Paket">➕</button>' : ""}
         </span>
       </td>
     `;
     row.addEventListener("click", function (e) {
       if (e.target.closest("button")) return;
-      openPackageSessionsModal(mp, mp.memberId);
+      openExpiredMemberSessions(memberId);
     });
-    const memberCardBtn = row.querySelector("button[data-action='member-card']");
-    if (memberCardBtn) {
-      memberCardBtn.addEventListener("click", function (e) {
-        e.stopPropagation();
-        openMemberCard(mp.memberId);
-      });
-    }
-    const newPkgBtn = row.querySelector("button[data-action='new-package']");
-    if (newPkgBtn) {
-      newPkgBtn.addEventListener("click", function (e) {
-        e.stopPropagation();
-        ui.editingMemberId = mp.memberId;
-        openMemberPackageModal(mp.memberId);
-      });
-    }
-    table.querySelector("tbody").appendChild(row);
+    row.querySelector("[data-action='member-card']").addEventListener("click", function (e) {
+      e.stopPropagation(); openMemberCard(memberId);
+    });
+    const newPkgBtn = row.querySelector("[data-action='new-package']");
+    if (newPkgBtn) newPkgBtn.addEventListener("click", function (e) {
+      e.stopPropagation(); ui.editingMemberId = memberId; openMemberPackageModal(memberId);
+    });
+    tbody.appendChild(row);
   }
 
   content.innerHTML = "";
@@ -11064,12 +10821,20 @@ function renderExpiredMembershipsTable() {
 }
 
 /** Üyeliği bitmiş (bitiş tarihi geçmiş) paketleri ve seansları ayrı listeler; filtre ve sıralama uygulanır */
-function openExpiredMembershipsModal() {
+function openExpiredMembershipsModal({ resetFilters = true } = {}) {
   const content = els.expiredMembershipsContent;
   if (!content) return;
   showAdminMainView("expired-memberships");
   content.innerHTML = "";
-  expiredMembershipsPage = 1;
+  if (resetFilters) {
+    expiredMembershipsPage = 1;
+    expiredMembershipsLetter = null;
+  }
+  initAlphaFilterBar(
+    document.getElementById('expiredAlphaFilter'),
+    () => expiredMembershipsLetter,
+    (letter) => { expiredMembershipsLetter = expiredMembershipsLetter === letter ? null : letter; expiredMembershipsPage = 1; renderExpiredMembershipsTable(); }
+  );
 
   const todayStr = localTodayDateStr();
 
@@ -11094,10 +10859,11 @@ let formerMembersSort = { column: null, dir: "asc" };
 let formerMembersPage = 1;
 let formerMembersPageSize = DEFAULT_LIST_PAGE_SIZE;
 let formerMembersFilterText = "";
+let formerMembersLetter = null;
 
 function fmtFormerMemberDeletedAt(iso) {
   if (!iso) return "—";
-  return String(iso).slice(0, 10);
+  return formatDateTR(String(iso).slice(0, 10)) || "—";
 }
 
 function formerMemberPackageFromRow(row) {
@@ -11111,6 +10877,29 @@ function formerMemberPackageFromRow(row) {
     status: row.status || "completed",
     packageType: row.package_type || row.packageType,
   };
+}
+
+function openFormerMemberCard(memberId) {
+  var m = formerMembersBaseList.find(function (x) { return normId(x.id) === normId(memberId); });
+  if (!m) return;
+  if (!state.members.some(function (x) { return normId(x.id) === normId(memberId); })) {
+    state.members.push(m);
+  }
+  openMemberCard(memberId);
+}
+
+function openExpiredMemberSessions(memberId) {
+  const m = state.members.find(x => normId(x.id) === normId(memberId));
+  const allPkgs = (state.memberPackages || [])
+    .filter(mp => normId(mp.memberId) === normId(memberId))
+    .slice()
+    .sort((a, b) => {
+      const ea = (a.endDate || a.end_date || "").toString().slice(0, 10);
+      const eb = (b.endDate || b.end_date || "").toString().slice(0, 10);
+      return eb.localeCompare(ea);
+    });
+  if (!allPkgs.length) { showAppAlert("Bu üyeye ait paket kaydı yok."); return; }
+  openPackageSessionsModal(allPkgs[0], memberId, m, { allPackages: allPkgs });
 }
 
 async function openFormerMemberSessions(memberId) {
@@ -11142,6 +10931,10 @@ function renderFormerMembersTable() {
   var list = formerMembersBaseList.slice();
   if (filterText) {
     list = list.filter(function (m) { return memberMatchesListFilter(m, filterText); });
+  }
+  syncAlphaFilterBarUI(document.getElementById('formerAlphaFilter'), formerMembersLetter);
+  if (formerMembersLetter) {
+    list = list.filter(function (m) { return memberStartsWithLetter(m, formerMembersLetter); });
   }
   if (!list.length) {
     content.innerHTML = '<div class="admin-panel-empty admin-panel-empty--compact"><p>' +
@@ -11202,12 +10995,20 @@ function renderFormerMembersTable() {
       "<td>" + escapeHtml(fmtFormerMemberDeletedAt(m.deletedAt || m.deleted_at)) + "</td>" +
       '<td class="expired-memberships-table__package">' + escapeHtml(String(pkgCount)) + "</td>" +
       '<td><span class="expired-memberships-table__actions">' +
+      '<button type="button" class="btn btn--xs btn--ghost btn--icon-action" data-former-card="' + m.id + '" title="Kimlik Kartı" aria-label="Kimlik Kartı">🪪</button>' +
       '<button type="button" class="btn btn--xs btn--primary btn--icon-action" data-former-reactivate="' + m.id + '" title="Tekrar Aktif Et" aria-label="Tekrar Aktif Et">↺</button>' +
       "</span></td>";
     row.addEventListener("click", function (e) {
       if (e.target.closest("button")) return;
       openFormerMemberSessions(m.id);
     });
+    var cardBtn = row.querySelector("[data-former-card]");
+    if (cardBtn) {
+      cardBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        openFormerMemberCard(parseInt(cardBtn.getAttribute("data-former-card"), 10));
+      });
+    }
     var reactivateBtn = row.querySelector("[data-former-reactivate]");
     if (reactivateBtn) {
       reactivateBtn.addEventListener("click", function (e) {
@@ -11231,6 +11032,12 @@ async function openFormerMembersModal() {
   }
   showAdminMainView("former-members");
   formerMembersPage = 1;
+  formerMembersLetter = null;
+  initAlphaFilterBar(
+    document.getElementById('formerAlphaFilter'),
+    () => formerMembersLetter,
+    (letter) => { formerMembersLetter = formerMembersLetter === letter ? null : letter; formerMembersPage = 1; renderFormerMembersTable(); }
+  );
   try {
     var rows = await window.API.getFormerMembers();
     formerMembersBaseList = (rows || []).map(function (row) {
@@ -11303,6 +11110,39 @@ async function createMemberOrReactivateFormer(pendingPayload) {
   }
 }
 
+const TURKISH_ALPHA = ['A','B','C','Ç','D','E','F','G','Ğ','H','I','İ','J','K','L','M','N','O','Ö','P','R','S','Ş','T','U','Ü','V','Y','Z'];
+
+function memberStartsWithLetter(m, letter) {
+  const name = getMemberDisplayName(m);
+  if (!name) return false;
+  return name.charAt(0).toLocaleUpperCase('tr') === letter;
+}
+
+function syncAlphaFilterBarUI(containerEl, activeLetter) {
+  if (!containerEl) return;
+  containerEl.querySelectorAll('.alpha-filter__btn').forEach(b => {
+    b.classList.toggle('is-active', b.getAttribute('data-letter') === activeLetter);
+  });
+}
+
+function initAlphaFilterBar(containerEl, getCurrentLetter, onToggle) {
+  if (!containerEl) return;
+  containerEl.innerHTML = '';
+  for (const letter of TURKISH_ALPHA) {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'alpha-filter__btn';
+    btn.textContent = letter;
+    btn.setAttribute('data-letter', letter);
+    if (getCurrentLetter() === letter) btn.classList.add('is-active');
+    btn.addEventListener('click', () => {
+      onToggle(letter);
+      syncAlphaFilterBarUI(containerEl, getCurrentLetter());
+    });
+    containerEl.appendChild(btn);
+  }
+}
+
 /** Üye listesi filtresi: ad/soyad (ayrı veya birlikte), telefon, üye no. */
 function memberMatchesListFilter(m, filterText) {
   const q = (filterText || "").trim();
@@ -11320,7 +11160,7 @@ function memberMatchesListFilter(m, filterText) {
 }
 
 /** Sadece aktif paketi olan üyeleri listeler; takvim alanında tam genişlik panel. */
-async function openListMembersModal() {
+async function openListMembersModal({ resetFilters = true } = {}) {
   const content = els.listMembersContent;
   if (!content) return;
   showAdminMembersListView();
@@ -11346,6 +11186,12 @@ async function openListMembersModal() {
   let page = 1;
   let pageSize = DEFAULT_LIST_PAGE_SIZE;
   let lastFilterText = getAdminListFilterText();
+  if (resetFilters) listMembersActiveLetter = null;
+  initAlphaFilterBar(
+    document.getElementById('listMembersAlphaFilter'),
+    () => listMembersActiveLetter,
+    (letter) => { listMembersActiveLetter = listMembersActiveLetter === letter ? null : letter; page = 1; applyAndRender(); }
+  );
 
   function getMp(m) {
     return activePackages.find((p) => normId(p.memberId) === normId(m.id));
@@ -11502,8 +11348,8 @@ async function openListMembersModal() {
     for (const m of members) {
       const mp = getMp(m);
       const packageName = mp ? (mp.packageName || "Paket") : "–";
-      const startStr = getStartStr(m) || "–";
-      const endStr = getEndStr(m) || "–";
+      const startStr = formatDateTR(getStartStr(m)) || "–";
+      const endStr = formatDateTR(getEndStr(m)) || "–";
       const remaining = getRemaining(m);
       const total = getTotal(m);
       const row = document.createElement("tr");
@@ -11529,8 +11375,8 @@ async function openListMembersModal() {
     for (const m of members) {
       const mp = getMp(m);
       const packageName = mp ? (mp.packageName || "Paket") : "–";
-      const startStr = getStartStr(m) || "–";
-      const endStr = getEndStr(m) || "–";
+      const startStr = formatDateTR(getStartStr(m)) || "–";
+      const endStr = formatDateTR(getEndStr(m)) || "–";
       const remaining = getRemaining(m);
       const total = getTotal(m);
       const card = document.createElement("article");
@@ -11567,7 +11413,9 @@ async function openListMembersModal() {
       lastFilterText = q;
       page = 1;
     }
-    const filtered = q ? membersWithActive.filter((m) => memberMatchesListFilter(m, q)) : membersWithActive;
+    syncAlphaFilterBarUI(document.getElementById('listMembersAlphaFilter'), listMembersActiveLetter);
+    let filtered = q ? membersWithActive.filter((m) => memberMatchesListFilter(m, q)) : membersWithActive;
+    if (listMembersActiveLetter) filtered = filtered.filter((m) => memberStartsWithLetter(m, listMembersActiveLetter));
     const sorted = sortMembers(filtered);
     page = renderPaginationBar(paginationEl, {
       page,
@@ -11922,6 +11770,22 @@ function bindEvents() {
 
   els.addSessionBtn.addEventListener("click", () => openGroupSessionModal(null));
   if (els.openListMembersBtn) els.openListMembersBtn.addEventListener("click", openListMembersModal);
+  if (els.refreshListMembersBtn) els.refreshListMembersBtn.addEventListener("click", async function () {
+    const btn = els.refreshListMembersBtn;
+    btn.disabled = true;
+    btn.textContent = "Yükleniyor…";
+    try {
+      var fetchRange = getPlannerFetchRange();
+      var loaded = await window.API.loadFullState(fetchRange);
+      applyStateFromApi(loaded, fetchRange);
+      await openListMembersModal({ resetFilters: false });
+    } catch (_) {
+      await openListMembersModal({ resetFilters: false });
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "↻ Yenile";
+    }
+  });
   if (els.openCalendarBtn) {
     els.openCalendarBtn.addEventListener("click", function () {
       if (isAdminPanelViewActive()) {
@@ -11970,10 +11834,6 @@ function bindEvents() {
   if (els.openPackagesBtn) els.openPackagesBtn.addEventListener("click", openPackagesModal);
   if (els.openStaffBtn) els.openStaffBtn.addEventListener("click", openStaffModal);
   if (els.openActivityLogsBtn) els.openActivityLogsBtn.addEventListener("click", openActivityLogsPage);
-  if (els.openDevResetBtn) els.openDevResetBtn.addEventListener("click", openDevResetModal);
-  if (els.openDevSeedBtn) els.openDevSeedBtn.addEventListener("click", openDevSeedModal);
-  if (els.devResetConfirmBtn) els.devResetConfirmBtn.addEventListener("click", confirmDevReset);
-  if (els.devSeedConfirmBtn) els.devSeedConfirmBtn.addEventListener("click", confirmDevSeed);
 
   // Sidebar: mobil drawer + geniş ekranda < / > rail
   if (els.sidebarMenuBtn) {
@@ -12163,27 +12023,22 @@ function bindEvents() {
   if (els.saveMemberCardBtn) els.saveMemberCardBtn.addEventListener("click", saveMemberCard);
   if (els.deleteMemberCardBtn) els.deleteMemberCardBtn.addEventListener("click", deleteMemberCardFromModal);
   // Üye silme modalı: İleri -> adım 2, Sil -> API çağrısı
-  if (els.deleteMemberNextBtn) {
-    els.deleteMemberNextBtn.addEventListener("click", () => {
-      const pwd = els.deleteMemberPassword ? els.deleteMemberPassword.value.trim() : "";
-      if (!pwd) {
-        if (els.deleteMemberError) {
-          els.deleteMemberError.textContent = "Admin şifresi girin.";
-          els.deleteMemberError.classList.remove("hidden");
-        }
-        return;
-      }
-      if (els.deleteMemberError) { els.deleteMemberError.textContent = ""; els.deleteMemberError.classList.add("hidden"); }
-      if (els.deleteMemberStep1) els.deleteMemberStep1.classList.add("hidden");
-      if (els.deleteMemberStep2) els.deleteMemberStep2.classList.remove("hidden");
-      if (els.deleteMemberNextBtn) els.deleteMemberNextBtn.classList.add("hidden");
-      if (els.deleteMemberConfirmBtn) els.deleteMemberConfirmBtn.classList.remove("hidden");
-    });
-  }
-  if (els.deleteMemberConfirmBtn) els.deleteMemberConfirmBtn.addEventListener("click", confirmDeleteMember);
+  if (els.deleteMemberConfirmBtn) els.deleteMemberConfirmBtn.onclick = confirmDeleteMember;
   if (els.deleteMemberModal) {
     els.deleteMemberModal.addEventListener("click", (e) => {
       if (e.target && e.target.dataset && e.target.dataset.close === "deleteMemberModal") closeDeleteMemberModal();
+    });
+    els.deleteMemberModal.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") confirmDeleteMember();
+    });
+  }
+  if (els.deleteStaffConfirmBtn) els.deleteStaffConfirmBtn.addEventListener("click", confirmDeleteStaff);
+  if (els.deleteStaffModal) {
+    els.deleteStaffModal.addEventListener("click", (e) => {
+      if (e.target && e.target.dataset && e.target.dataset.close === "deleteStaffModal") closeDeleteStaffModal();
+    });
+    els.deleteStaffModal.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") confirmDeleteStaff();
     });
   }
   if (els.memberPackageInfoBtn) els.memberPackageInfoBtn.addEventListener("click", () => {
@@ -12666,6 +12521,20 @@ function bindLoginForm() {
   const btn = document.getElementById("loginBtn");
   if (!form || !window.API || form.dataset.bound === "1") return;
   form.dataset.bound = "1";
+
+  // Şifre göster/gizle
+  const pwInput = document.getElementById("loginPassword");
+  const pwToggle = document.getElementById("loginPasswordToggle");
+  const eyeOpen = document.getElementById("loginPasswordEyeOpen");
+  const eyeClosed = document.getElementById("loginPasswordEyeClosed");
+  if (pwToggle && pwInput) {
+    pwToggle.addEventListener("click", function () {
+      const show = pwInput.type === "password";
+      pwInput.type = show ? "text" : "password";
+      if (eyeOpen) eyeOpen.style.display = show ? "none" : "";
+      if (eyeClosed) eyeClosed.style.display = show ? "" : "none";
+    });
+  }
   form.addEventListener("submit", async function (ev) {
     ev.preventDefault();
     const email = (document.getElementById("loginEmail") || {}).value.trim();

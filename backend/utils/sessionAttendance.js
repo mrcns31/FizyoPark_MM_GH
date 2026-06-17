@@ -7,13 +7,17 @@ import {
   parseStaffWorkingHours,
   resolveLocalDateRangeMs,
 } from './staffWorkingHours.js';
-import { isSessionCancelled } from './packageSessionCounts.js';
+import { autoCompletePackageIfExhausted, isSessionCancelled } from './packageSessionCounts.js';
 
 const ATTENDANCE_TYPE_SHIFT_REMINDER = 'attendance_pending_shift_end';
 
 /** Yönetici manuel girişi (VARCHAR(10) uyumlu; eski manual_admin de okunur) */
 export function isAdminCheckInMethod(method) {
   return method === 'admin' || method === 'manual_admin';
+}
+
+function resolveMethod(row) {
+  return row.check_in_method ?? row.checkInMethod ?? null;
 }
 
 const ATTENDANCE_JOIN_SQL = `
@@ -34,7 +38,7 @@ export function isSessionAttendanceConfirmed(row, now = Date.now()) {
 
 /** Onay etiketi: Yönetici - Geldi / Personel Adı - Geldi / QR / Gelmedi */
 export function buildAttendanceLabel(row, now = Date.now()) {
-  const method = row.check_in_method ?? row.checkInMethod ?? null;
+  const method = resolveMethod(row);
   const outcome = row.attendance_outcome ?? row.attendanceOutcome ?? null;
   const checkedIn = row.checked_in_at ?? row.checkedInAt ?? null;
   const confirmerStaffName = (
@@ -54,7 +58,6 @@ export function buildAttendanceLabel(row, now = Date.now()) {
     const name = confirmerStaffName || 'Personel';
     return `${name} - Geldi`;
   }
-  if (checkedIn) return 'Katılındı';
   if (outcome === 'no_show') {
     if (confirmerRole === 'admin' || confirmerRole === 'manager') return 'Yönetici - Gelmedi';
     if (confirmerStaffName) return `${confirmerStaffName} - Gelmedi`;
@@ -74,7 +77,7 @@ export function buildPackageSessionApprovalInfo(row, now = Date.now()) {
     return { label: 'İptal edildi', kind: 'cancelled', checkInAt: null };
   }
 
-  const method = row.check_in_method ?? row.checkInMethod ?? null;
+  const method = resolveMethod(row);
   const checkedInAt = row.checked_in_at ?? row.checkedInAt ?? null;
   const outcome = row.attendance_outcome ?? row.attendanceOutcome ?? null;
   const confirmedAt = row.attendance_confirmed_at ?? row.attendanceConfirmedAt ?? null;
@@ -121,7 +124,7 @@ export function buildPackageSessionApprovalInfo(row, now = Date.now()) {
 
 export function sessionRowToAttendanceDto(row, now = Date.now()) {
   const label = buildAttendanceLabel(row, now);
-  const method = row.check_in_method ?? null;
+  const method = resolveMethod(row);
   const checkedIn = row.checked_in_at != null;
   const outcome = row.attendance_outcome ?? null;
   const confirmedAt = row.attendance_confirmed_at != null;
@@ -324,6 +327,8 @@ export async function confirmSessionAttendance(db, sessionId, userId, action, op
       [sessionId, userId]
     );
   }
+
+  await autoCompletePackageIfExhausted(db, session.member_package_id);
 
   const updated = await db.query(
     `SELECT s.*,

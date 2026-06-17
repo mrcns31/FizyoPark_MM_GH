@@ -142,9 +142,12 @@ router.post('/verify-card-access', async (req, res) => {
       return res.status(401).json({ valid: false, reason: 'format' });
     }
 
-    // Önce üye tablosunu kontrol et
+    // Önce üye tablosunu kontrol et (member_cards tablosundan çok kartlı arama)
     const memberRow = await db.query(
-      'SELECT id, name, user_id FROM members WHERE card_no = $1 AND deleted_at IS NULL',
+      `SELECT m.id, m.name, m.user_id
+       FROM members m
+       JOIN member_cards mc ON mc.member_id = m.id
+       WHERE mc.card_no = $1 AND m.deleted_at IS NULL`,
       [normalized]
     );
 

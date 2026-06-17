@@ -1,28 +1,36 @@
 import db from '../config/database.js';
 
 export async function fetchBootstrapMembers() {
+  const result = await db.query(
+    `SELECT id, name, first_name, last_name, phone, email, birth_date, profession,
+            member_no, notes, deleted_at, user_id, deletion_requested_at, card_no
+     FROM members WHERE deleted_at IS NULL ORDER BY name`
+  );
+  return result.rows;
+}
+
+export async function fetchBootstrapStaff() {
   try {
     const result = await db.query(
-      `SELECT * FROM members WHERE (deleted_at IS NULL) ORDER BY name`
+      `SELECT s.*, u.username AS login_username, u.email AS user_email
+       FROM staff s
+       LEFT JOIN users u ON u.id = s.user_id
+       WHERE s.deleted_at IS NULL
+       ORDER BY s.first_name, s.last_name`
     );
     return result.rows;
   } catch (colErr) {
     if (colErr.code === '42703') {
-      const result = await db.query('SELECT * FROM members ORDER BY name');
+      const result = await db.query(
+        `SELECT s.*, u.username AS login_username, u.email AS user_email
+         FROM staff s
+         LEFT JOIN users u ON u.id = s.user_id
+         ORDER BY s.first_name, s.last_name`
+      );
       return result.rows;
     }
     throw colErr;
   }
-}
-
-export async function fetchBootstrapStaff() {
-  const result = await db.query(
-    `SELECT s.*, u.username AS login_username, u.email AS user_email
-     FROM staff s
-     LEFT JOIN users u ON u.id = s.user_id
-     ORDER BY s.first_name, s.last_name`
-  );
-  return result.rows;
 }
 
 export async function fetchBootstrapRooms() {
@@ -37,7 +45,8 @@ export async function fetchBootstrapPackages() {
 
 export async function fetchBootstrapMemberPackages() {
   const result = await db.query(
-    `SELECT mp.*, p.name as package_name, p.lesson_count, p.month_overrun,
+    `SELECT mp.id, mp.member_id, mp.package_id, mp.start_date, mp.end_date, mp.status, mp.skip_day_distribution,
+            p.name as package_name, p.lesson_count, p.month_overrun, p.package_type,
             COALESCE(TRIM(m.first_name || ' ' || m.last_name), m.name, '') as member_name, m.member_no
      FROM member_packages mp
      JOIN packages p ON p.id = mp.package_id

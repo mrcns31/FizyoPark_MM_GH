@@ -1866,6 +1866,34 @@ body.login-screen-open{
   padding:0;
   margin:0;
 }
+/* Masaüstü admin: input etiketi üzerine şeffaf overlay — picker doğru konumda açılır */
+.weeknav__datePick--enabled .weeknav__dateInput{
+  display:block;
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  opacity:0;
+  cursor:pointer;
+  z-index:1;
+}
+/* Mobilde overlay değil, normal görünüm */
+.topbar--admin-mobile .weeknav__datePick--enabled .weeknav__dateInput{
+  position:static;
+  width:auto;
+  height:auto;
+  opacity:1;
+  inset:auto;
+  z-index:auto;
+}
+.weeknav__datePick--enabled .weeknav__dateInput::-webkit-calendar-picker-indicator{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  opacity:0;
+  cursor:pointer;
+}
 .weeknav__label{
   flex:1 1 auto;
   min-width:0;
@@ -3963,6 +3991,8 @@ body.body--sidebar-open{
   white-space:normal;
 }
 .package-session-approval--qr,
+.package-session-approval--card,
+.package-session-approval--phone,
 .package-session-approval--present,
 .package-session-approval--staff_present,
 .package-session-approval--admin_present{
@@ -4296,6 +4326,41 @@ select option:checked{
   gap:8px;
   min-width:0;
 }
+.admin-main-panel__alpha-filter{
+  display:flex;
+  flex-wrap:wrap;
+  gap:2px;
+  flex:1;
+  justify-content:center;
+  padding:0;
+}
+.admin-main-panel__head-row:has(.admin-main-panel__alpha-filter) .admin-main-panel__title{
+  flex:0;
+  white-space:nowrap;
+}
+.alpha-filter__btn{
+  min-width:22px;
+  padding:2px 3px;
+  font-size:11px;
+  font-weight:600;
+  line-height:1.5;
+  border-radius:3px;
+  border:1px solid var(--border);
+  background:transparent;
+  color:var(--muted);
+  cursor:pointer;
+  transition:background .12s,color .12s,border-color .12s;
+}
+.alpha-filter__btn:hover{
+  background:rgba(124,92,255,.12);
+  color:var(--text);
+  border-color:var(--accent);
+}
+.alpha-filter__btn.is-active{
+  background:var(--accent);
+  color:#fff;
+  border-color:var(--accent);
+}
 #adminEntryListView .admin-main-panel__head--tabs{
   display:flex;
   align-items:center;
@@ -4390,6 +4455,70 @@ select option:checked{
   gap:0;
   border-bottom:1px solid var(--border);
   background: rgba(255,255,255,.02);
+}
+.headCell--day-flex{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+}
+.staff-initials-bar{
+  grid-column: 1 / -1;
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  padding:7px 12px;
+  justify-content:center;
+  border-top:1px solid var(--border);
+  background:rgba(255,255,255,.02);
+}
+.staff-initials-bar--inline{
+  grid-column:unset;
+  padding:0;
+  border:none;
+  background:none;
+  gap:10px;
+  flex-wrap:nowrap;
+}
+.topbar__row--staff-mobile{
+  display:flex;
+  align-items:center;
+  gap:8px;
+  padding:5px 12px;
+  overflow-x:auto;
+  overflow-y:hidden;
+  -webkit-overflow-scrolling:touch;
+  scrollbar-width:none;
+  border-top:1px solid var(--border);
+  background:rgba(255,255,255,.02);
+}
+.topbar__row--staff-mobile::-webkit-scrollbar{ display:none; }
+.topbar__row--staff-mobile .staff-initials-btn{
+  width:26px;
+  height:26px;
+  font-size:10px;
+  flex-shrink:0;
+}
+.staff-initials-btn{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  width:32px;
+  height:32px;
+  border-radius:50%;
+  border:2px solid;
+  font-size:11px;
+  font-weight:800;
+  cursor:pointer;
+  letter-spacing:.02em;
+  flex-shrink:0;
+  transition:background .15s, color .15s, transform .1s;
+}
+.staff-initials-btn:hover{
+  transform:scale(1.12);
+}
+.staff-initials-btn--active{
+  box-shadow:0 0 0 3px rgba(255,255,255,.25);
 }
 .planner__header .headCell{
   padding:10px 10px;
@@ -4657,7 +4786,8 @@ select option:checked{
   line-height:1.5;
   color:rgba(232,236,255,.95);
   font-weight:500;
-  word-break:break-word;
+  overflow:hidden;
+  min-width:0;
 }
 .planner-session-card__detail{
   display:none;
@@ -4835,11 +4965,18 @@ select option:checked{
   line-height:1.5;
   color:rgba(232,236,255,.95);
   font-weight:500;
-  white-space:normal;
   overflow:hidden;
+  min-width:0;
   max-height:96px;
-  word-wrap:break-word;
   transition:max-height .2s ease, opacity .2s ease, margin-top .2s ease, padding-top .2s ease;
+}
+.event__member-name{
+  display:block;
+  width:100%;
+  min-width:0;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
 }
 .event__title{ font-weight:800; font-size:12.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .event--compact .event__title{ font-size:11.5px; }
@@ -5153,6 +5290,31 @@ select option:checked{
   height:16px;
   cursor:pointer;
 }
+.input-password-wrap{
+  position:relative;
+  display:flex;
+  align-items:center;
+}
+.input-password-wrap .input{
+  flex:1;
+  padding-right:40px;
+}
+.input-password-toggle{
+  position:absolute;
+  right:8px;
+  top:50%;
+  transform:translateY(-50%);
+  background:none;
+  border:none;
+  padding:4px;
+  cursor:pointer;
+  color:var(--muted);
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  border-radius:4px;
+}
+.input-password-toggle:hover{ color:var(--text); }
 .login-form .input,
 .login-form .btn{
   width:100%;

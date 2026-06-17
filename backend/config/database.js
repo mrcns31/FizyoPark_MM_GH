@@ -1,5 +1,8 @@
 import pkg from 'pg';
-const { Pool } = pkg;
+const { Pool, types } = pkg;
+
+// DATE sütunlarını JS Date'e çevirme — timezone kaymasını önler
+types.setTypeParser(1082, val => val);
 import dotenv from 'dotenv';
 
 dotenv.config();

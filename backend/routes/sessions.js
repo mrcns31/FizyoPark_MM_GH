@@ -97,7 +97,7 @@ router.get('/', [
     const { startDate, endDate, staffId, roomId } = req.query;
     
     let query = `
-      SELECT s.*, 
+      SELECT s.*,
              st.first_name || ' ' || st.last_name as staff_name,
              COALESCE(NULLIF(TRIM(m.first_name || ' ' || m.last_name), ''), NULLIF(TRIM(m.name), '')) as member_name,
              r.name as room_name,
@@ -106,11 +106,12 @@ router.get('/', [
              cu.role AS confirmer_role
       FROM sessions s
       LEFT JOIN staff st ON s.staff_id = st.id
-      LEFT JOIN members m ON s.member_id = m.id
+      LEFT JOIN members m ON s.member_id = m.id AND m.deleted_at IS NULL
       LEFT JOIN rooms r ON s.room_id = r.id
       LEFT JOIN users cu ON cu.id = s.attendance_confirmed_by
       LEFT JOIN staff cs ON cs.user_id = cu.id
       WHERE (s.deleted_at IS NULL)
+        AND (s.member_id IS NULL OR m.id IS NOT NULL)
     `;
     const params = [];
     let paramIndex = 1;
@@ -122,8 +123,10 @@ router.get('/', [
       params.push(startTs);
     }
     if (endDate) {
-      const endTs = new Date(endDate).getTime();
-      query += ` AND s.end_ts <= $${paramIndex++}`;
+      // Günün sonuna kadar (23:59:59 UTC) olacak şekilde start_ts filtrele;
+      // s.end_ts ile karşılaştırmak son günkü seansları dışarıda bırakıyordu.
+      const endTs = new Date(endDate + 'T23:59:59.999Z').getTime();
+      query += ` AND s.start_ts <= $${paramIndex++}`;
       params.push(endTs);
     }
     if (staffId) {
@@ -175,9 +178,10 @@ router.get('/', [
              r.name as room_name
       FROM sessions s
       LEFT JOIN staff st ON s.staff_id = st.id
-      LEFT JOIN members m ON s.member_id = m.id
+      LEFT JOIN members m ON s.member_id = m.id AND m.deleted_at IS NULL
       LEFT JOIN rooms r ON s.room_id = r.id
       WHERE (s.deleted_at IS NULL)
+        AND (s.member_id IS NULL OR m.id IS NOT NULL)
     ` + query.split('WHERE (s.deleted_at IS NULL)')[1];
         result = await db.query(fallback.replace('WHERE (s.deleted_at IS NULL)', 'WHERE 1=1'), params);
       } else throw colErr;

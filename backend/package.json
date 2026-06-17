@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
+    "predev": "node predev.cjs",
     "dev": "nodemon server.js",
     "seed": "node scripts/seed-admin.js",
     "migrate": "node scripts/run-migration.js migration_one_active_package_per_member.sql",
@@ -34,6 +35,8 @@
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
+    "bcryptjs": "^3.0.3",
+    "mssql": "^12.5.5",
     "nodemon": "^3.0.2"
   }
 }

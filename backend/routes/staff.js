@@ -16,15 +16,29 @@ const checkAdmin = (req, res, next) => {
   next();
 };
 
-// Personel listesi
+// Personel listesi (soft-silinen personel gösterilmez)
 router.get('/', async (req, res) => {
   try {
-    const result = await db.query(
-      `SELECT s.*, u.username AS login_username, u.email AS user_email
-       FROM staff s
-       LEFT JOIN users u ON u.id = s.user_id
-       ORDER BY s.first_name, s.last_name`
-    );
+    let result;
+    try {
+      result = await db.query(
+        `SELECT s.*, u.username AS login_username, u.email AS user_email
+         FROM staff s
+         LEFT JOIN users u ON u.id = s.user_id
+         WHERE s.deleted_at IS NULL
+         ORDER BY s.first_name, s.last_name`
+      );
+    } catch (colErr) {
+      if (colErr.code === '42703') {
+        // deleted_at kolonu henüz yok — migration_staff_deleted_at.sql çalıştırın
+        result = await db.query(
+          `SELECT s.*, u.username AS login_username, u.email AS user_email
+           FROM staff s
+           LEFT JOIN users u ON u.id = s.user_id
+           ORDER BY s.first_name, s.last_name`
+        );
+      } else throw colErr;
+    }
     res.json(result.rows);
   } catch (error) {
     console.error('Staff list error:', error);
@@ -246,33 +260,52 @@ router.put('/:id', [
   }
 });
 
-// Personel sil (bağlı giriş hesabını da sil)
-router.delete('/:id', async (req, res) => {
+// Personel sil (admin şifresi zorunlu; soft delete - veritabanında kalır)
+router.delete('/:id', [
+  body('adminPassword').notEmpty().withMessage('Admin şifresi gerekli'),
+], async (req, res) => {
   try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ error: errors.array().map(e => e.msg).join(', ') });
+    }
     const { id } = req.params;
-    const existing = await db.query('SELECT * FROM staff WHERE id = $1', [id]);
+    const { adminPassword } = req.body;
+
+    // Admin şifresini doğrula
+    const adminResult = await db.query(
+      "SELECT password_hash FROM users WHERE role = 'admin' AND is_active = true LIMIT 1"
+    );
+    if (adminResult.rows.length === 0) {
+      return res.status(403).json({ error: 'Admin hesabı bulunamadı.' });
+    }
+    const valid = await bcrypt.compare(adminPassword, adminResult.rows[0].password_hash);
+    if (!valid) {
+      return res.status(401).json({ error: 'Admin şifresi hatalı.' });
+    }
+
+    let existing;
+    try {
+      existing = await db.query('SELECT * FROM staff WHERE id = $1 AND deleted_at IS NULL', [id]);
+    } catch (colErr) {
+      if (colErr.code === '42703') {
+        return res.status(503).json({ error: 'Silme özelliği için migration gerekli. migration_staff_deleted_at.sql çalıştırın.' });
+      }
+      throw colErr;
+    }
     if (existing.rows.length === 0) {
       return res.status(404).json({ error: 'Personel bulunamadı' });
     }
-    const deleted = existing.rows[0];
-    const userId = deleted.user_id;
+    const staffRow = existing.rows[0];
+    const userId = staffRow.user_id;
 
-    const client = await db.pool.connect();
-    try {
-      await client.query('BEGIN');
-      await client.query('DELETE FROM staff WHERE id = $1', [id]);
-      if (userId) {
-        await client.query('DELETE FROM users WHERE id = $1', [userId]);
-      }
-      await client.query('COMMIT');
-    } catch (err) {
-      await client.query('ROLLBACK');
-      throw err;
-    } finally {
-      client.release();
+    // Soft delete: personel kaydı silinmez, deleted_at işaretlenir; giriş hesabı devre dışı bırakılır
+    await db.query('UPDATE staff SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1', [id]);
+    if (userId) {
+      await db.query('UPDATE users SET is_active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1', [userId]);
     }
 
-    await activityLog(req, { action: 'staff.delete', entityType: 'staff', entityId: id, details: { name: `${deleted.first_name} ${deleted.last_name}` } }).catch(() => {});
+    await activityLog(req, { action: 'staff.delete', entityType: 'staff', entityId: id, details: { name: `${staffRow.first_name} ${staffRow.last_name}`, softDelete: true } }).catch(() => {});
     res.json({ message: 'Personel silindi' });
   } catch (error) {
     console.error('Staff delete error:', error);

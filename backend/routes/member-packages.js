@@ -8,6 +8,7 @@ import { ATTENDANCE_JOIN_SQL } from '../utils/sessionAttendance.js';
 import { loadStaffMap, sessionToDto } from '../utils/memberPackageDto.js';
 import { fulfillPendingPackageRequestsForMember } from './package-requests.js';
 import { localDateStrFromTs } from '../utils/staffWorkingHours.js';
+import { autoCompletePackageIfExhausted } from '../utils/packageSessionCounts.js';
 
 const router = express.Router();
 router.use(verifyToken);
@@ -328,6 +329,13 @@ router.get('/', [
 ], async (req, res) => {
   try {
     const { memberId } = req.query;
+
+    // 2-saat kuralı ile yanan seansları da sayarak bitmiş paketleri otomatik tamamla
+    const completedIds = await autoCompletePackageIfExhausted(db);
+    if (completedIds.length > 0) {
+      console.log('[member-packages GET] autoComplete → tamamlanan paketler:', completedIds);
+    }
+
     let sql = `
       SELECT mp.*, p.name as package_name, p.lesson_count, p.month_overrun,
              COALESCE(TRIM(m.first_name || ' ' || m.last_name), m.name, '') as member_name, m.member_no
