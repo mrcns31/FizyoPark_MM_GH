@@ -7223,6 +7223,7 @@ function refreshAdminHubSection(section) {
   else if (section === "packages") preparePackagesPanel();
   else if (section === "staff-list") prepareStaffListPanel();
   else if (section === "closure-days") prepareClosureDaysPanel();
+  else if (section === "extend-package") initExtendPackagePanel();
   else if (section === "profile") fillAdminProfileModal();
 }
 
@@ -7758,6 +7759,107 @@ function bindAdminProfileActions() {
 }
 
 
+
+function initExtendPackagePanel() {
+  var searchEl = document.getElementById("extendPackageMemberSearch");
+  var resultsEl = document.getElementById("extendPackageMemberResults");
+  var selectedEl = document.getElementById("extendPackageSelected");
+  var infoEl = document.getElementById("extendPackageSelectedInfo");
+  var endDateEl = document.getElementById("extendPackageEndDate");
+  var errorEl = document.getElementById("extendPackageError");
+  var saveBtn = document.getElementById("extendPackageSaveBtn");
+  if (!searchEl) return;
+
+  var selectedMpId = null;
+
+  // Temizle
+  searchEl.value = "";
+  resultsEl.innerHTML = "";
+  selectedEl.classList.add("hidden");
+  if (endDateEl) endDateEl.value = "";
+  if (errorEl) { errorEl.classList.add("hidden"); errorEl.textContent = ""; }
+  var radioActive = document.getElementById("extendStatusActive");
+  if (radioActive) radioActive.checked = true;
+
+  // Önceki listener'ı temizle
+  if (searchEl._extendHandler) searchEl.removeEventListener("input", searchEl._extendHandler);
+  searchEl._extendHandler = function () {
+    var q = searchEl.value.trim().toLowerCase();
+    resultsEl.innerHTML = "";
+    selectedEl.classList.add("hidden");
+    selectedMpId = null;
+    if (q.length < 1) return;
+    var matches = (state.members || []).filter(function (m) {
+      var full = getMemberDisplayName(m).toLowerCase();
+      return full.includes(q);
+    }).slice(0, 10);
+    matches.forEach(function (m) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn btn--ghost";
+      btn.style.cssText = "width:100%; text-align:left; padding:8px 12px; border-radius:6px; margin-bottom:2px;";
+      btn.textContent = getMemberDisplayName(m);
+      btn.addEventListener("click", function () {
+        selectExtendMember(m);
+      });
+      resultsEl.appendChild(btn);
+    });
+  };
+  searchEl.addEventListener("input", searchEl._extendHandler);
+
+  function selectExtendMember(m) {
+    resultsEl.innerHTML = "";
+    searchEl.value = getMemberDisplayName(m);
+    // En son paket
+    var pkgs = (state.memberPackages || []).filter(function (mp) {
+      return normId(mp.memberId) === normId(m.id);
+    }).sort(function (a, b) {
+      var ea = (a.endDate || a.end_date || "").toString();
+      var eb = (b.endDate || b.end_date || "").toString();
+      return eb.localeCompare(ea);
+    });
+    if (!pkgs.length) {
+      resultsEl.innerHTML = '<p class="hint" style="padding:8px 0;">Bu üyenin paketi bulunamadı.</p>';
+      return;
+    }
+    var mp = pkgs[0];
+    selectedMpId = mp.id;
+    var endRaw = (mp.endDate || mp.end_date || "").toString().slice(0, 10);
+    if (infoEl) infoEl.textContent = "Son paket: " + formatDateTR(endRaw) + " — " + (mp.status || "?");
+    if (endDateEl) endDateEl.value = endRaw;
+    var radioStatus = document.getElementById("extendStatus" + ((mp.status || "active") === "active" ? "Active" : "Completed"));
+    if (radioStatus) radioStatus.checked = true;
+    selectedEl.classList.remove("hidden");
+    if (errorEl) { errorEl.classList.add("hidden"); errorEl.textContent = ""; }
+  }
+
+  if (saveBtn._extendSave) saveBtn.removeEventListener("click", saveBtn._extendSave);
+  saveBtn._extendSave = async function () {
+    if (!selectedMpId) return;
+    var newEnd = endDateEl ? endDateEl.value : "";
+    if (!newEnd) {
+      if (errorEl) { errorEl.textContent = "Bitiş tarihi seçin."; errorEl.classList.remove("hidden"); }
+      return;
+    }
+    var statusEl = document.querySelector('input[name="extendPackageStatus"]:checked');
+    var newStatus = statusEl ? statusEl.value : "active";
+    if (errorEl) { errorEl.classList.add("hidden"); errorEl.textContent = ""; }
+    saveBtn.disabled = true;
+    try {
+      await window.API.updateMemberPackage(selectedMpId, { endDate: newEnd, status: newStatus });
+      var fetchRange = getPlannerFetchRange();
+      var loaded = await window.API.loadFullState(fetchRange);
+      applyStateFromApi(loaded, fetchRange);
+      render();
+      if (infoEl) infoEl.textContent = "✓ Güncellendi! Bitiş: " + formatDateTR(newEnd) + " — " + (newStatus === "active" ? "Aktif" : "Paketi Bitmiş");
+    } catch (e) {
+      if (errorEl) { errorEl.textContent = (e.data && e.data.error) || e.message || "Güncelleme başarısız."; errorEl.classList.remove("hidden"); }
+    } finally {
+      saveBtn.disabled = false;
+    }
+  };
+  saveBtn.addEventListener("click", saveBtn._extendSave);
+}
 
 function clearPackageForm() {
   if (!els.packageName) return;

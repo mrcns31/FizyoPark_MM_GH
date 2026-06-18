@@ -954,6 +954,7 @@
                 <button type="button" class="member-profile-nav__btn btn btn--ghost admin-hub-nav__item" data-admin-hub-section="staff-list" data-admin-hub-admin-only="1">Personel Listesi</button>
                 <button type="button" class="member-profile-nav__btn btn btn--ghost admin-hub-nav__item" data-admin-hub-section="closure-days" data-admin-hub-admin-only="1">Kapalı Günler</button>
                 <button type="button" class="member-profile-nav__btn btn btn--ghost admin-hub-nav__item" data-admin-hub-open-logs="1" data-admin-hub-admin-only="1">İşlem Logları</button>
+                <button type="button" class="member-profile-nav__btn btn btn--ghost admin-hub-nav__item" data-admin-hub-section="extend-package" data-admin-hub-admin-only="1">Paket Süresi Güncelle</button>
                 <button type="button" class="member-profile-nav__btn btn btn--ghost admin-hub-nav__item" data-admin-hub-section="profile">Hesap İşlemleri</button>
               </nav>
             </aside>
@@ -1071,6 +1072,39 @@
                 </div>
                 <h3 class="member-profile-panel__title" style="margin-top:20px;">Geçmiş Kayıtlar</h3>
                 <div id="closurePeriodsList" class="list"></div>
+              </section>
+              <section class="admin-hub-panel hidden" data-admin-hub-panel="extend-package" data-admin-hub-admin-only="1">
+                <h2 class="member-profile-panel__title">Paket Süresi Güncelle</h2>
+                <p class="hint" style="margin-top:0;">Üye adını yazın, son paketini bulun, bitiş tarihini ve durumunu güncelleyin.</p>
+                <div class="formRow" style="margin-top:16px;">
+                  <label class="label" for="extendPackageMemberSearch">Üye Adı</label>
+                  <input id="extendPackageMemberSearch" class="input" type="text" placeholder="Ad veya soyad yazın…" autocomplete="off" />
+                </div>
+                <div id="extendPackageMemberResults" style="margin-top:6px; max-height:200px; overflow-y:auto;"></div>
+                <div id="extendPackageSelected" class="hidden" style="margin-top:16px; padding:12px; border:1px solid var(--border); border-radius:8px; background:rgba(255,255,255,.04);">
+                  <div id="extendPackageSelectedInfo" class="hint" style="margin-bottom:12px;"></div>
+                  <div class="formGrid">
+                    <div class="formRow">
+                      <label class="label" for="extendPackageEndDate">Yeni Bitiş Tarihi</label>
+                      <input id="extendPackageEndDate" class="input" type="date" />
+                    </div>
+                    <div class="formRow">
+                      <label class="label">Durum</label>
+                      <div style="display:flex; gap:16px; align-items:center; padding:8px 0;">
+                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                          <input type="radio" name="extendPackageStatus" id="extendStatusActive" value="active" checked /> Aktif
+                        </label>
+                        <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                          <input type="radio" name="extendPackageStatus" id="extendStatusCompleted" value="completed" /> Paketi Bitmiş
+                        </label>
+                      </div>
+                    </div>
+                  </div>
+                  <div id="extendPackageError" class="error hidden" style="margin-top:8px;"></div>
+                  <div class="admin-hub-panel__actions">
+                    <button id="extendPackageSaveBtn" class="btn btn--primary" type="button">Kaydet</button>
+                  </div>
+                </div>
               </section>
               <section class="admin-hub-panel hidden" data-admin-hub-panel="profile">
                 <h2 class="member-profile-panel__title">Hesap İşlemleri</h2>

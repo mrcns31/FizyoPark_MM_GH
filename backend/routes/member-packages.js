@@ -602,6 +602,7 @@ router.put('/:id', [
   body('skip_day_distribution').optional().isBoolean(),
   body('effective_date').optional().isISO8601(),
   body('package_id').optional().isInt(),
+  body('status').optional().isIn(['active', 'completed', 'cancelled']),
   body('slots').optional().isArray(),
   body('slots.*.day_of_week').optional().isInt({ min: 0, max: 6 }),
   body('slots.*.start_time').optional().trim(),
@@ -614,7 +615,7 @@ router.put('/:id', [
     }
 
     const { id } = req.params;
-    const { start_date, end_date, skip_day_distribution, effective_date, package_id: body_package_id, slots } = req.body;
+    const { start_date, end_date, skip_day_distribution, effective_date, package_id: body_package_id, slots, status } = req.body;
 
     const existing = await db.query('SELECT * FROM member_packages WHERE id = $1', [id]);
     if (existing.rows.length === 0) {
@@ -777,6 +778,10 @@ router.put('/:id', [
     if (body_package_id !== undefined) {
       updateFields.push(`package_id = $${pi++}`);
       values.push(body_package_id);
+    }
+    if (status !== undefined) {
+      updateFields.push(`status = $${pi++}`);
+      values.push(status);
     }
     if (updateFields.length > 0) {
       values.push(id);

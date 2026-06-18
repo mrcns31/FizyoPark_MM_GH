@@ -731,6 +731,7 @@
     const payload = {};
     if (body.startDate !== undefined) payload.start_date = body.startDate;
     if (body.endDate !== undefined) payload.end_date = body.endDate;
+    if (body.status !== undefined) payload.status = body.status;
     if (body.skipDayDistribution !== undefined) payload.skip_day_distribution = body.skipDayDistribution;
     if (body.effectiveDate !== undefined) payload.effective_date = body.effectiveDate;
     if (body.packageId !== undefined) payload.package_id = body.packageId;
