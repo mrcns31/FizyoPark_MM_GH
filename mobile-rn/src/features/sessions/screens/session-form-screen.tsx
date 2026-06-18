@@ -1,0 +1,295 @@
+import { useEffect, useMemo, useState } from 'react';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { useQuery } from '@tanstack/react-query';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+
+import { ScreenContainer } from '../../../components/screen-container';
+import { DateField } from '../../../components/date-field';
+import { TimeField } from '../../../components/time-field';
+import { SelectField } from '../../../components/select-field';
+import { FormField } from '../../../components/form';
+import { Button, Card } from '../../../components/ui';
+import { ApiError } from '../../../lib/api-client';
+import { getMembers } from '../../members/api/members';
+import { getRooms } from '../../rooms/api/rooms';
+import { getStaff } from '../../staff/api/staff';
+import { colors } from '../../../theme/colors';
+import { useCreateSession, useDeleteSession, useSessions, useUpdateSession } from '../api/hooks';
+import { useWorkingHours } from '../../settings/api/hooks';
+import { useMemberPackages } from '../../member-packages/api/hooks';
+import { isAttendanceConfirmed, type PlannerSession } from '../api/sessions';
+import { promptAdminPassword } from '../../../lib/admin-password';
+
+/** Date → "YYYY-MM-DD" (yerel). */
+function dateToStr(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+/** "YYYY-MM-DD" tarihini al, saati koru. */
+function mergeDate(base: Date, dateStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  if (!y || !m || !d) return base;
+  return new Date(y, m - 1, d, base.getHours(), 0, 0, 0);
+}
+/** "HH:00" saatini al, tarihi koru (dakika hep 00). */
+function mergeTime(base: Date, timeStr: string): Date {
+  const h = parseInt(timeStr.split(':')[0], 10) || 0;
+  return new Date(base.getFullYear(), base.getMonth(), base.getDate(), h, 0, 0, 0);
+}
+
+/**
+ * Seans oluştur/düzenle (modal sheet) — web "Grup Seans" modalı paritesi.
+ * Her iki modda da ÇOKLU üye: personel/oda/tarih/saat + üye listesi.
+ * - Yeni (FAB): her üyeye seans oluşturur.
+ * - Düzenleme (?id=&date=): o slottaki grubu doldurur; kaydette ekle→oluştur,
+ *   çıkar→sil, slot/personel/oda değişince kalanları günceller.
+ */
+export function SessionFormScreen() {
+  const router = useRouter();
+  const params = useLocalSearchParams<{ id?: string; date?: string; defaultTs?: string }>();
+  const create = useCreateSession();
+  const update = useUpdateSession();
+  const del = useDeleteSession();
+
+  const { data: daySessions } = useSessions(
+    params.date ? { startDate: params.date, endDate: params.date } : {}
+  );
+  const editing = params.id ? daySessions?.find((s) => s.id === Number(params.id)) : undefined;
+
+  // Düzenlemede: aynı slottaki tüm seanslar (grup) = aynı personel + başlangıç + bitiş + oda.
+  const groupSessions = useMemo<PlannerSession[]>(() => {
+    if (!editing) return [];
+    return (daySessions ?? []).filter(
+      (s) =>
+        s.staffId === editing.staffId &&
+        s.startTs === editing.startTs &&
+        s.endTs === editing.endTs &&
+        (s.roomId ?? null) === (editing.roomId ?? null),
+    );
+  }, [editing, daySessions]);
+
+  const membersQ = useQuery({ queryKey: ['members'], queryFn: getMembers });
+  const staffQ = useQuery({ queryKey: ['staff'], queryFn: getStaff });
+  const roomsQ = useQuery({ queryKey: ['rooms'], queryFn: getRooms });
+
+  const [staffId, setStaffId] = useState<number | null>(null);
+  const [roomId, setRoomId] = useState<number | null>(null);
+  const [memberIds, setMemberIds] = useState<number[]>([]);
+  const [note, setNote] = useState('');
+  const [start, setStart] = useState<Date>(() => {
+    const d = new Date(params.defaultTs ? Number(params.defaultTs) : Date.now());
+    d.setMinutes(0, 0, 0);
+    return d;
+  });
+  const [inited, setInited] = useState(false);
+
+  // Düzenleme verisi yüklenince formu bir kez doldur.
+  useEffect(() => {
+    if (editing && !inited) {
+      setStaffId(editing.staffId);
+      setRoomId(editing.roomId ?? null);
+      setMemberIds(groupSessions.map((s) => s.memberId).filter((x): x is number => x != null));
+      setNote(editing.note ?? '');
+      const d = new Date(editing.startTs);
+      d.setMinutes(0, 0, 0);
+      setStart(d);
+      setInited(true);
+    }
+  }, [editing, groupSessions, inited]);
+
+  // Not alanı yalnızca tekil seans düzenlemede (web grup modalında not yok).
+  const singleEdit = !!editing && groupSessions.length <= 1;
+
+  // Süre: düzenlemede mevcut süre korunur, yeni seansta 60 dk (web ile aynı).
+  const durationMin = editing ? Math.max(30, Math.round((editing.endTs - editing.startTs) / 60000)) : 60;
+
+  // Seçili günün çalışma saatleri → saat seçimini sınırla.
+  const { data: workingHours } = useWorkingHours();
+  const dow = start.getDay();
+  const dayWh = workingHours?.[dow];
+  const minHour = dayWh ? parseInt(dayWh.start.split(':')[0], 10) : 8;
+  const maxHour = dayWh ? Math.max(minHour, parseInt(dayWh.end.split(':')[0], 10) - 1) : 21;
+
+  // Yeni seansta saat çalışma saatleri dışındaysa başlangıca kenetle (web yeni grup
+  // modalı saati tesis başlangıç saatine ayarlar). Düzenlemede dokunma.
+  useEffect(() => {
+    if (editing) return;
+    const h = start.getHours();
+    if (h < minHour || h > maxHour) {
+      setStart((d) => {
+        const n = new Date(d);
+        n.setHours(minHour, 0, 0, 0);
+        return n;
+      });
+    }
+  }, [editing, minHour, maxHour, start]);
+
+  // Sadece aktif paketi olan üyelere seans açılabilir (backend de zorunlu kılıyor).
+  const { data: allPackages } = useMemberPackages();
+  const activeMemberIds = useMemo(() => {
+    const set = new Set<number>();
+    for (const mp of allPackages ?? []) if (mp.status === 'active') set.add(mp.memberId);
+    return set;
+  }, [allPackages]);
+
+  const members = membersQ.data ?? [];
+  const memberName = (id: number) => members.find((m) => m.id === id)?.name ?? `#${id}`;
+
+  // Eklenebilir üyeler: aktif paketli & henüz eklenmemiş.
+  const addableOptions = members
+    .filter((m) => activeMemberIds.has(m.id) && !memberIds.includes(m.id))
+    .map((m) => ({ label: m.name, value: m.id }));
+
+  // Personeli o günün çalışma gününe göre filtrele (çalışma saati tanımlıysa).
+  const staffOptions = (staffQ.data ?? [])
+    .filter((s) => {
+      const wh = s.workingHours?.[dow];
+      return !wh || wh.enabled;
+    })
+    .map((s) => ({ label: s.fullName, value: s.id }));
+
+  async function onSave() {
+    if (!staffId) return Alert.alert('Eksik bilgi', 'Personel zorunludur.');
+    if (memberIds.length === 0) return Alert.alert('Eksik bilgi', 'En az bir üye ekleyin.');
+
+    const startTs = start.getTime();
+    const endTs = startTs + durationMin * 60000;
+
+    try {
+      if (editing) {
+        const byMember = new Map(groupSessions.map((s) => [s.memberId, s]));
+        const keep = new Set(memberIds);
+        const slotChanged = (ex: PlannerSession) =>
+          ex.staffId !== staffId ||
+          (ex.roomId ?? null) !== (roomId ?? null) ||
+          ex.startTs !== startTs ||
+          ex.endTs !== endTs ||
+          (singleEdit && note !== (ex.note ?? '')); // tekil: not değişince de güncelle
+        const removed = groupSessions.filter((s) => s.memberId == null || !keep.has(s.memberId));
+        const updated = memberIds
+          .map((mid) => byMember.get(mid))
+          .filter((ex): ex is PlannerSession => !!ex && slotChanged(ex));
+
+        // Onaylanmış seans değişiyor/siliniyorsa tek seferde admin şifresi (web paritesi).
+        let adminPassword: string | undefined;
+        if ([...removed, ...updated].some((s) => isAttendanceConfirmed(s))) {
+          const pwd = await promptAdminPassword('Girişi onaylanmış seans(lar) üzerinde değişiklik için admin şifrenizi girin.');
+          if (pwd == null) return;
+          adminPassword = pwd;
+        }
+
+        // Eklenen/güncellenen üyeler
+        for (const mid of memberIds) {
+          const ex = byMember.get(mid);
+          if (ex) {
+            if (slotChanged(ex)) {
+              await update.mutateAsync({
+                id: ex.id,
+                data: { memberId: mid, staffId, roomId: roomId ?? null, startTs, endTs, note: singleEdit ? note : ex.note ?? '' },
+                adminPassword,
+              });
+            }
+          } else {
+            await create.mutateAsync({ memberId: mid, staffId, roomId: roomId ?? null, startTs, endTs, note: '' });
+          }
+        }
+        // Çıkarılan üyeler → sil
+        for (const s of removed) {
+          await del.mutateAsync({ id: s.id, adminPassword });
+        }
+      } else {
+        for (const mid of memberIds) {
+          await create.mutateAsync({ memberId: mid, staffId, roomId: roomId ?? null, startTs, endTs, note: '' });
+        }
+      }
+      router.back();
+    } catch (e) {
+      Alert.alert('Hata', e instanceof ApiError ? e.message : 'Kayıt başarısız');
+    }
+  }
+
+  const saving = create.isPending || update.isPending || del.isPending;
+  const title = editing ? (groupSessions.length > 1 ? 'Grup seans düzenle' : 'Seans düzenle') : 'Grup seans ekle';
+
+  return (
+    <ScreenContainer scroll>
+      <Stack.Screen options={{ title }} />
+      <Card style={styles.card}>
+        <SelectField label="Personel" required value={staffId} onChange={setStaffId} options={staffOptions} />
+        <SelectField
+          label="Oda (opsiyonel)"
+          value={roomId}
+          onChange={setRoomId}
+          options={(roomsQ.data ?? []).map((r) => ({ label: r.name, value: r.id }))}
+        />
+
+        <View style={styles.dtRow}>
+          <View style={styles.dtDate}>
+            <Text style={styles.label}>Tarih</Text>
+            <DateField value={dateToStr(start)} onChange={(v) => setStart(mergeDate(start, v))} />
+          </View>
+          <View>
+            <Text style={styles.label}>Saat</Text>
+            <TimeField
+              value={`${String(start.getHours()).padStart(2, '0')}:00`}
+              hourOnly
+              minHour={minHour}
+              maxHour={maxHour}
+              onChange={(v) => setStart(mergeTime(start, v))}
+            />
+          </View>
+        </View>
+
+        <View>
+          <Text style={styles.label}>Üyeler {memberIds.length ? `(${memberIds.length})` : ''}</Text>
+          {memberIds.map((mid) => (
+            <View key={mid} style={styles.memberRow}>
+              <Text style={styles.memberName} numberOfLines={1}>{memberName(mid)}</Text>
+              <Pressable
+                hitSlop={8}
+                style={styles.removeBtn}
+                onPress={() => setMemberIds((ids) => ids.filter((x) => x !== mid))}
+              >
+                <Ionicons name="trash-outline" size={18} color={colors.danger} />
+              </Pressable>
+            </View>
+          ))}
+          <SelectField
+            label=""
+            value={null}
+            onChange={(v) => setMemberIds((ids) => (ids.includes(v) ? ids : [...ids, v]))}
+            options={addableOptions}
+            placeholder={addableOptions.length ? '+ Üye ekle' : 'Eklenecek aktif paketli üye yok'}
+          />
+        </View>
+
+        {singleEdit ? <FormField label="Not" value={note} onChangeText={setNote} multiline /> : null}
+      </Card>
+
+      <Button title={editing ? 'Güncelle' : 'Oluştur'} onPress={onSave} loading={saving} style={styles.submit} />
+    </ScreenContainer>
+  );
+}
+
+const styles = StyleSheet.create({
+  card: { gap: 14, marginTop: 8 },
+  label: { color: colors.muted, fontSize: 12, marginBottom: 6 },
+  dtRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
+  dtDate: { flex: 1 },
+  memberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    marginBottom: 8,
+  },
+  memberName: { color: colors.text, fontSize: 15, fontWeight: '600', flex: 1 },
+  removeBtn: { padding: 2 },
+  submit: { marginTop: 14, marginBottom: 8 },
+});
