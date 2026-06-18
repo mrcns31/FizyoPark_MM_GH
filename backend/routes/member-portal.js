@@ -221,15 +221,20 @@ router.post('/verify-card-access', async (req, res) => {
 router.post('/verify-phone-access', async (req, res) => {
   try {
     const { phone } = req.body || {};
+    console.log('[verify-phone-access] gelen:', phone);
     const normalized = normalizePhoneFlexible(phone);
+    console.log('[verify-phone-access] normalize:', normalized);
     if (!normalized) {
       return res.status(401).json({ valid: false, reason: 'format' });
     }
+    // DB'deki numaralar farklı formatlarda olabilir; her iki tarafı rakama indirgeyerek karşılaştır
+    const digits = normalized.replace(/\D/g, '');
 
     // Önce üye tablosunu kontrol et
     const memberRow = await db.query(
-      'SELECT id, name, user_id FROM members WHERE phone = $1 AND deleted_at IS NULL',
-      [normalized]
+      `SELECT id, name, user_id FROM members
+       WHERE REGEXP_REPLACE(phone, '[^0-9]', '', 'g') = $1 AND deleted_at IS NULL`,
+      [digits]
     );
 
     if (memberRow.rows.length) {
@@ -273,8 +278,8 @@ router.post('/verify-phone-access', async (req, res) => {
     const staffRow = await db.query(
       `SELECT s.id, s.first_name, s.last_name, u.role
        FROM staff s LEFT JOIN users u ON u.id = s.user_id
-       WHERE s.phone = $1`,
-      [normalized]
+       WHERE REGEXP_REPLACE(s.phone, '[^0-9]', '', 'g') = $1`,
+      [digits]
     );
     if (!staffRow.rows.length) {
       return res.status(401).json({ valid: false, reason: 'not_found' });

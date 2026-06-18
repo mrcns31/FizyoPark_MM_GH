@@ -100,7 +100,9 @@
       }
     } catch (err) {
       var reason = err && err.data && err.data.reason;
-      setFailure(INVALID_REASON_MESSAGES[reason] || 'Bağlantı hatası, tekrar deneyin');
+      var detail = err && err.message ? err.message : '';
+      var status = err && err.status ? ' [' + err.status + ']' : '';
+      setFailure((INVALID_REASON_MESSAGES[reason] || 'Bağlantı hatası') + (detail ? '\n' + detail + status : status));
     }
   }
 
@@ -246,7 +248,9 @@
       }
     } catch (err) {
       var reason = err && err.data && err.data.reason;
-      setFailure(INVALID_REASON_MESSAGES[reason] || 'Bağlantı hatası, tekrar deneyin');
+      var detail = err && err.message ? err.message : '';
+      var status = err && err.status ? ' [' + err.status + ']' : '';
+      setFailure((INVALID_REASON_MESSAGES[reason] || 'Bağlantı hatası') + (detail ? '\n' + detail + status : status));
     }
   }
 
@@ -302,16 +306,38 @@
     if (!phoneEntry) focusInput();
   });
 
-  /* ─── Saat ──────────────────────────────────────────────────────────────── */
+  /* ─── Saat & sunucu bağlantı kontrolü ──────────────────────────────────── */
+
+  var serverOnline = false;
 
   function tickClock() {
+    if (!serverOnline) {
+      clockEl.textContent = 'Sunucuya bağlanılamıyor…';
+      return;
+    }
     var now = new Date();
     clockEl.textContent =
       now.toLocaleDateString('tr-TR', { weekday: 'long', day: '2-digit', month: 'long' }) +
       ' — ' +
       now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
   }
-  tickClock();
+
+  function checkServer() {
+    fetch('/health', { method: 'GET', cache: 'no-store' })
+      .then(function (r) {
+        var wasOffline = !serverOnline;
+        serverOnline = r.ok;
+        if (wasOffline && serverOnline) tickClock();
+        else if (!serverOnline) tickClock();
+      })
+      .catch(function () {
+        serverOnline = false;
+        tickClock();
+      });
+  }
+
+  checkServer();
+  setInterval(checkServer, 30000);
   setInterval(tickClock, 30000);
 
   /* ─── Her saat :30'da otomatik yenileme ────────────────────────────────── */

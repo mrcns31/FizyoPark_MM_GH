@@ -1,0 +1,21 @@
+[Unit]
+Description=FizyoPark Kiosk Ekrani
+After=backend.service nginx.service graphical.target
+Wants=backend.service
+
+[Service]
+Type=simple
+User=__APP_USER__
+PAMName=login
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/__APP_USER__/.Xauthority
+ExecStart=/usr/bin/startx /home/__APP_USER__/.xinitrc -- :0 vt7
+Restart=on-failure
+RestartSec=5
+TTYPath=/dev/tty7
+StandardInput=tty
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=graphical.target

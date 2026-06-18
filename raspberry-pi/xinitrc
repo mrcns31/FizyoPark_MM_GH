@@ -1,0 +1,36 @@
+#!/bin/sh
+# FizyoPark Kiosk — X başlatma scripti
+# /home/pi/.xinitrc olarak kopyalanır
+
+# ── Ekran güç yönetimini kapat ──────────────────────────────────────────────
+xset s off
+xset -dpms
+xset s noblank
+
+# ── Fare imlecini gizle (3 saniye hareketsizlikte) ──────────────────────────
+unclutter -idle 3 -root &
+
+# ── Pencere yöneticisi (sadece kiosk için minimal) ─────────────────────────
+openbox --config-file /dev/null &
+sleep 1
+
+# ── Ekran dönüşü (monitör dik duruyor ise yorumu kaldırın) ─────────────────
+# xrandr --output HDMI-1 --rotate right
+
+# ── Chromium kiosk modu ────────────────────────────────────────────────────
+# nginx 80 portunda kiosk.html'i sunuyor;
+# api.js window.location.hostname ile backend portunu (3000) otomatik bulur.
+exec chromium-browser \
+  --kiosk \
+  --noerrdialogs \
+  --disable-infobars \
+  --disable-translate \
+  --no-first-run \
+  --disable-pinch \
+  --overscroll-history-navigation=0 \
+  --disable-features=TranslateUI \
+  --check-for-update-interval=604800 \
+  --disable-restore-session-state \
+  --disable-background-networking \
+  --disable-sync \
+  "http://localhost/kiosk.html"

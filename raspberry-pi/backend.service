@@ -1,0 +1,21 @@
+[Unit]
+Description=FizyoPark Backend API
+After=network.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__APP_USER__
+WorkingDirectory=__APP_DIR__/backend
+ExecStart=/usr/bin/node server.js
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Ortam değişkenleri .env'den okunur (dotenv)
+# Ek olarak buraya da yazılabilir:
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
