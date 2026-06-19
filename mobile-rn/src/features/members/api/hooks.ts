@@ -4,6 +4,7 @@ import type { Member } from '../../../types/api';
 import {
   createMember,
   deleteMember,
+  getFormerMemberPackages,
   getFormerMembers,
   getMembers,
   reactivateMember,
@@ -21,6 +22,14 @@ export function useMembers() {
 
 export function useFormerMembers() {
   return useQuery({ queryKey: memberKeys.former, queryFn: getFormerMembers });
+}
+
+export function useFormerMemberPackages(memberId: number | null) {
+  return useQuery({
+    queryKey: ['members', 'former', memberId, 'packages'],
+    queryFn: () => getFormerMemberPackages(memberId as number),
+    enabled: memberId != null,
+  });
 }
 
 export function useReactivateMember() {

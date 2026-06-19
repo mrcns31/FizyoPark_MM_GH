@@ -216,12 +216,6 @@ export function SessionFormScreen() {
       <Stack.Screen options={{ title }} />
       <Card style={styles.card}>
         <SelectField label="Personel" required value={staffId} onChange={setStaffId} options={staffOptions} />
-        <SelectField
-          label="Oda (opsiyonel)"
-          value={roomId}
-          onChange={setRoomId}
-          options={(roomsQ.data ?? []).map((r) => ({ label: r.name, value: r.id }))}
-        />
 
         <View style={styles.dtRow}>
           <View style={styles.dtDate}>

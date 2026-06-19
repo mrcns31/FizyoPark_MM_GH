@@ -121,3 +121,16 @@ const monthLabelFmt = new Intl.DateTimeFormat('tr-TR', { timeZone: TZ, month: 'l
 export function monthLabel(ts: number): string {
   return monthLabelFmt.format(new Date(ts));
 }
+
+// "19 Haz 2026 Cum" — kısa ay + kısa gün adı
+const shortMonthFmt = new Intl.DateTimeFormat('tr-TR', { timeZone: TZ, day: 'numeric', month: 'short', year: 'numeric' });
+const shortWeekdayFmt = new Intl.DateTimeFormat('tr-TR', { timeZone: TZ, weekday: 'short' });
+const WEEKDAY_SHORT: Record<string, string> = {
+  Paz: 'Paz', Pzt: 'Pzt', Sal: 'Sal', Çar: 'Çar', Per: 'Per', Cum: 'Cum', Cmt: 'Cmt',
+};
+export function formatDayShort(ts: number): string {
+  const d = new Date(ts);
+  const datePart = shortMonthFmt.format(d).replace('.', '');
+  const wd = shortWeekdayFmt.format(d).replace('.', '');
+  return `${datePart} ${WEEKDAY_SHORT[wd] ?? wd}`;
+}

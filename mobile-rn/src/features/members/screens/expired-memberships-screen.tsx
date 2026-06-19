@@ -52,7 +52,7 @@ export function ExpiredMembershipsScreen() {
     const out: Row[] = [];
     for (const [memberId, pkgs] of byMember) {
       const hasActive = pkgs.some((p) => p.status === 'active');
-      if (hasActive) continue; // aktif paketi olan "bitmiş" sayılmaz
+      if (hasActive) continue;
       const latest = [...pkgs].sort((a, b) => (b.endDate || '').localeCompare(a.endDate || ''))[0];
       if (!latest) continue;
       const m = members.find((x) => x.id === memberId);
@@ -146,7 +146,28 @@ export function ExpiredMembershipsScreen() {
                 {fmtTR(r.startDate)} – {fmtTR(r.endDate)} bitti
               </Text>
             </View>
-            <Ionicons name="add-circle-outline" size={22} color={colors.accent} />
+            <View style={styles.actions}>
+              <Pressable
+                style={styles.iconBtn}
+                hitSlop={8}
+                onPress={(e) => {
+                  e.stopPropagation?.();
+                  router.push({ pathname: '/(admin)/members/form', params: { id: String(r.memberId) } });
+                }}
+              >
+                <Ionicons name="person-outline" size={18} color={colors.muted} />
+              </Pressable>
+              <Pressable
+                style={styles.iconBtn}
+                hitSlop={8}
+                onPress={(e) => {
+                  e.stopPropagation?.();
+                  router.push({ pathname: '/(admin)/members/member-packages', params: { memberId: String(r.memberId) } });
+                }}
+              >
+                <Ionicons name="add-circle-outline" size={18} color={colors.accent} />
+              </Pressable>
+            </View>
           </Pressable>
         )}
       />
@@ -172,4 +193,15 @@ const styles = StyleSheet.create({
   name: { fontSize: 15, fontWeight: '700', color: colors.text },
   metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   meta: { fontSize: 12, color: colors.muted },
+  actions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  iconBtn: {
+    width: 38,
+    height: 38,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
 });

@@ -155,6 +155,7 @@ export interface MemberPackage {
   slots: PackageSlot[];
   sessionConflicts: unknown[];
   sessionsCreated: number | null;
+  remainingSessions: number | null;
 }
 
 export function memberPackageFromApi(row: any): MemberPackage {
@@ -180,6 +181,12 @@ export function memberPackageFromApi(row: any): MemberPackage {
         ? Number(row.sessions_created)
         : row.sessionsCreated != null
           ? Number(row.sessionsCreated)
+          : null,
+    remainingSessions:
+      row.remaining_sessions != null
+        ? Number(row.remaining_sessions)
+        : row.remainingSessions != null
+          ? Number(row.remainingSessions)
           : null,
   };
 }

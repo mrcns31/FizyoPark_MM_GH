@@ -10,6 +10,7 @@ import {
   endOfMonthTs,
   enumerateDays,
   formatDayLabel,
+  formatDayShort,
   formatSessionRange,
   monthLabel,
   startOfMonthTs,
@@ -27,6 +28,7 @@ import { useConfirmAttendance, useDeleteSession, useSessions } from '../api/hook
 import { isAttendanceConfirmed, type PlannerSession } from '../api/sessions';
 import { promptAdminPassword } from '../../../lib/admin-password';
 import { AdminCalendarGrid } from './admin-calendar-grid';
+import { DateField } from '../../../components/date-field';
 import { SessionDetailSheet } from '../components/session-detail-sheet';
 
 const DAY = 24 * 3600 * 1000;
@@ -34,7 +36,6 @@ type ViewMode = 'day' | 'week' | 'month';
 const VIEWS: { key: ViewMode; label: string }[] = [
   { key: 'day', label: 'Günlük' },
   { key: 'week', label: 'Haftalık' },
-  { key: 'month', label: 'Aylık' },
 ];
 
 /**
@@ -146,29 +147,36 @@ export function AdminPlannerScreen() {
   }
 
   const step = view === 'day' ? DAY : view === 'week' ? 7 * DAY : 30 * DAY;
+
   const rangeLabel =
-    view === 'day' ? formatDayLabel(anchor) : view === 'month' ? monthLabel(anchor) : weekRangeLabel(range.start, range.end);
+    view === 'day' ? formatDayShort(anchor) : view === 'month' ? monthLabel(anchor) : weekRangeLabel(range.start, range.end);
   const isToday = view === 'day' && toDateStr(anchor) === toDateStr(Date.now());
 
   const wide = { maxWidth: contentMaxWidth, alignSelf: 'center' as const, width: '100%' as const, paddingHorizontal: gutter };
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <ScreenHeader title="Takvim" />
-
-      {/* gün/aralık nav */}
-      <View style={[styles.header, wide]}>
-        <Pressable onPress={() => setAnchor((t) => t - step)} hitSlop={10} style={styles.navBtn}>
-          <Ionicons name="chevron-back" size={22} color={colors.text} />
-        </Pressable>
-        <View style={styles.headCenter}>
-          <Text style={styles.dayLabel}>{rangeLabel}</Text>
-          <Muted>{sessions.length} seans</Muted>
-        </View>
-        <Pressable onPress={() => setAnchor((t) => t + step)} hitSlop={10} style={styles.navBtn}>
-          <Ionicons name="chevron-forward" size={22} color={colors.text} />
-        </Pressable>
-      </View>
+      <ScreenHeader
+        title="Takvim"
+        right={
+          <View style={styles.navInline}>
+            <Pressable onPress={() => setAnchor((t) => t - step)} hitSlop={10} style={styles.navBtn}>
+              <Ionicons name="chevron-back" size={20} color={colors.text} />
+            </Pressable>
+            <DateField
+              value={toDateStr(anchor)}
+              onChange={(v) => {
+                const [y, m, d] = v.split('-').map(Number);
+                setAnchor(new Date(y, m - 1, d).getTime());
+              }}
+              trigger={<Text style={styles.dayLabel}>{rangeLabel}</Text>}
+            />
+            <Pressable onPress={() => setAnchor((t) => t + step)} hitSlop={10} style={styles.navBtn}>
+              <Ionicons name="chevron-forward" size={20} color={colors.text} />
+            </Pressable>
+          </View>
+        }
+      />
 
       {/* görünüm seçici + Bugün */}
       <View style={[styles.toolbar, wide]}>
@@ -231,7 +239,11 @@ export function AdminPlannerScreen() {
                 dayTs={d.ts}
                 sessions={d.sessions}
                 fullRail={view === 'day'}
-                onPressGroup={(g) => setSelectedKey({ startTs: g[0].startTs, staffId: g[0].staffId })}
+                onPressGroup={(g) => router.push({
+                  pathname: '/(admin)/planner/session-form',
+                  params: { id: String(g[0].id), date: toDateStr(g[0].startTs) },
+                })}
+                onLongPressGroup={(g) => setSelectedKey({ startTs: g[0].startTs, staffId: g[0].staffId })}
               />
             </View>
           ))}
@@ -269,10 +281,11 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 8, paddingBottom: 2 },
   title: { fontSize: 20, fontWeight: '800', color: colors.text },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12 },
+  navInline: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   navBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
+    width: 30,
+    height: 30,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: colors.border,
     backgroundColor: 'rgba(255,255,255,0.04)',
@@ -280,7 +293,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headCenter: { alignItems: 'center', flex: 1 },
-  dayLabel: { fontSize: 16, fontWeight: '750' as '700', color: colors.text },
+  dayLabel: { fontSize: 13, fontWeight: '700', color: colors.text, width: 132, textAlign: 'center' },
   toolbar: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingBottom: 10 },
   viewGroup: { flex: 1, flexDirection: 'row', gap: 6 },
   viewBtn: {

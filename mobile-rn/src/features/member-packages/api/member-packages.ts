@@ -79,8 +79,11 @@ export interface MemberPackageSession {
   staffName: string;
   roomName: string;
   attendanceOutcome: string | null;
+  checkedInAt: string | null;
+  checkInMethod: string | null;
   isCancelled: boolean;
   isPast: boolean;
+  status: string;
   statusLabel: string | null;
 }
 
@@ -94,8 +97,11 @@ export async function getMemberPackageSessions(id: number): Promise<MemberPackag
     staffName: row.staffName || row.staff_name || '',
     roomName: row.roomName || row.room_name || '',
     attendanceOutcome: row.attendanceOutcome || row.attendance_outcome || null,
+    checkedInAt: row.checkedInAt || row.checked_in_at || null,
+    checkInMethod: row.checkInMethod || row.check_in_method || null,
     isCancelled: !!(row.isCancelled ?? row.is_cancelled),
     isPast: !!row.isPast,
+    status: row.status || 'scheduled',
     statusLabel: row.statusLabel || row.status_label || null,
   }));
 }

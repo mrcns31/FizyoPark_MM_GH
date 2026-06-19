@@ -35,11 +35,14 @@ export function DateField({
   onChange,
   placeholder = 'Tarih seç',
   minimumDate,
+  trigger,
 }: {
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   minimumDate?: Date;
+  /** Özel tetikleyici — sağlanırsa varsayılan buton yerine bu render edilir. */
+  trigger?: React.ReactNode;
 }) {
   const [open, setOpen] = useState(false);
   const [iosTemp, setIosTemp] = useState<Date>(() => strToDate(value));
@@ -51,12 +54,16 @@ export function DateField({
 
   return (
     <>
+      {trigger ? (
+        <Pressable onPress={openPicker}>{trigger}</Pressable>
+      ) : (
       <Pressable style={styles.btn} onPress={openPicker}>
         <Ionicons name="calendar-outline" size={18} color={colors.muted} />
         <Text style={[styles.btnText, !value && styles.placeholder]}>
           {value ? labelTR(value) : placeholder}
         </Text>
       </Pressable>
+      )}
 
       {Platform.OS === 'android' && open ? (
         <DateTimePicker

@@ -58,6 +58,10 @@ export async function updateAccountProfile(body: Record<string, unknown>): Promi
   await apiClient.put('/auth/account', body || {});
 }
 
+export async function verifyAdminPassword(password: string): Promise<void> {
+  await apiClient.post('/auth/verify-password', { password });
+}
+
 export async function logout(): Promise<void> {
   try {
     if (await getToken()) {

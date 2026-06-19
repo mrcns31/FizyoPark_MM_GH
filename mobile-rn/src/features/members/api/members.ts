@@ -47,3 +47,29 @@ export async function reactivateMember(id: number): Promise<Member> {
   const { data } = await apiClient.put(`/members/${id}/reactivate`, {});
   return memberFromApi(data);
 }
+
+export interface FormerMemberPackage {
+  id: number;
+  packageId: number;
+  packageName: string;
+  startDate: string;
+  endDate: string;
+  status: string;
+  lessonCount: number;
+  sessionsCreated: number | null;
+}
+
+/** Eski üyenin geçmiş paketleri — GET /members/former/:id/packages. */
+export async function getFormerMemberPackages(memberId: number): Promise<FormerMemberPackage[]> {
+  const { data } = await apiClient.get(`/members/former/${memberId}/packages`);
+  return (Array.isArray(data?.packages) ? data.packages : []).map((row: any) => ({
+    id: row.id,
+    packageId: row.package_id,
+    packageName: row.package_name || '',
+    startDate: (row.start_date || '').slice(0, 10),
+    endDate: (row.end_date || '').slice(0, 10),
+    status: row.status || 'completed',
+    lessonCount: row.lesson_count ?? 0,
+    sessionsCreated: row.sessions_created ?? null,
+  }));
+}

@@ -1,17 +1,29 @@
 import { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { DateField } from '../../../components/date-field';
 import { Badge, Card, Muted } from '../../../components/ui';
 import { ScreenHeader } from '../../../components/screen-header';
-import { formatTime } from '../../../lib/datetime';
+import { formatDayShort, formatTime } from '../../../lib/datetime';
+
+const DAY_MS = 24 * 3600 * 1000;
+
+function tsToDateStr(ts: number): string {
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+function dateStrToTs(s: string): number {
+  const [y, m, d] = s.split('-').map(Number);
+  return new Date(y, m - 1, d).getTime();
+}
 import { useResponsive } from '../../../lib/responsive';
 import { colors } from '../../../theme/colors';
 import { useConfirmAttendance, useEntryList, useWalkInList } from '../api/hooks';
 
 const PRESENT_KINDS = ['qr', 'phone', 'card', 'admin_present', 'staff_present'];
+const PHYSICAL_ENTRY_KINDS = ['qr', 'phone', 'card'];
 
 const STATUS_FILTERS = [
   { key: 'all', label: 'Tümü' },
@@ -75,7 +87,24 @@ export function EntryListScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <ScreenHeader title="Giriş Listesi" />
+      <ScreenHeader
+        title="Giriş Listesi"
+        right={
+          <View style={styles.dateNav}>
+            <Pressable style={styles.navBtn} hitSlop={10} onPress={() => setDate(tsToDateStr(dateStrToTs(date) - DAY_MS))}>
+              <Ionicons name="chevron-back" size={20} color={colors.text} />
+            </Pressable>
+            <DateField
+              value={date}
+              onChange={setDate}
+              trigger={<Text style={styles.dateLabel}>{formatDayShort(dateStrToTs(date))}</Text>}
+            />
+            <Pressable style={styles.navBtn} hitSlop={10} onPress={() => setDate(tsToDateStr(dateStrToTs(date) + DAY_MS))}>
+              <Ionicons name="chevron-forward" size={20} color={colors.text} />
+            </Pressable>
+          </View>
+        }
+      />
       <View style={[styles.top, wide]}>
         <View style={styles.tabs}>
           <Pressable style={[styles.tab, tab === 'entry' && styles.tabOn]} onPress={() => setTab('entry')}>
@@ -85,7 +114,6 @@ export function EntryListScreen() {
             <Text style={[styles.tabText, tab === 'walkin' && styles.tabTextOn]}>Randevusuz</Text>
           </Pressable>
         </View>
-        <DateField value={date} onChange={setDate} />
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
           {(tab === 'entry' ? STATUS_FILTERS : WALKIN_FILTERS).map((f) => {
             const sel = tab === 'entry' ? statusF === f.key : walkF === f.key;
@@ -129,17 +157,29 @@ export function EntryListScreen() {
                       <Pressable
                         style={[styles.actBtn, styles.actPresent]}
                         hitSlop={6}
-                        onPress={() => confirm.mutate({ id: s.id, action: 'present' })}
+                        onPress={() =>
+                          confirm.mutate(
+                            { id: s.id, action: 'present' },
+                            { onError: (e: any) => Alert.alert('Hata', e?.message ?? 'İşlem başarısız') },
+                          )
+                        }
                       >
                         <Ionicons name="checkmark" size={16} color={colors.ok} />
                       </Pressable>
-                      <Pressable
-                        style={[styles.actBtn, styles.actNoShow]}
-                        hitSlop={6}
-                        onPress={() => confirm.mutate({ id: s.id, action: 'no_show' })}
-                      >
-                        <Ionicons name="close" size={16} color={colors.danger} />
-                      </Pressable>
+                      {!PHYSICAL_ENTRY_KINDS.includes(s.statusKind) ? (
+                        <Pressable
+                          style={[styles.actBtn, styles.actNoShow]}
+                          hitSlop={6}
+                          onPress={() =>
+                            confirm.mutate(
+                              { id: s.id, action: 'no_show' },
+                              { onError: (e: any) => Alert.alert('Hata', e?.message ?? 'İşlem başarısız') },
+                            )
+                          }
+                        >
+                          <Ionicons name="close" size={16} color={colors.danger} />
+                        </Pressable>
+                      ) : null}
                     </View>
                   ) : null}
                 </View>

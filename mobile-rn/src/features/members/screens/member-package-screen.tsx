@@ -239,6 +239,7 @@ export function MemberPackageScreen() {
     ]);
   }
 
+
   return (
     <ScreenContainer scroll>
       <Stack.Screen options={{ title: 'Paketler' }} />
@@ -289,6 +290,7 @@ export function MemberPackageScreen() {
         })}
       </View>
 
+      {!hasActive || editingId ? (
       <View style={styles.formHead}>
         <SectionTitle>{editingId ? 'Paketi Düzenle' : 'Yeni Paket Tanımla'}</SectionTitle>
         {editingId ? (
@@ -297,7 +299,8 @@ export function MemberPackageScreen() {
           </Pressable>
         ) : null}
       </View>
-      <Card style={styles.form}>
+      ) : null}
+      {!hasActive || editingId ? <Card style={styles.form}>
         <SelectField
           label="Paket"
           required
@@ -373,7 +376,7 @@ export function MemberPackageScreen() {
           loading={create.isPending || update.isPending || checking}
           disabled={!editingId && hasActive}
         />
-      </Card>
+      </Card> : null}
     </ScreenContainer>
   );
 }
