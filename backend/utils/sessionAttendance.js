@@ -282,50 +282,70 @@ export async function confirmSessionAttendance(db, sessionId, userId, action, op
 
   const session = existing.rows[0];
 
-  if (session.check_in_method === 'qr' && session.checked_in_at != null) {
-    return {
-      ok: false,
-      status: 409,
-      error: 'Bu seans QR ile giriş yapılmış; manuel onay gerekmez',
-    };
-  }
-  if (session.attendance_confirmed_at != null && !allowOverride) {
-    return { ok: false, status: 409, error: 'Bu seans için zaten onay verilmiş' };
-  }
-  if (!isAdmin && !canStaffApproveNow(session, now)) {
-    return {
-      ok: false,
-      status: 400,
-      error: 'Seans saati gelmeden onay verilemez',
-    };
-  }
+  const PHYSICAL_METHODS = ['qr', 'phone', 'card'];
+  const hasPhysicalEntry = session.checked_in_at != null && PHYSICAL_METHODS.includes(session.check_in_method);
 
-  const presentMethod = isAdmin ? 'admin' : 'manual';
-
-  if (action === 'present') {
+  // Fiziksel giriş (QR/TELEFON/KART) her zaman önceliklidir — personel/admin onayı üzerine yazamaz
+  if (hasPhysicalEntry) {
+    if (action === 'no_show') {
+      return {
+        ok: false,
+        status: 409,
+        error: `Bu üye ${session.check_in_method === 'qr' ? 'QR' : session.check_in_method === 'phone' ? 'telefon' : 'kart'} ile giriş yapmış; gelmedi olarak işaretlenemez.`,
+      };
+    }
+    // action === 'present': fiziksel giriş verisini koru, sadece onay kaydını ekle
+    if (session.attendance_confirmed_at != null && !allowOverride) {
+      return { ok: false, status: 409, error: 'Bu seans için zaten onay verilmiş' };
+    }
     await db.query(
       `UPDATE sessions
-       SET checked_in_at = CURRENT_TIMESTAMP,
-           check_in_method = $3,
-           attendance_outcome = 'present',
-           attendance_confirmed_at = CURRENT_TIMESTAMP,
-           attendance_confirmed_by = $2,
-           updated_at = CURRENT_TIMESTAMP
-       WHERE id = $1`,
-      [sessionId, userId, presentMethod]
-    );
-  } else {
-    await db.query(
-      `UPDATE sessions
-       SET checked_in_at = NULL,
-           check_in_method = NULL,
-           attendance_outcome = 'no_show',
+       SET attendance_outcome = 'present',
            attendance_confirmed_at = CURRENT_TIMESTAMP,
            attendance_confirmed_by = $2,
            updated_at = CURRENT_TIMESTAMP
        WHERE id = $1`,
       [sessionId, userId]
     );
+  } else {
+    if (session.attendance_confirmed_at != null && !allowOverride) {
+      return { ok: false, status: 409, error: 'Bu seans için zaten onay verilmiş' };
+    }
+    if (!isAdmin && !canStaffApproveNow(session, now)) {
+      return {
+        ok: false,
+        status: 400,
+        error: 'Seans saati gelmeden onay verilemez',
+      };
+    }
+
+    const presentMethod = isAdmin ? 'admin' : 'manual';
+
+    if (action === 'present') {
+      await db.query(
+        `UPDATE sessions
+         SET checked_in_at = CURRENT_TIMESTAMP,
+             check_in_method = $3,
+             attendance_outcome = 'present',
+             attendance_confirmed_at = CURRENT_TIMESTAMP,
+             attendance_confirmed_by = $2,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1`,
+        [sessionId, userId, presentMethod]
+      );
+    } else {
+      await db.query(
+        `UPDATE sessions
+         SET checked_in_at = NULL,
+             check_in_method = NULL,
+             attendance_outcome = 'no_show',
+             attendance_confirmed_at = CURRENT_TIMESTAMP,
+             attendance_confirmed_by = $2,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1`,
+        [sessionId, userId]
+      );
+    }
   }
 
   await autoCompletePackageIfExhausted(db, session.member_package_id);

@@ -3,9 +3,17 @@ import { body, validationResult } from 'express-validator';
 import bcrypt from 'bcrypt';
 import db from '../config/database.js';
 import { verifyToken } from './auth.js';
-import { toPhoneFormat } from '../utils/phone.js';
+import { toPhoneFormat, phoneDigits } from '../utils/phone.js';
 import { ensureMemberUserAccount, resetMemberPassword } from '../utils/memberAccount.js';
 import { log as activityLog } from '../utils/activityLogger.js';
+
+/** Email boşsa telefon numarasından otomatik üret: 5321234567@fizyopark.com */
+function buildMemberEmail(email, phone) {
+  const trimmed = (email || '').trim();
+  if (trimmed) return trimmed;
+  const digits = phoneDigits(phone);
+  return digits ? `${digits}@fizyopark.com` : null;
+}
 
 const router = express.Router();
 router.use(verifyToken);
@@ -155,6 +163,21 @@ router.post('/', [
     if (!phone) {
       return res.status(400).json({ error: 'Telefon (xxx)xxx-xx-xx formatında olmalı, 10 hane.' });
     }
+
+    // Kart kontrolü ÖNCE yapılır — silinmiş üyelerdeki kartlar da geçerli sayılır (DB unique index tüm satırlara bakar)
+    const cardNo = (req.body.card_no || '').trim() || null;
+    if (cardNo) {
+      const cardDup = await db.query(
+        'SELECT id, name, deleted_at FROM members WHERE card_no = $1',
+        [cardNo]
+      );
+      if (cardDup.rows.length > 0) {
+        const cardOwner = cardDup.rows[0];
+        const ownerLabel = cardOwner.name + (cardOwner.deleted_at ? ' (eski üye)' : '');
+        return res.status(409).json({ error: `Bu kart numarası başka bir üyeye (${ownerLabel}) tanımlı.` });
+      }
+    }
+
     const dup = await db.query(
       'SELECT id, deleted_at, member_no, first_name, last_name, name FROM members WHERE trim(phone) = $1',
       [phone]
@@ -194,7 +217,7 @@ router.post('/', [
       first_name: (req.body.first_name || '').trim(),
       last_name: (req.body.last_name || '').trim(),
       phone,
-      email: (req.body.email || '').trim() || null,
+      email: buildMemberEmail(req.body.email, phone),
       birth_date: req.body.birth_date || null,
       profession: (req.body.profession || '').trim() || null,
       address: (req.body.address || '').trim() || null,
@@ -204,7 +227,7 @@ router.post('/', [
       clinical_conditions: (req.body.clinical_conditions || '').trim() || null,
       past_operations: (req.body.past_operations || '').trim() || null,
       notes: (req.body.notes || '').trim() || null,
-      card_no: (req.body.card_no || '').trim() || null
+      card_no: cardNo
     };
     const name = `${row.first_name} ${row.last_name}`.trim();
     if (!name) {
@@ -243,12 +266,23 @@ router.post('/', [
         client.release();
       }
     }
+    // Kart numarası varsa member_cards'a da ekle
+    if (cardNo) {
+      await db.query(
+        'INSERT INTO member_cards (member_id, card_no, is_primary) VALUES ($1,$2,true) ON CONFLICT (card_no) DO UPDATE SET member_id=$1',
+        [created.id, cardNo]
+      );
+    }
+
     await activityLog(req, { action: 'member.create', entityType: 'member', entityId: created.id, details: { member_no: created.member_no, name: created.name } }).catch(() => {});
 
     res.status(201).json(created);
   } catch (error) {
     if (error.code === '23505') {
-      return res.status(409).json({ error: 'Bu üye numarası veya telefon zaten kayıtlı.' });
+      const msg = (error.constraint || '').includes('card')
+        ? 'Bu kart numarası başka bir üyeye tanımlı.'
+        : 'Bu üye numarası veya telefon zaten kayıtlı.';
+      return res.status(409).json({ error: msg });
     }
     console.error('Member create error:', error);
     console.error('Request body:', JSON.stringify(req.body, null, 2));
@@ -307,7 +341,11 @@ router.put('/:id', [
     if (updates.first_name !== undefined) set('first_name', (updates.first_name || '').trim());
     if (updates.last_name !== undefined) set('last_name', (updates.last_name || '').trim());
     if (updates.phone !== undefined) set('phone', phone);
-    if (updates.email !== undefined) set('email', (updates.email || '').trim() || null);
+    if (updates.email !== undefined) {
+      // Mevcut telefonu al: güncellenmiyorsa DB'den çek
+      const effectivePhone = phone ?? (await db.query('SELECT phone FROM members WHERE id = $1', [id])).rows[0]?.phone;
+      set('email', buildMemberEmail(updates.email, effectivePhone));
+    }
     if (updates.birth_date !== undefined) set('birth_date', updates.birth_date || null);
     if (updates.profession !== undefined) set('profession', (updates.profession || '').trim() || null);
     if (updates.address !== undefined) set('address', (updates.address || '').trim() || null);
@@ -317,7 +355,31 @@ router.put('/:id', [
     if (updates.clinical_conditions !== undefined) set('clinical_conditions', (updates.clinical_conditions || '').trim() || null);
     if (updates.past_operations !== undefined) set('past_operations', (updates.past_operations || '').trim() || null);
     if (updates.notes !== undefined) set('notes', (updates.notes || '').trim() || null);
-    if (updates.card_no !== undefined) set('card_no', (updates.card_no || '').trim() || null);
+    if (updates.card_no !== undefined) {
+      const newCardNo = (updates.card_no || '').trim() || null;
+      if (newCardNo) {
+        // members.card_no çakışma kontrolü
+        const cardDup = await db.query(
+          'SELECT id, name, deleted_at FROM members WHERE card_no = $1 AND id != $2',
+          [newCardNo, id]
+        );
+        if (cardDup.rows.length > 0) {
+          const cardOwner = cardDup.rows[0];
+          const ownerLabel = cardOwner.name + (cardOwner.deleted_at ? ' (eski üye)' : '');
+          return res.status(409).json({ error: `Bu kart numarası başka bir üyeye (${ownerLabel}) tanımlı.` });
+        }
+        // member_cards çakışma kontrolü
+        const mcDup = await db.query(
+          'SELECT mc.card_no, m.name, m.deleted_at FROM member_cards mc JOIN members m ON m.id=mc.member_id WHERE mc.card_no=$1 AND mc.member_id!=$2',
+          [newCardNo, id]
+        );
+        if (mcDup.rows.length > 0) {
+          const ownerLabel = mcDup.rows[0].name + (mcDup.rows[0].deleted_at ? ' (eski üye)' : '');
+          return res.status(409).json({ error: `Bu kart numarası başka bir üyeye (${ownerLabel}) tanımlı.` });
+        }
+      }
+      set('card_no', newCardNo);
+    }
 
     if (fields.length === 0) {
       return res.status(400).json({ error: 'Güncellenecek alan yok' });
@@ -335,6 +397,18 @@ router.put('/:id', [
       return res.status(404).json({ error: 'Üye bulunamadı' });
     }
     let updated = result.rows[0];
+
+    // card_no değiştiyse member_cards tablosunu da senkronize et
+    if (updates.card_no !== undefined) {
+      const newCardNo = (updates.card_no || '').trim() || null;
+      await db.query('DELETE FROM member_cards WHERE member_id = $1', [id]);
+      if (newCardNo) {
+        await db.query(
+          'INSERT INTO member_cards (member_id, card_no, is_primary) VALUES ($1,$2,true) ON CONFLICT (card_no) DO UPDATE SET member_id=$1',
+          [id, newCardNo]
+        );
+      }
+    }
     if (updated.email && updated.phone) {
       const client = await db.pool.connect();
       try {
@@ -357,7 +431,13 @@ router.put('/:id', [
     res.json(updated);
   } catch (error) {
     if (error.code === '23505') {
-      return res.status(409).json({ error: 'Bu üye numarası veya telefon zaten kayıtlı.' });
+      const msg = (error.constraint || '').includes('card')
+        ? 'Bu kart numarası başka bir üyeye tanımlı.'
+        : 'Bu üye numarası veya telefon zaten kayıtlı.';
+      return res.status(409).json({ error: msg });
+    }
+    if (error.code === 'CARD_TAKEN') {
+      return res.status(409).json({ error: error.message });
     }
     console.error('Member update error:', error);
     console.error('Error details:', {
@@ -443,6 +523,7 @@ router.delete('/:id', [
     if (deleteHistory === true) {
       // Tam silme: üye kaydı + giriş hesabı silinir; seanslar soft delete (veritabanında kalır, log için)
       await db.query('UPDATE sessions SET deleted_at = CURRENT_TIMESTAMP WHERE member_id = $1', [id]);
+      await db.query('DELETE FROM member_cards WHERE member_id = $1', [id]);
       await db.query('DELETE FROM members WHERE id = $1', [id]);
       if (memberUserId) {
         await db.query("DELETE FROM users WHERE id = $1 AND role = 'member'", [memberUserId]);
@@ -451,7 +532,8 @@ router.delete('/:id', [
       return res.json({ message: 'Üye ve geçmiş bilgileri silindi' });
     }
 
-    // Soft delete: listede görünmez, veritabanında deleted_at işaretlenir
+    // Soft delete: listede görünmez, kart numaraları çakışmasın diye temizlenir
+    await db.query('DELETE FROM member_cards WHERE member_id = $1', [id]);
     await db.query(
       'UPDATE members SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *',
       [id]
@@ -499,6 +581,7 @@ router.post('/:id/approve-deletion-request', async (req, res) => {
         return res.status(400).json({ error: 'Bu üye için bekleyen iptal talebi yok' });
       }
 
+      await client.query('DELETE FROM member_cards WHERE member_id = $1', [id]);
       await client.query(
         `UPDATE members
          SET deleted_at = CURRENT_TIMESTAMP, deletion_requested_at = NULL
@@ -626,7 +709,21 @@ router.post('/:id/reactivate', async (req, res) => {
       if (body.systemic_diseases !== undefined) setField('systemic_diseases', String(body.systemic_diseases || '').trim() || null);
       if (body.clinical_conditions !== undefined) setField('clinical_conditions', String(body.clinical_conditions || '').trim() || null);
       if (body.past_operations !== undefined) setField('past_operations', String(body.past_operations || '').trim() || null);
-      if (body.card_no !== undefined) setField('card_no', String(body.card_no || '').trim() || null);
+      if (body.card_no !== undefined) {
+        const newCardNo = String(body.card_no || '').trim() || null;
+        if (newCardNo) {
+          const cardDup = await client.query(
+            'SELECT id, name, deleted_at FROM members WHERE card_no = $1 AND id != $2',
+            [newCardNo, id]
+          );
+          if (cardDup.rows.length > 0) {
+            const cardOwner = cardDup.rows[0];
+            const ownerLabel = cardOwner.name + (cardOwner.deleted_at ? ' (eski üye)' : '');
+            throw Object.assign(new Error(`Bu kart numarası başka bir üyeye (${ownerLabel}) tanımlı.`), { code: 'CARD_TAKEN' });
+          }
+        }
+        setField('card_no', newCardNo);
+      }
 
       if (body.first_name !== undefined || body.last_name !== undefined) {
         const fn = body.first_name !== undefined ? body.first_name : member.first_name;

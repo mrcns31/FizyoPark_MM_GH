@@ -625,43 +625,43 @@ router.put('/:id', [
     const mp = existing.rows[0];
     const nowMs = Date.now();
 
-    let firstTs = null;
+    // İlk QR/TELEFON/KART katılımını bul (bu seanslar değiştirilemez)
+    let firstAttendedTs = null;
+    const attendedSessionRes = await db.query(
+      `SELECT MIN(start_ts) AS first_ts FROM sessions
+       WHERE member_package_id = $1
+         AND checked_in_at IS NOT NULL
+         AND check_in_method IN ('qr', 'phone', 'card')
+         AND deleted_at IS NULL`,
+      [id]
+    );
+    firstAttendedTs = attendedSessionRes.rows[0]?.first_ts != null
+      ? Number(attendedSessionRes.rows[0].first_ts)
+      : null;
+
+    // İlk seans QR/TELEFON/KART ile katılındıysa paket türü değiştirilemez
     if (body_package_id !== undefined && Number(body_package_id) !== Number(mp.package_id)) {
-      const firstSession = await db.query(
-        'SELECT MIN(start_ts) AS first_ts FROM sessions WHERE member_package_id = $1 AND (deleted_at IS NULL)',
-        [id]
-      );
-      firstTs = firstSession.rows[0]?.first_ts != null ? Number(firstSession.rows[0].first_ts) : null;
-      if (firstTs != null && firstTs < nowMs) {
+      if (firstAttendedTs != null) {
         return res.status(400).json({
-          error: 'İlk seans geçtiği için paket (seans sayısı) değiştirilemez. Tarih, gün, saat veya personel değişikliği yapabilirsiniz.',
+          error: 'İlk randevuya katılım gerçekleştiği için paket türü değiştirilemez. Bitiş tarihi, gün, saat veya personel değişikliği yapabilirsiniz.',
         });
       }
     }
 
-    // İlk seans geçtiyse paket başlangıç tarihi ilk seanstan sonra olamaz
-    if (start_date !== undefined) {
-      if (firstTs == null) {
-        const firstSession = await db.query(
-          'SELECT MIN(start_ts) AS first_ts FROM sessions WHERE member_package_id = $1 AND (deleted_at IS NULL)',
-          [id]
-        );
-        firstTs = firstSession.rows[0]?.first_ts != null ? Number(firstSession.rows[0].first_ts) : null;
-      }
-      if (firstTs != null && firstTs < nowMs) {
-        const firstDate = new Date(firstTs);
-        const firstSessionDateStr =
-          firstDate.getFullYear() +
-          '-' +
-          String(firstDate.getMonth() + 1).padStart(2, '0') +
-          '-' +
-          String(firstDate.getDate()).padStart(2, '0');
-        const startDateStr = String(start_date).slice(0, 10);
-        if (startDateStr > firstSessionDateStr) {
-          return res.status(400).json({
-            error: 'İlk seans tarihi geçtiği için paket başlangıç tarihi ilk seans tarihinden (' + firstSessionDateStr + ') sonra girilemez.',
-          });
-        }
+    // İlk seans katılındıysa başlangıç tarihi o tarihten sonra olamaz
+    if (start_date !== undefined && firstAttendedTs != null) {
+      const firstDate = new Date(firstAttendedTs);
+      const firstAttendedDateStr =
+        firstDate.getFullYear() +
+        '-' +
+        String(firstDate.getMonth() + 1).padStart(2, '0') +
+        '-' +
+        String(firstDate.getDate()).padStart(2, '0');
+      const startDateStr = String(start_date).slice(0, 10);
+      if (startDateStr !== firstAttendedDateStr) {
+        return res.status(400).json({
+          error: 'İlk randevuya katılım gerçekleştiği için başlangıç tarihi ' + firstAttendedDateStr + ' olarak sabitlenmiştir.',
+        });
       }
     }
 

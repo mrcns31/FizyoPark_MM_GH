@@ -501,4 +501,30 @@ router.post('/logout', verifyToken, (req, res) => {
   res.json({ message: 'Başarıyla çıkış yapıldı' });
 });
 
+// Mevcut kullanıcının şifresini doğrula (hassas işlemler için admin onayı)
+router.post('/verify-password', verifyToken, [
+  body('password').notEmpty().withMessage('Şifre gerekli'),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ error: 'Şifre gerekli' });
+    }
+    const { password } = req.body;
+    const { userId } = req.user;
+    const userRes = await db.query('SELECT password_hash FROM users WHERE id = $1', [userId]);
+    if (userRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Kullanıcı bulunamadı' });
+    }
+    const valid = await bcrypt.compare(password, userRes.rows[0].password_hash);
+    if (!valid) {
+      return res.status(401).json({ error: 'Şifre hatalı' });
+    }
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('Verify password error:', error);
+    res.status(500).json({ error: 'Şifre doğrulanamadı' });
+  }
+});
+
 export default router;

@@ -1398,6 +1398,14 @@ function cacheEls() {
     "appDialogModalMessage",
     "appDialogCancelBtn",
     "appDialogOkBtn",
+    "adminPasswordConfirmModal",
+    "adminPasswordConfirmBackdrop",
+    "adminPasswordConfirmTitle",
+    "adminPasswordConfirmMessage",
+    "adminPasswordConfirmInput",
+    "adminPasswordConfirmError",
+    "adminPasswordConfirmOkBtn",
+    "adminPasswordConfirmCancelBtn",
     "memberSessionCancelModal",
     "memberSessionCancelInfo",
     "memberSessionCancelReason",
@@ -1698,7 +1706,7 @@ function updateTopbarForViewMode() {
   const adminMobile = isAdminMobilePanel();
   updateAdminMobileTopbarClass();
   if (els.todayBtn) {
-    const showToday = !adminMobile && (ui.viewMode === "week" || ui.viewMode === "month");
+    const showToday = !adminMobile && !viewingToday;
     els.todayBtn.classList.toggle("hidden", !showToday);
   }
   if (els.viewDayListBtn) {
@@ -2350,6 +2358,52 @@ function showAppAlert(message, options) {
   }).then(function () {});
 }
 
+/** Admin şifre onay modalı: şifre doğrulandıktan sonra resolve(true), iptal/hata → resolve(false) */
+function showAdminPasswordConfirm(message, title) {
+  return new Promise(function (resolve) {
+    if (!els.adminPasswordConfirmModal) { resolve(false); return; }
+    if (els.adminPasswordConfirmTitle) els.adminPasswordConfirmTitle.textContent = title || "Yönetici Onayı";
+    if (els.adminPasswordConfirmMessage) els.adminPasswordConfirmMessage.textContent = message || "";
+    if (els.adminPasswordConfirmInput) els.adminPasswordConfirmInput.value = "";
+    if (els.adminPasswordConfirmError) { els.adminPasswordConfirmError.textContent = ""; els.adminPasswordConfirmError.classList.add("hidden"); }
+    els.adminPasswordConfirmModal.classList.remove("hidden");
+    setTimeout(function () { if (els.adminPasswordConfirmInput) els.adminPasswordConfirmInput.focus(); }, 80);
+
+    function cleanup() {
+      els.adminPasswordConfirmModal.classList.add("hidden");
+      if (els.adminPasswordConfirmOkBtn) els.adminPasswordConfirmOkBtn.removeEventListener("click", onOk);
+      if (els.adminPasswordConfirmCancelBtn) els.adminPasswordConfirmCancelBtn.removeEventListener("click", onCancel);
+      if (els.adminPasswordConfirmBackdrop) els.adminPasswordConfirmBackdrop.removeEventListener("click", onCancel);
+      if (els.adminPasswordConfirmInput) els.adminPasswordConfirmInput.removeEventListener("keydown", onKeydown);
+    }
+    async function onOk() {
+      var pw = els.adminPasswordConfirmInput ? els.adminPasswordConfirmInput.value : "";
+      if (!pw) {
+        if (els.adminPasswordConfirmError) { els.adminPasswordConfirmError.textContent = "Şifre girin."; els.adminPasswordConfirmError.classList.remove("hidden"); }
+        return;
+      }
+      if (els.adminPasswordConfirmOkBtn) els.adminPasswordConfirmOkBtn.disabled = true;
+      try {
+        await window.API.verifyAdminPassword(pw);
+        cleanup();
+        resolve(true);
+      } catch (e) {
+        if (els.adminPasswordConfirmError) {
+          els.adminPasswordConfirmError.textContent = (e.data && e.data.error) || "Şifre hatalı.";
+          els.adminPasswordConfirmError.classList.remove("hidden");
+        }
+        if (els.adminPasswordConfirmOkBtn) els.adminPasswordConfirmOkBtn.disabled = false;
+      }
+    }
+    function onCancel() { cleanup(); resolve(false); }
+    function onKeydown(e) { if (e.key === "Enter") onOk(); if (e.key === "Escape") onCancel(); }
+    if (els.adminPasswordConfirmOkBtn) els.adminPasswordConfirmOkBtn.addEventListener("click", onOk);
+    if (els.adminPasswordConfirmCancelBtn) els.adminPasswordConfirmCancelBtn.addEventListener("click", onCancel);
+    if (els.adminPasswordConfirmBackdrop) els.adminPasswordConfirmBackdrop.addEventListener("click", onCancel);
+    if (els.adminPasswordConfirmInput) els.adminPasswordConfirmInput.addEventListener("keydown", onKeydown);
+  });
+}
+
 function bindAppDialogModal() {
   if (!els.appDialogModal || els.appDialogModal.dataset.bound === "1") return;
   els.appDialogModal.dataset.bound = "1";
@@ -2457,22 +2511,15 @@ function fmtPackageSessionCheckInTime(s) {
   var startTs = Number(s.startTs != null ? s.startTs : s.start_ts);
   var lessonTimeStr = fmtPackageSessionTime(new Date(startTs));
 
-  if (method === "qr" && checkedInAt) {
-    var qrAt = new Date(checkedInAt);
-    if (!isNaN(qrAt.getTime())) return fmtPackageSessionTime(qrAt);
+  // QR / Telefon / Kart: kapıdan fiziksel giriş → gerçek giriş saati
+  if (checkedInAt && (method === "qr" || method === "phone" || method === "card")) {
+    var entryAt = new Date(checkedInAt);
+    if (!isNaN(entryAt.getTime())) return fmtPackageSessionTime(entryAt);
     return "—";
   }
 
-  if (
-    checkedInAt &&
-    (method === "manual" || method === "admin" || method === "manual_admin")
-  ) {
-    return lessonTimeStr;
-  }
-
-  if (checkedInAt && method !== "qr") {
-    return lessonTimeStr;
-  }
+  // Personel / Admin onayı → randevu saati
+  if (checkedInAt) return lessonTimeStr;
 
   return "—";
 }
@@ -6491,7 +6538,7 @@ function showAdminMainView(view) {
 }
 
 async function goToPrevPeriod() {
-  if (isAdminUser() && ui.adminMainView && ui.adminMainView !== "calendar") showAdminCalendarView();
+  if (isAdminUser() && ui.adminMainView && ui.adminMainView !== "calendar" && !isAdminMainViewActive("entry-list")) showAdminCalendarView();
   if (ui.viewMode === "day") {
     await setCurrentDay(addDays(ui.currentDay, -1));
   } else if (ui.viewMode === "month") {
@@ -6508,7 +6555,7 @@ async function goToPrevPeriod() {
 }
 
 async function goToNextPeriod() {
-  if (isAdminUser() && ui.adminMainView && ui.adminMainView !== "calendar") showAdminCalendarView();
+  if (isAdminUser() && ui.adminMainView && ui.adminMainView !== "calendar" && !isAdminMainViewActive("entry-list")) showAdminCalendarView();
   if (ui.viewMode === "day") {
     await setCurrentDay(addDays(ui.currentDay, 1));
   } else if (ui.viewMode === "month") {
@@ -7224,6 +7271,7 @@ function refreshAdminHubSection(section) {
   else if (section === "staff-list") prepareStaffListPanel();
   else if (section === "closure-days") prepareClosureDaysPanel();
   else if (section === "extend-package") initExtendPackagePanel();
+  else if (section === "former-members") initFormerMembersHubPanel();
   else if (section === "profile") fillAdminProfileModal();
 }
 
@@ -7861,6 +7909,104 @@ function initExtendPackagePanel() {
   saveBtn.addEventListener("click", saveBtn._extendSave);
 }
 
+async function initFormerMembersHubPanel() {
+  var searchEl = document.getElementById("formerMemberHubSearch");
+  var resultsEl = document.getElementById("formerMemberHubResults");
+  var selectedEl = document.getElementById("formerMemberHubSelected");
+  var infoEl = document.getElementById("formerMemberHubInfo");
+  var cardBtn = document.getElementById("formerMemberHubCardBtn");
+  var sessionsBtn = document.getElementById("formerMemberHubSessionsBtn");
+  var reactivateBtn = document.getElementById("formerMemberHubReactivateBtn");
+  if (!searchEl) return;
+
+  // Sıfırla
+  searchEl.value = "";
+  resultsEl.innerHTML = "";
+  selectedEl.classList.add("hidden");
+
+  // Eski üyeleri çek — hem local hem global listeyi doldur (openFormerMemberCard buna bakar)
+  var formerList = [];
+  try {
+    if (window.API && window.API.getFormerMembers) {
+      var rows = await window.API.getFormerMembers();
+      formerList = (rows || []).map(function (row) {
+        return Object.assign({}, row, {
+          packageCount: row.packageCount != null ? row.packageCount : row.package_count,
+          sessionCount: row.sessionCount != null ? row.sessionCount : row.session_count,
+        });
+      });
+      formerMembersBaseList = formerList;
+    }
+  } catch (_) {}
+
+  var selectedMember = null;
+
+  function selectFormerMember(m) {
+    selectedMember = m;
+    resultsEl.innerHTML = "";
+    searchEl.value = getMemberDisplayName(m);
+    var deletedDate = (m.deletedAt || m.deleted_at || "").toString().slice(0, 10);
+    if (infoEl) infoEl.textContent = getMemberDisplayName(m) + (deletedDate ? "  •  İptal: " + formatDateTR(deletedDate) : "") + (m.packageCount ? "  •  " + m.packageCount + " paket" : "");
+    selectedEl.classList.remove("hidden");
+  }
+
+  if (searchEl._formerHandler) searchEl.removeEventListener("input", searchEl._formerHandler);
+  searchEl._formerHandler = function () {
+    var q = searchEl.value.trim().toLowerCase();
+    resultsEl.innerHTML = "";
+    selectedEl.classList.add("hidden");
+    selectedMember = null;
+    if (q.length < 1) return;
+    var matches = formerList.filter(function (m) {
+      return getMemberDisplayName(m).toLowerCase().includes(q);
+    }).slice(0, 10);
+    if (!matches.length) {
+      resultsEl.innerHTML = '<p class="hint" style="padding:8px 0;">Eşleşen eski üye bulunamadı.</p>';
+      return;
+    }
+    matches.forEach(function (m) {
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "btn btn--ghost";
+      btn.style.cssText = "width:100%; text-align:left; padding:8px 12px; border-radius:6px; margin-bottom:2px;";
+      btn.textContent = getMemberDisplayName(m) + (m.packageCount ? " (" + m.packageCount + " paket)" : "");
+      btn.addEventListener("click", function () { selectFormerMember(m); });
+      resultsEl.appendChild(btn);
+    });
+  };
+  searchEl.addEventListener("input", searchEl._formerHandler);
+
+  // Kimlik Kartı
+  if (cardBtn) {
+    if (cardBtn._formerCardHandler) cardBtn.removeEventListener("click", cardBtn._formerCardHandler);
+    cardBtn._formerCardHandler = function () {
+      if (!selectedMember) return;
+      openFormerMemberCard(selectedMember.id);
+    };
+    cardBtn.addEventListener("click", cardBtn._formerCardHandler);
+  }
+
+  // Eski Paketler
+  if (sessionsBtn) {
+    if (sessionsBtn._formerSessionsHandler) sessionsBtn.removeEventListener("click", sessionsBtn._formerSessionsHandler);
+    sessionsBtn._formerSessionsHandler = async function () {
+      if (!selectedMember) return;
+      await openFormerMemberSessions(selectedMember.id);
+    };
+    sessionsBtn.addEventListener("click", sessionsBtn._formerSessionsHandler);
+  }
+
+  // Paket Yeni (tekrar aktif et)
+  if (reactivateBtn) {
+    if (reactivateBtn._formerReactivateHandler) reactivateBtn.removeEventListener("click", reactivateBtn._formerReactivateHandler);
+    reactivateBtn._formerReactivateHandler = function () {
+      if (!selectedMember) return;
+      reactivateFormerMemberById(selectedMember.id);
+    };
+    reactivateBtn.addEventListener("click", reactivateBtn._formerReactivateHandler);
+  }
+}
+
 function clearPackageForm() {
   if (!els.packageName) return;
   els.packageName.value = "";
@@ -7946,13 +8092,19 @@ async function savePackageFromForm() {
 
 async function deletePackage(id) {
   const p = state.packages.find((x) => x.id === id);
-  if (!p || !(await showAppConfirm(`"${p.name}" paketini silmek istediğinize emin misiniz?`))) return;
+  if (!p) return;
+
+  const confirmed = await showAdminPasswordConfirm(
+    `"${p.name}" paketini pasife almak istediğinize emin misiniz?\n\nPaket tamamen silinmez; mevcut üye kayıtları korunur, yeni atamalarda görünmez.`,
+    "Paket Pasife Al — Yönetici Onayı"
+  );
+  if (!confirmed) return;
 
   if (window.API && window.API.getToken()) {
     try {
       await window.API.deletePackage(id);
     } catch (e) {
-      await showAppAlert((e.data && e.data.error) || e.message || "Paket silinemedi.");
+      await showAppAlert((e.data && e.data.error) || e.message || "Paket pasife alınamadı.");
       return;
     }
   }
@@ -9032,7 +9184,7 @@ function openMemberPackageModal(memberId, memberPackageId, options) {
 
   if (els.mpPackage) els.mpPackage.disabled = false;
   if (els.mpPackageFirstSessionHint) { els.mpPackageFirstSessionHint.classList.add("hidden"); els.mpPackageFirstSessionHint.style.display = "none"; }
-  if (els.mpStartDate) els.mpStartDate.removeAttribute("max");
+  if (els.mpStartDate) { els.mpStartDate.removeAttribute("max"); els.mpStartDate.removeAttribute("readonly"); els.mpStartDate.disabled = false; }
 
   if (editingMemberPackageId && window.API && window.API.getMemberPackage) {
     window.API.getMemberPackage(editingMemberPackageId).then((mp) => {
@@ -9044,25 +9196,32 @@ function openMemberPackageModal(memberId, memberPackageId, options) {
       if (window.API.getMemberPackageSessions) {
         window.API.getMemberPackageSessions(editingMemberPackageId).then((sessions) => {
           const list = Array.isArray(sessions) ? sessions : [];
-          const now = Date.now();
-          const withTs = list.filter((s) => s.start_ts != null).map((s) => Number(s.start_ts));
-          const minTs = withTs.length > 0 ? Math.min(...withTs) : null;
-          const firstSessionPassed = minTs != null && minTs < now;
-          if (firstSessionPassed) {
-            if (els.mpPackage) {
-              els.mpPackage.disabled = true;
-            }
+          // Yalnızca QR/TELEFON/KART ile fiilen katılım gerçekleşmiş seansları bul
+          const PHYSICAL_METHODS = ['qr', 'phone', 'card'];
+          const attendedSessions = list.filter(
+            (s) => s.checkedIn && PHYSICAL_METHODS.includes(s.checkInMethod) && s.startTs != null
+          );
+          const firstAttendedTs = attendedSessions.length > 0
+            ? Math.min(...attendedSessions.map((s) => Number(s.startTs)))
+            : null;
+          if (firstAttendedTs != null) {
+            // İlk seans QR/TELEFON/KART ile katılındı: paket türü + başlangıç tarihi kilitli
+            if (els.mpPackage) els.mpPackage.disabled = true;
             if (els.mpPackageFirstSessionHint) {
               els.mpPackageFirstSessionHint.classList.remove("hidden");
               els.mpPackageFirstSessionHint.style.display = "block";
             }
-            if (els.mpStartDate && minTs != null) {
-              const d = new Date(minTs);
-              const firstSessionDateStr = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
-              els.mpStartDate.setAttribute("max", firstSessionDateStr);
+            if (els.mpStartDate) {
+              const d = new Date(firstAttendedTs);
+              const firstDateStr = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+              els.mpStartDate.value = firstDateStr;
+              els.mpStartDate.setAttribute("readonly", "readonly");
+              els.mpStartDate.disabled = true;
             }
           } else if (els.mpStartDate) {
             els.mpStartDate.removeAttribute("max");
+            els.mpStartDate.removeAttribute("readonly");
+            els.mpStartDate.disabled = false;
           }
         }).catch(() => {});
       }
@@ -9199,11 +9358,14 @@ async function saveMemberPackageFromForm() {
   }
 
   // Tutarsızlık kontrolü: Seanslar paket bitişinden önce bitiyor ve bugün o tarihten sonra → kalan seans 0 ama üye aktif listede kalır.
+  // Güncelleme (editingMemberPackageId var): backend effectiveDate=bugün'den itibaren seansları oluşturur,
+  // dolayısıyla hesaplamayı bugünden başlatmak gerekir (geçmiş seanslar hesaba katılmaz).
   if (window.API && window.API.getToken() && !skipDayDistribution && slots.length > 0) {
     const pkg = (state.packages || []).find((p) => p.id === packageId);
     const lessonCount = pkg ? Number(pkg.lessonCount ?? pkg.lesson_count ?? 0) : 0;
     if (lessonCount > 0) {
-      const lastSessionDate = getLastSessionDateInRange(startDate, endDate, slots, lessonCount);
+      const checkFromDate = editingMemberPackageId ? todayStr : startDate;
+      const lastSessionDate = getLastSessionDateInRange(checkFromDate, endDate, slots, lessonCount);
       if (lastSessionDate && lastSessionDate < endDate && todayStr > lastSessionDate) {
         const lastFormatted = lastSessionDate.split("-").reverse().join(".");
         const endFormatted = endDate.split("-").reverse().join(".");
@@ -10923,10 +11085,18 @@ function renderExpiredMembershipsTable() {
 }
 
 /** Üyeliği bitmiş (bitiş tarihi geçmiş) paketleri ve seansları ayrı listeler; filtre ve sıralama uygulanır */
-function openExpiredMembershipsModal({ resetFilters = true } = {}) {
+async function openExpiredMembershipsModal({ resetFilters = true } = {}) {
   const content = els.expiredMembershipsContent;
   if (!content) return;
   showAdminMainView("expired-memberships");
+  content.innerHTML = '<p class="hint admin-panel-loading">Yükleniyor…</p>';
+  // Paket durumlarını sunucudan taze çek
+  try {
+    if (window.API && window.API.getMemberPackages) {
+      const freshPackages = await window.API.getMemberPackages();
+      if (Array.isArray(freshPackages)) state.memberPackages = freshPackages;
+    }
+  } catch (_) {}
   content.innerHTML = "";
   if (resetFilters) {
     expiredMembershipsPage = 1;
@@ -11268,6 +11438,14 @@ async function openListMembersModal({ resetFilters = true } = {}) {
   showAdminMembersListView();
   content.innerHTML = '<p class="hint admin-panel-loading">Yükleniyor…</p>';
 
+  // Paket durumlarını sunucudan taze çek (auto-complete, sonlandırma vb. yansısın)
+  try {
+    if (window.API && window.API.getMemberPackages) {
+      const freshPackages = await window.API.getMemberPackages();
+      if (Array.isArray(freshPackages)) state.memberPackages = freshPackages;
+    }
+  } catch (_) {}
+
   try {
     await ensureActivePackageSessionsForList();
   } catch (_) {}
@@ -11276,10 +11454,35 @@ async function openListMembersModal({ resetFilters = true } = {}) {
 
   const activePackages = (state.memberPackages || []).filter((mp) => isMemberPackageActive(mp));
   const memberIdsWithActive = new Set(activePackages.map((mp) => normId(mp.memberId)));
+  const memberIdsWithAny = new Set((state.memberPackages || []).map((mp) => normId(mp.memberId)));
   const membersWithActive = state.members.filter((m) => memberIdsWithActive.has(normId(m.id)));
 
+  // Hiç paketi olmayan üyeler — paket atanmadan görünmezler, uyarı göster
+  const membersWithoutAny = state.members.filter((m) => !memberIdsWithAny.has(normId(m.id)));
+  if (membersWithoutAny.length > 0) {
+    const noPackageDiv = document.createElement("div");
+    noPackageDiv.className = "admin-panel-warning";
+    noPackageDiv.style.cssText = "background:var(--color-surface,#1e2330);border:1px solid var(--color-danger,#e74c3c);border-radius:6px;padding:.75rem 1rem;margin-bottom:1rem;";
+    noPackageDiv.innerHTML =
+      '<div style="margin-bottom:.5rem;color:var(--color-danger,#e74c3c);font-weight:600;">⚠ Paketsiz üyeler (' + membersWithoutAny.length + ') — paket atamak için isme tıklayın:</div>' +
+      membersWithoutAny.map(function (m) {
+        return '<button type="button" data-open-member-id="' + escapeHtml(String(m.id)) + '" ' +
+          'style="display:inline-block;margin:.25rem;padding:.35rem .75rem;background:transparent;color:var(--color-danger,#e74c3c);border:1px solid var(--color-danger,#e74c3c);border-radius:4px;cursor:pointer;font-size:.9rem;">' +
+          escapeHtml(getMemberDisplayName(m)) + '</button>';
+      }).join("");
+    content.appendChild(noPackageDiv);
+    noPackageDiv.querySelectorAll("[data-open-member-id]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        openMemberPackageModal(Number(btn.dataset.openMemberId));
+      });
+    });
+  }
+
   if (membersWithActive.length === 0) {
-    content.innerHTML = '<div class="admin-panel-empty"><p>Aktif paketi olan üye yok.</p></div>';
+    const emptyDiv = document.createElement("div");
+    emptyDiv.className = "admin-panel-empty";
+    emptyDiv.innerHTML = "<p>Aktif paketi olan üye yok.</p>";
+    content.appendChild(emptyDiv);
     return;
   }
 
@@ -11966,7 +12169,7 @@ function bindEvents() {
       if (e.target.closest("#openPackageRequestsBtn, #openCancellationRequestsBtn, #closePackageRequestsBtn, #closeCancellationRequestsBtn")) {
         return;
       }
-      if (e.target.closest(".sidebar-nav__btn, #openAdminHubBtn, #addMemberBtn, #openCalendarBtn, #openListMembersBtn, #openExpiredMembershipsBtn, #openFormerMembersBtn, #openEntryListBtn, #openNotificationsBtn")) {
+      if (e.target.closest(".sidebar-nav__btn, #openAdminHubBtn, #addMemberBtn, #openCalendarBtn, #openListMembersBtn, #openExpiredMembershipsBtn, #openEntryListBtn, #openNotificationsBtn")) {
         closeSidebar();
       }
     });

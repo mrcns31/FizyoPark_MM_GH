@@ -1,5 +1,12 @@
 import bcrypt from 'bcrypt';
-import { phoneLast4 } from './phone.js';
+import { phoneLast4, phoneDigits } from './phone.js';
+
+function resolveEmail(email, phone) {
+  const trimmed = (email || '').trim();
+  if (trimmed) return trimmed;
+  const digits = phoneDigits(phone);
+  return digits ? `${digits}@fizyopark.com` : null;
+}
 
 /**
  * Üye için giriş hesabı oluşturur veya günceller.
@@ -7,8 +14,8 @@ import { phoneLast4 } from './phone.js';
  * @returns {Promise<number|null>} user_id
  */
 export async function ensureMemberUserAccount(client, member) {
-  const email = (member.email || '').trim().toLowerCase();
   const phone = member.phone;
+  const email = resolveEmail(member.email, phone)?.toLowerCase() ?? '';
   if (!email || !phone) return member.user_id ?? null;
 
   const initialPassword = phoneLast4(phone);
@@ -68,7 +75,8 @@ export async function resetMemberPassword(client, memberId) {
   );
   if (res.rows.length === 0) return null;
   const member = res.rows[0];
-  if (!member.email || !member.phone) return null;
+  const resolvedEmail = resolveEmail(member.email, member.phone);
+  if (!resolvedEmail || !member.phone) return null;
 
   let userId = member.user_id;
   if (!userId) {

@@ -5110,6 +5110,30 @@ select option:checked{
   width:min(420px, calc(100vw - 32px)) !important;
   max-width:min(420px, calc(100vw - 32px)) !important;
 }
+/* Üye Kimlik Kartı — compact overlay */
+#memberCardModal.modal--compact.modal:not(.hidden){
+  display:flex !important;
+  align-items:center !important;
+  justify-content:center !important;
+  padding:max(16px, env(safe-area-inset-top)) 16px max(16px, env(safe-area-inset-bottom)) !important;
+}
+#memberCardModal.modal--compact .modal__card.member-card-modal{
+  width:min(520px, calc(100vw - 32px)) !important;
+  max-width:min(520px, calc(100vw - 32px)) !important;
+  height:auto !important;
+  max-height:calc(100dvh - 32px) !important;
+  margin:0 !important;
+  border-radius:var(--radius) !important;
+  border:1px solid var(--border) !important;
+  box-shadow:0 16px 48px rgba(0,0,0,.55);
+  flex:0 0 auto;
+}
+#memberCardModal.modal--compact .modal__title{
+  text-align:center;
+  font-size:17px;
+  padding-bottom:8px;
+  flex-shrink:0;
+}
 #appDialogModal.modal--compact .modal__title,
 #memberSessionCancelModal.modal--compact .modal__title{
   text-align:center;

@@ -691,6 +691,9 @@
     await apiFetch('/packages/' + id, { method: 'DELETE' });
     invalidateRareCache();
   }
+  async function verifyAdminPassword(password) {
+    return apiFetch('/auth/verify-password', { method: 'POST', body: JSON.stringify({ password }) });
+  }
 
   async function getMemberPackages(memberId) {
     const rows = memberId != null ? await apiFetch('/member-packages?memberId=' + memberId) : await apiFetch('/member-packages');
@@ -1007,6 +1010,7 @@
     createPackage,
     updatePackage,
     deletePackage,
+    verifyAdminPassword,
     exportPackagesCsv,
     getMemberPackages,
     getMemberPackage,

@@ -15,11 +15,11 @@ const checkAdminOrManager = (req, res, next) => {
   next();
 };
 
-// Paket listesi
+// Paket listesi (deleted_at IS NULL → sadece aktif paketler)
 router.get('/', async (req, res) => {
   try {
     const result = await db.query(
-      'SELECT * FROM packages ORDER BY name'
+      'SELECT * FROM packages WHERE deleted_at IS NULL ORDER BY name'
     );
     res.json(result.rows);
   } catch (error) {
@@ -128,21 +128,35 @@ router.put('/:id', checkAdminOrManager, [
   }
 });
 
-// Paket sil
+// Paket pasife al (soft delete) — eski üye paketleri korunur, yeni atamalarda görünmez
 router.delete('/:id', checkAdminOrManager, async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await db.query('DELETE FROM packages WHERE id = $1 RETURNING *', [id]);
+    const result = await db.query(
+      'UPDATE packages SET deleted_at = NOW() WHERE id = $1 AND deleted_at IS NULL RETURNING *',
+      [id]
+    );
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: 'Paket bulunamadı' });
+      return res.status(404).json({ error: 'Paket bulunamadı veya zaten pasif' });
     }
-    const deleted = result.rows[0];
-    await activityLog(req, { action: 'package.delete', entityType: 'package', entityId: id, details: { name: deleted.name } }).catch(() => {});
-    res.json({ message: 'Paket silindi' });
+    const deactivated = result.rows[0];
+    await activityLog(req, {
+      action: 'package.deactivate',
+      entityType: 'package',
+      entityId: id,
+      details: { name: deactivated.name },
+    }).catch(() => {});
+    res.json({ message: 'Paket pasife alındı' });
   } catch (error) {
-    console.error('Package delete error:', error);
-    res.status(500).json({ error: 'Paket silinirken hata oluştu' });
+    console.error('Package deactivate error:', error);
+    let msg = 'Paket pasife alınırken hata oluştu';
+    if (error.code === '42703') {
+      msg = 'deleted_at kolonu eksik. backend/database/migration_packages_soft_delete.sql dosyasını çalıştırın.';
+    } else if (error.message) {
+      msg = process.env.NODE_ENV === 'production' ? msg : error.message;
+    }
+    res.status(500).json({ error: msg });
   }
 });
 
