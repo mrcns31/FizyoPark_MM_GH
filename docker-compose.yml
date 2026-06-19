@@ -35,7 +35,7 @@ services:
       DB_PASSWORD: fizyopark2024
       JWT_SECRET: fizyopark_jwt_secret_2024_degistir
       JWT_EXPIRES_IN: 24h
-      CORS_ORIGIN: http://192.168.9.182,http://192.168.9.101
+      CORS_ORIGIN: http://localhost:5173,http://127.0.0.1:5173,http://192.168.9.182,http://192.168.9.101
       DOOR_RASPI_URL: http://192.168.9.126:7000/open
       RATE_LIMIT_DISABLED: "1"
     ports:

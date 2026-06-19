@@ -1,0 +1,439 @@
+import { useMemo, useState } from 'react';
+import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+
+import { ScreenContainer } from '../../../components/screen-container';
+import { DateField } from '../../../components/date-field';
+import { TimeField } from '../../../components/time-field';
+import { SelectField } from '../../../components/select-field';
+import { Badge, Button, Card, ErrorBox, Muted, SectionTitle } from '../../../components/ui';
+import { ApiError } from '../../../lib/api-client';
+import { colors } from '../../../theme/colors';
+import type { MemberPackage } from '../../../types/api';
+import { checkMemberPackageAvailability, type SlotInput } from '../../member-packages/api/member-packages';
+import { usePackages } from '../../packages/api/hooks';
+import { useStaff } from '../../staff/api/hooks';
+import { useWorkingHours } from '../../settings/api/hooks';
+import {
+  useCreateMemberPackage,
+  useEndMemberPackage,
+  useMemberPackages,
+  useUpdateMemberPackage,
+} from '../../member-packages/api/hooks';
+import { useMembers } from '../api/hooks';
+
+const DAY_NAMES = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
+// Web `getMemberPackageSlotDaysOrder`: hafta içi → Cmt → Paz sırası.
+const DAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
+
+function fmtTR(v: string): string {
+  if (!v) return '–';
+  const [y, m, d] = v.slice(0, 10).split('-');
+  return `${d}-${m}-${y}`;
+}
+function todayStr(): string {
+  const n = new Date();
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
+}
+/** "YYYY-MM-DD" + ay → "YYYY-MM-DD" (web ay-aşım hesabıyla aynı). */
+function addMonths(dateStr: string, months: number): string {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  if (!y || !m || !d) return dateStr;
+  const dt = new Date(y, m - 1 + months, d);
+  return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+}
+function statusLabel(s: string): { label: string; tone: 'green' | 'neutral' | 'red' } {
+  if (s === 'active') return { label: 'Aktif', tone: 'green' };
+  if (s === 'completed') return { label: 'Tamamlandı', tone: 'neutral' };
+  if (s === 'cancelled') return { label: 'İptal', tone: 'red' };
+  return { label: s, tone: 'neutral' };
+}
+
+interface DayRow {
+  checked: boolean;
+  startTime: string;
+  staffId: number | null;
+}
+
+/** Üyeye paket tanımlama — web `openMemberPackageModal`/`saveMemberPackageFromForm` birebir. */
+export function MemberPackageScreen() {
+  const { memberId: memberIdParam, packageId: packageIdParam } = useLocalSearchParams<{
+    memberId?: string;
+    packageId?: string;
+  }>();
+  const memberId = memberIdParam ? Number(memberIdParam) : undefined;
+  const router = useRouter();
+
+  const { data: members } = useMembers();
+  const member = members?.find((m) => m.id === memberId);
+  const { data: packages } = usePackages();
+  const { data: staff } = useStaff();
+  const { data: workingHours } = useWorkingHours();
+  const { data: memberPackages } = useMemberPackages(memberId);
+  const create = useCreateMemberPackage();
+  const update = useUpdateMemberPackage();
+  const endPkg = useEndMemberPackage();
+
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [checking, setChecking] = useState(false);
+
+  const hasActive = useMemo(
+    () => (memberPackages ?? []).some((mp) => mp.status === 'active'),
+    [memberPackages],
+  );
+
+  // Tesisin açık günleri (genel çalışma saatleri); hiçbiri yoksa tüm günler.
+  const openDays = useMemo(() => {
+    const enabled = DAY_ORDER.filter((d) => workingHours?.[d]?.enabled);
+    return enabled.length ? enabled : DAY_ORDER;
+  }, [workingHours]);
+
+  const [packageId, setPackageId] = useState<number | null>(
+    packageIdParam ? Number(packageIdParam) : null,
+  );
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+  const [skipDist, setSkipDist] = useState(false);
+  const [days, setDays] = useState<Record<number, DayRow>>({});
+  const [error, setError] = useState<string | null>(null);
+
+  function monthsFor(pkgId: number | null): number {
+    const p = (packages ?? []).find((x) => x.id === pkgId);
+    return p ? Number(p.monthOverrun ?? 0) || 1 : 1;
+  }
+
+  // Paket seçilince: başlangıç=bugün, bitiş=bugün + ay-aşım (web ile birebir).
+  function onPickPackage(id: number) {
+    setPackageId(id);
+    const start = todayStr();
+    setStartDate(start);
+    setEndDate(addMonths(start, monthsFor(id)));
+  }
+  // Başlangıç değişince bitişi yeniden hesapla (elle de değiştirilebilir).
+  function onPickStart(v: string) {
+    setStartDate(v);
+    if (v) setEndDate(addMonths(v, monthsFor(packageId)));
+  }
+
+  /** O günün çalışma saati aralığı: [açılış saati, son seans saati=kapanış-1]. */
+  function dayHourRange(d: number): { min: number; max: number; openStr: string } {
+    const wh = workingHours?.[d];
+    const open = wh ? parseInt(wh.start.split(':')[0], 10) : 8;
+    const close = wh ? parseInt(wh.end.split(':')[0], 10) : 21;
+    return { min: open, max: Math.max(open, close - 1), openStr: `${String(open).padStart(2, '0')}:00` };
+  }
+
+  function toggleDay(d: number) {
+    setDays((prev) => {
+      const cur = prev[d];
+      if (cur?.checked) return { ...prev, [d]: { ...cur, checked: false } };
+      const openStr = dayHourRange(d).openStr;
+      return { ...prev, [d]: { checked: true, startTime: cur?.startTime || openStr, staffId: cur?.staffId ?? null } };
+    });
+  }
+  function setDay(d: number, patch: Partial<DayRow>) {
+    setDays((prev) => ({ ...prev, [d]: { ...(prev[d] ?? { checked: true, startTime: '18:00', staffId: null }), ...patch } }));
+  }
+
+  function resetForm() {
+    setEditingId(null);
+    setPackageId(null);
+    setStartDate('');
+    setEndDate('');
+    setSkipDist(false);
+    setDays({});
+    setError(null);
+  }
+
+  /** Mevcut paketi forma yükle (web "Düzenle"). */
+  function onEdit(mp: MemberPackage) {
+    setError(null);
+    setEditingId(mp.id);
+    setPackageId(mp.packageId);
+    setStartDate(mp.startDate.slice(0, 10));
+    setEndDate(mp.endDate.slice(0, 10));
+    const hasSlots = (mp.slots ?? []).length > 0;
+    setSkipDist(!hasSlots);
+    const next: Record<number, DayRow> = {};
+    for (const s of mp.slots ?? []) {
+      next[s.dayOfWeek] = { checked: true, startTime: s.startTime.slice(0, 5), staffId: s.staffId };
+    }
+    setDays(next);
+  }
+
+  async function onSave() {
+    setError(null);
+    if (!memberId) return setError('Üye seçili değil.');
+    if (!editingId && hasActive) {
+      return setError('Bu üyenin zaten aktif bir paketi var. Yeni paket için önce mevcut paketi "Sonlandır" ile kapatın.');
+    }
+    if (!packageId) return setError('Paket seçin.');
+    if (!startDate || !endDate) return setError('Başlangıç ve bitiş tarihi girin.');
+    if (endDate < startDate) return setError('Bitiş tarihi başlangıçtan önce olamaz.');
+
+    let slots: SlotInput[] = [];
+    if (!skipDist) {
+      const checkedDays = openDays.filter((d) => days[d]?.checked);
+      if (checkedDays.length === 0) return setError('En az bir gün seçin.');
+      for (const d of checkedDays) {
+        const row = days[d];
+        if (!row.startTime || row.staffId == null) {
+          return setError('Seçili günler için saat ve personel seçiniz.');
+        }
+      }
+      slots = checkedDays.map((d) => ({ dayOfWeek: d, startTime: days[d].startTime, staffId: days[d].staffId }));
+    }
+
+    // Atama öncesi uygunluk/çakışma kontrolü (web checkMemberPackageAvailability).
+    if (!skipDist) {
+      try {
+        setChecking(true);
+        const res = await checkMemberPackageAvailability({
+          memberId, packageId, startDate, endDate, skipDayDistribution: skipDist, slots,
+          excludeMemberPackageId: editingId ?? undefined,
+        });
+        if (!res.ok && res.conflicts.length) {
+          const lines = res.conflicts
+            .slice(0, 6)
+            .map((c) => c.message || [c.date, c.time, c.staffName, c.reason].filter(Boolean).join(' · '))
+            .filter(Boolean);
+          return setError(`Çakışma var:\n${lines.join('\n')}`);
+        }
+      } catch {
+        // uygunluk endpoint'i hata verirse engelleme; kaydetmede backend yine doğrular
+      } finally {
+        setChecking(false);
+      }
+    }
+
+    const today = todayStr();
+    const onDone = (n: number | null, verb: string) => {
+      Alert.alert(verb, n != null ? `${n} seans oluşturuldu.` : 'İşlem başarılı.');
+      resetForm();
+    };
+    const onErr = (e: unknown) =>
+      setError(e instanceof ApiError ? e.message : 'İşlem başarısız (çakışma olabilir).');
+
+    if (editingId) {
+      update.mutate(
+        { id: editingId, body: { packageId, startDate, endDate, skipDayDistribution: skipDist, slots, effectiveDate: today } },
+        { onSuccess: (mp) => onDone(mp.sessionsCreated, 'Paket güncellendi'), onError: onErr },
+      );
+    } else {
+      create.mutate(
+        { memberId, packageId, startDate, endDate, skipDayDistribution: skipDist, slots },
+        { onSuccess: (mp) => onDone(mp.sessionsCreated, 'Paket tanımlandı'), onError: onErr },
+      );
+    }
+  }
+
+  function onEnd(id: number) {
+    Alert.alert('Paketi sonlandır', 'Bu paket sonlandırılsın mı? Gelecek seanslar iptal edilir.', [
+      { text: 'Vazgeç', style: 'cancel' },
+      {
+        text: 'Sonlandır',
+        style: 'destructive',
+        onPress: () => endPkg.mutate({ id }, { onError: (e) => Alert.alert('Hata', (e as Error).message) }),
+      },
+    ]);
+  }
+
+  return (
+    <ScreenContainer scroll>
+      <Stack.Screen options={{ title: 'Paketler' }} />
+      {member ? <Text style={styles.memberName}>{member.name}</Text> : null}
+
+      <SectionTitle>Mevcut Paketler</SectionTitle>
+      <View style={styles.list}>
+        {(memberPackages ?? []).length === 0 ? (
+          <Card>
+            <Muted>Bu üyenin paketi yok.</Muted>
+          </Card>
+        ) : null}
+        {(memberPackages ?? []).map((mp) => {
+          const st = statusLabel(mp.status);
+          return (
+            <View key={mp.id} style={styles.pkgItem}>
+              <View style={styles.pkgLeft}>
+                <Text style={styles.pkgName}>{mp.packageName}</Text>
+                <Text style={styles.pkgMeta}>
+                  {fmtTR(mp.startDate)} – {fmtTR(mp.endDate)} · {mp.lessonCount} ders
+                </Text>
+              </View>
+              <Badge label={st.label} tone={st.tone} />
+              <Pressable
+                style={styles.iconBtn}
+                hitSlop={6}
+                onPress={() =>
+                  router.push({
+                    pathname: '/(admin)/members/package-sessions',
+                    params: { memberPackageId: String(mp.id), packageName: mp.packageName },
+                  })
+                }
+              >
+                <Ionicons name="list-outline" size={16} color={colors.muted} />
+              </Pressable>
+              {mp.status === 'active' ? (
+                <>
+                  <Pressable style={styles.iconBtn} hitSlop={6} onPress={() => onEdit(mp)}>
+                    <Ionicons name="create-outline" size={16} color={colors.muted} />
+                  </Pressable>
+                  <Pressable style={styles.iconBtn} hitSlop={6} onPress={() => onEnd(mp.id)}>
+                    <Ionicons name="stop-circle-outline" size={16} color={colors.danger} />
+                  </Pressable>
+                </>
+              ) : null}
+            </View>
+          );
+        })}
+      </View>
+
+      <View style={styles.formHead}>
+        <SectionTitle>{editingId ? 'Paketi Düzenle' : 'Yeni Paket Tanımla'}</SectionTitle>
+        {editingId ? (
+          <Pressable onPress={resetForm} hitSlop={6}>
+            <Text style={styles.cancelEdit}>Vazgeç</Text>
+          </Pressable>
+        ) : null}
+      </View>
+      <Card style={styles.form}>
+        <SelectField
+          label="Paket"
+          required
+          value={packageId}
+          onChange={onPickPackage}
+          options={(packages ?? []).map((p) => ({ label: `${p.name} (${p.lessonCount} ders)`, value: p.id }))}
+        />
+        <View style={styles.dateRow}>
+          <View style={styles.dateCol}>
+            <Text style={styles.label}>Başlangıç</Text>
+            <DateField value={startDate} onChange={onPickStart} />
+          </View>
+          <View style={styles.dateCol}>
+            <Text style={styles.label}>Bitiş</Text>
+            <DateField value={endDate} onChange={setEndDate} />
+          </View>
+        </View>
+
+        <Pressable style={styles.skipRow} onPress={() => setSkipDist((v) => !v)} hitSlop={6}>
+          <View style={[styles.check, skipDist && styles.checkOn]}>
+            {skipDist ? <Ionicons name="checkmark" size={15} color="#fff" /> : null}
+          </View>
+          <Text style={styles.skipText}>Haftalık gün dağılımı yapma (seansları sonra elle ekle)</Text>
+        </Pressable>
+
+        {!skipDist ? (
+          <View style={styles.slots}>
+            <Text style={styles.label}>Haftalık günler</Text>
+            {openDays.map((d) => {
+              const row = days[d];
+              const checked = !!row?.checked;
+              const hr = dayHourRange(d);
+              return (
+                <View key={d} style={[styles.dayCard, checked && styles.dayCardOn]}>
+                  <Pressable style={styles.dayHead} onPress={() => toggleDay(d)} hitSlop={6}>
+                    <View style={[styles.check, checked && styles.checkOn]}>
+                      {checked ? <Ionicons name="checkmark" size={15} color="#fff" /> : null}
+                    </View>
+                    <Text style={styles.dayName}>{DAY_NAMES[d]}</Text>
+                  </Pressable>
+                  {checked ? (
+                    <View style={styles.dayInputs}>
+                      <TimeField
+                        value={row.startTime}
+                        hourOnly
+                        minHour={hr.min}
+                        maxHour={hr.max}
+                        onChange={(v) => setDay(d, { startTime: v })}
+                      />
+                      <View style={styles.dayStaff}>
+                        <SelectField
+                          label=""
+                          placeholder="Personel"
+                          value={row.staffId}
+                          onChange={(v) => setDay(d, { staffId: v })}
+                          options={(staff ?? []).map((st) => ({ label: st.fullName, value: st.id }))}
+                        />
+                      </View>
+                    </View>
+                  ) : null}
+                </View>
+              );
+            })}
+          </View>
+        ) : null}
+
+        {error ? <ErrorBox>{error}</ErrorBox> : null}
+
+        <Button
+          title={editingId ? 'Paketi Güncelle' : 'Paketi Tanımla'}
+          variant="primary"
+          onPress={onSave}
+          loading={create.isPending || update.isPending || checking}
+          disabled={!editingId && hasActive}
+        />
+      </Card>
+    </ScreenContainer>
+  );
+}
+
+const styles = StyleSheet.create({
+  memberName: { color: colors.text, fontSize: 18, fontWeight: '800', marginTop: 8, marginBottom: 4 },
+  list: { gap: 8, marginBottom: 8 },
+  pkgItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    padding: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  pkgLeft: { flex: 1, gap: 2 },
+  pkgName: { color: colors.text, fontSize: 14, fontWeight: '700' },
+  pkgMeta: { color: colors.muted, fontSize: 12 },
+  iconBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  formHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  cancelEdit: { color: colors.accent, fontSize: 13, fontWeight: '700' },
+  form: { gap: 12, marginBottom: 16 },
+  label: { color: colors.muted, fontSize: 12, marginBottom: 6 },
+  dateRow: { flexDirection: 'row', gap: 10 },
+  dateCol: { flex: 1 },
+  skipRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  check: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkOn: { backgroundColor: colors.accent, borderColor: colors.accent },
+  skipText: { flex: 1, color: colors.text, fontSize: 13 },
+  slots: { gap: 8 },
+  dayCard: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.02)',
+    padding: 10,
+    gap: 10,
+  },
+  dayCardOn: { borderColor: 'rgba(124,92,255,0.4)', backgroundColor: 'rgba(124,92,255,0.06)' },
+  dayHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  dayName: { color: colors.text, fontSize: 15, fontWeight: '600' },
+  dayInputs: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  dayStaff: { flex: 1 },
+});
