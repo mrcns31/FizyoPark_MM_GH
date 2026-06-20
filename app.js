@@ -1221,10 +1221,10 @@ function cacheEls() {
     "openActivityLogsBtn",
     "packagesList",
     "packagesTable",
-    "packagesExportExcelBtn",
+    "packagesRefreshBtn",
     "packageName",
     "packageLessonCount",
-    "packageMonthOverrun",
+
     "packageWeeklyLessonCount",
     "packageType",
     "packageSaveBtn",
@@ -4369,7 +4369,6 @@ function renderPackages() {
     tr.innerHTML = `
       <td class="packagesTable__name">${escapeHtml(p.name)}</td>
       <td class="packagesTable__stat" data-label="Ders adet">${Number(p.lessonCount ?? p.lesson_count ?? 0)}</td>
-      <td class="packagesTable__stat" data-label="Ay aşım süresi">${Number(p.monthOverrun ?? p.month_overrun ?? 0)}</td>
       <td class="packagesTable__actions" colspan="2">
         <button class="btn btn--xs btn--ghost" type="button" data-package-edit="${p.id}" title="Düzelt">✎</button>
         <button class="btn btn--xs btn--ghost" type="button" data-package-delete="${p.id}" title="Sil">✕</button>
@@ -8011,7 +8010,6 @@ function clearPackageForm() {
   if (!els.packageName) return;
   els.packageName.value = "";
   els.packageLessonCount.value = "1";
-  els.packageMonthOverrun.value = "0";
   els.packageWeeklyLessonCount.value = "";
   els.packageType.value = "fixed";
   editingPackageId = null;
@@ -8023,7 +8021,6 @@ function editPackage(id) {
   editingPackageId = id;
   els.packageName.value = p.name || "";
   els.packageLessonCount.value = String(p.lessonCount ?? p.lesson_count ?? 1);
-  els.packageMonthOverrun.value = String(p.monthOverrun ?? p.month_overrun ?? 0);
   els.packageWeeklyLessonCount.value = p.weeklyLessonCount ?? p.weekly_lesson_count ?? "";
   els.packageType.value = p.packageType ?? p.package_type ?? "fixed";
   if (els.packagesFormError) els.packagesFormError.classList.add("hidden");
@@ -8104,8 +8101,10 @@ async function deletePackage(id) {
     try {
       await window.API.deletePackage(id);
     } catch (e) {
-      await showAppAlert((e.data && e.data.error) || e.message || "Paket pasife alınamadı.");
-      return;
+      const msg = (e.data && e.data.error) || e.message || "Paket pasife alınamadı.";
+      await showAppAlert(msg);
+      // 404 = zaten DB'de silinmiş; state'den yine de çıkar
+      if (e.status !== 404) return;
     }
   }
 
@@ -12455,14 +12454,16 @@ function bindEvents() {
   // Paket tanımlama (admin hub içinde)
   if (els.packageSaveBtn) els.packageSaveBtn.addEventListener("click", savePackageFromForm);
   if (els.packageCancelBtn) els.packageCancelBtn.addEventListener("click", clearPackageForm);
-  if (els.packagesExportExcelBtn) {
-    els.packagesExportExcelBtn.addEventListener("click", async () => {
-      if (window.API && window.API.exportPackagesCsv) {
-        try {
-          await window.API.exportPackagesCsv();
-        } catch (err) {
-          await showAppAlert(err.message || "Excel'e aktarım başarısız.");
-        }
+  if (els.packagesRefreshBtn) {
+    els.packagesRefreshBtn.addEventListener("click", async () => {
+      if (window.API && window.API.invalidateRareCache) window.API.invalidateRareCache();
+      try {
+        const rows = await window.API.getPackages();
+        state.packages = rows;
+        renderPackages();
+        updatePackagesSummary();
+      } catch (err) {
+        await showAppAlert(err.message || "Paket listesi yenilenemedi.");
       }
     });
   }

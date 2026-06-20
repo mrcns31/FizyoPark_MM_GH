@@ -39,7 +39,7 @@ export async function fetchBootstrapRooms() {
 }
 
 export async function fetchBootstrapPackages() {
-  const result = await db.query('SELECT * FROM packages ORDER BY name');
+  const result = await db.query('SELECT * FROM packages WHERE deleted_at IS NULL ORDER BY name');
   return result.rows;
 }
 

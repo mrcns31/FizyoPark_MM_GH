@@ -980,7 +980,7 @@
                   <div class="admin-hub-packages-layout__list">
                     <div class="admin-hub-packages-layout__list-head">
                       <span class="panel__title">Tanımlı Paketler</span>
-                      <button id="packagesExportExcelBtn" class="btn btn--ghost btn--xs" type="button">Excel'e Aktar</button>
+                      <button id="packagesRefreshBtn" class="btn btn--ghost btn--xs" type="button">Yenile</button>
                     </div>
                     <div id="packagesListWrap" class="packagesTable-wrap">
                       <table class="packagesTable" id="packagesTable">
@@ -988,7 +988,6 @@
                           <tr>
                             <th>Paket Adı</th>
                             <th>Ders Adet</th>
-                            <th>Ay Aşım Süresi</th>
                             <th></th>
                             <th></th>
                           </tr>
@@ -1008,10 +1007,7 @@
                         <label class="label" for="packageLessonCount">Ders Adet</label>
                         <input id="packageLessonCount" class="input" type="number" min="1" value="1" />
                       </div>
-                      <div class="formRow">
-                        <label class="label" for="packageMonthOverrun">Ay Aşım Süresi</label>
-                        <input id="packageMonthOverrun" class="input" type="number" min="0" value="0" />
-                      </div>
+
                       <div class="formRow formRow--full">
                         <label class="label" for="packageWeeklyLessonCount">Haftalık Ders Sayısı</label>
                         <input id="packageWeeklyLessonCount" class="input" type="number" min="0" placeholder="Boş bırakılabilir" />

@@ -663,6 +663,11 @@
     invalidateRareCache();
   }
 
+  async function getPackages() {
+    const rows = await apiFetch('/packages');
+    return (rows || []).map(packageFromApi);
+  }
+
   async function createPackage(body) {
     const payload = {
       name: body.name,
@@ -1007,6 +1012,7 @@
     createRoom,
     updateRoom,
     deleteRoom,
+    getPackages,
     createPackage,
     updatePackage,
     deletePackage,
