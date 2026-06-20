@@ -58,8 +58,8 @@ services:
       - "traefik.http.routers.fizyo-mm-web.rule=Host(`${APP_HOST:-fizyopark-mm.local}`)"
       - traefik.http.routers.fizyo-mm-web.entrypoints=websecure
       - traefik.http.routers.fizyo-mm-web.tls=true
-      # 'le' resolver infra'da kurulu; APP_HOST + DNS hazir oldugunda gercek Let's Encrypt alir.
-      - traefik.http.routers.fizyo-mm-web.tls.certresolver=le
+      # le-mm: bu app'e ozel ACME hesabi (mail: fizyoparkankara@gmail.com), infra'da tanimli.
+      - traefik.http.routers.fizyo-mm-web.tls.certresolver=le-mm
       - traefik.http.services.fizyo-mm-web.loadbalancer.server.port=80
 
 networks:
