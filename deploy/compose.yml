@@ -58,9 +58,8 @@ services:
       - "traefik.http.routers.fizyo-mm-web.rule=Host(`${APP_HOST:-fizyopark-mm.local}`)"
       - traefik.http.routers.fizyo-mm-web.entrypoints=websecure
       - traefik.http.routers.fizyo-mm-web.tls=true
-      # Domain + DNS hazir olunca asagidaki satiri ac: 'le' resolver infra'da zaten kurulu,
-      # Traefik otomatik gercek Let's Encrypt sertifikasi alir (restart/infra degisikligi YOK).
-      # - traefik.http.routers.fizyo-mm-web.tls.certresolver=le
+      # 'le' resolver infra'da kurulu; APP_HOST + DNS hazir oldugunda gercek Let's Encrypt alir.
+      - traefik.http.routers.fizyo-mm-web.tls.certresolver=le
       - traefik.http.services.fizyo-mm-web.loadbalancer.server.port=80
 
 networks:
