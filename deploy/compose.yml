@@ -1,0 +1,72 @@
+# fizyopark-mm — VPS deploy stack (ikinci/izole uygulama). Calisan fizyopark-ankara'ya dokunmaz.
+# Sunucuda /opt/fizyopark-mm/compose.yml + .env yan yana. Kullanim:
+#   docker compose -f compose.yml --env-file .env pull && docker compose -f compose.yml --env-file .env up -d
+# Imajlar ghcr.io/mrcns31/* (private) — sunucuda bir kerelik `docker login ghcr.io` gerekir.
+name: fizyopark-mm
+
+services:
+  db:
+    image: ghcr.io/mrcns31/fizyopark-db:${DB_TAG:-latest}
+    container_name: fizyopark-mm-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - fizyopark-mm-pgdata:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    image: ghcr.io/mrcns31/fizyopark-api:${API_TAG:-latest}
+    container_name: fizyopark-mm-api
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: true
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DB_HOST: db
+      DB_PORT: "5432"
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - internal
+    # Disari port publish YOK — yalniz web (nginx) /api proxy'si uzerinden erisilir.
+
+  web:
+    image: ghcr.io/mrcns31/fizyopark-web:${WEB_TAG:-latest}
+    container_name: fizyopark-mm-web
+    restart: unless-stopped
+    depends_on:
+      - api
+    networks:
+      - edge
+      - internal
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=edge
+      # Host bazli yonlendirme: yalniz ${APP_HOST}'a gelen istek bu app'e; gerisi mevcut app'te kalir.
+      - "traefik.http.routers.fizyo-mm-web.rule=Host(`${APP_HOST:-fizyopark-mm.local}`)"
+      - traefik.http.routers.fizyo-mm-web.entrypoints=websecure
+      - traefik.http.routers.fizyo-mm-web.tls=true
+      # Domain + DNS hazir olunca asagidaki satiri ac: 'le' resolver infra'da zaten kurulu,
+      # Traefik otomatik gercek Let's Encrypt sertifikasi alir (restart/infra degisikligi YOK).
+      # - traefik.http.routers.fizyo-mm-web.tls.certresolver=le
+      - traefik.http.services.fizyo-mm-web.loadbalancer.server.port=80
+
+networks:
+  edge:
+    external: true
+  internal: {}
+
+volumes:
+  fizyopark-mm-pgdata: {}

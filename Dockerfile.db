@@ -1,0 +1,12 @@
+# fizyopark-mm db imaji — postgres + sema/migration gomulu. Build context: repo koku.
+# Volume bosken ilk acilista initdb sema + migration'lari otomatik uygular.
+FROM postgres:16-alpine
+
+# initdb scriptleri alfabetik calisir: once sema, sonra migration runner.
+COPY backend/database/schema.sql              /docker-entrypoint-initdb.d/01_schema.sql
+COPY deploy/db-migrations.sh                  /docker-entrypoint-initdb.d/02_migrations.sh
+
+# Migration SQL'leri (runner /migrations'tan okur)
+COPY backend/database/migration_*.sql         /migrations/
+
+RUN chmod +x /docker-entrypoint-initdb.d/02_migrations.sh
