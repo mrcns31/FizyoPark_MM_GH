@@ -1,0 +1,189 @@
+name: Deploy (fizyopark-mm → VPS)
+
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - "docs/**"
+      - "**/*.md"
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-fizyopark-mm
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  OWNER: mrcns31
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      api: ${{ steps.f.outputs.api }}
+      web: ${{ steps.f.outputs.web }}
+      db: ${{ steps.f.outputs.db }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: dorny/paths-filter@v4
+        id: f
+        with:
+          filters: |
+            api:
+              - 'backend/**'
+            db:
+              - 'backend/database/schema.sql'
+              - 'backend/database/migration_*.sql'
+              - 'deploy/db-migrations.sh'
+              - 'Dockerfile.db'
+            web:
+              - 'index.html'
+              - 'app.js'
+              - 'api.js'
+              - 'styles.css'
+              - 'manifest.json'
+              - 'sw.js'
+              - 'pwa-register.js'
+              - 'kiosk.html'
+              - 'kiosk.js'
+              - 'activity-logs.html'
+              - 'activity-logs.js'
+              - 'icons/**'
+              - 'fonts/**'
+              - 'deploy/nginx.conf'
+              - 'Dockerfile.web'
+
+  build-api:
+    needs: changes
+    if: ${{ needs.changes.outputs.api == 'true' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile-vps
+          push: true
+          provenance: false
+          sbom: false
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/fizyopark-api:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/fizyopark-api:latest
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,scope=api,mode=max
+
+  build-web:
+    needs: changes
+    if: ${{ needs.changes.outputs.web == 'true' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.web
+          push: true
+          provenance: false
+          sbom: false
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/fizyopark-web:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/fizyopark-web:latest
+          cache-from: type=gha,scope=web
+          cache-to: type=gha,scope=web,mode=max
+
+  build-db:
+    needs: changes
+    if: ${{ needs.changes.outputs.db == 'true' || github.event_name == 'workflow_dispatch' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.db
+          push: true
+          provenance: false
+          sbom: false
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/fizyopark-db:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.OWNER }}/fizyopark-db:latest
+          cache-from: type=gha,scope=db
+          cache-to: type=gha,scope=db,mode=max
+
+  deploy:
+    needs: [build-api, build-web, build-db]
+    if: ${{ !cancelled() && (needs.build-api.result == 'success' || needs.build-web.result == 'success' || needs.build-db.result == 'success') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Copy compose.yml + deploy.sh to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          source: "deploy/compose.yml,deploy/deploy.sh"
+          target: /opt/fizyopark-mm/
+          strip_components: 1
+          overwrite: true
+      - name: Run deploy.sh on VPS (only changed services)
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          SHA: ${{ github.sha }}
+          DEPLOY_API: ${{ needs.build-api.result == 'success' }}
+          DEPLOY_WEB: ${{ needs.build-web.result == 'success' }}
+          DEPLOY_DB: ${{ needs.build-db.result == 'success' }}
+          GHCR_TOKEN: ${{ secrets.GHCR_PULL_TOKEN }}
+          GHCR_USER: mrcns31
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          envs: SHA,DEPLOY_API,DEPLOY_WEB,DEPLOY_DB,GHCR_TOKEN,GHCR_USER
+          script: bash /opt/fizyopark-mm/deploy.sh "${SHA}"
+
+  cleanup:
+    needs: [deploy]
+    if: ${{ !cancelled() && needs.deploy.result == 'success' }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        pkg: [fizyopark-api, fizyopark-web, fizyopark-db]
+    steps:
+      - name: Keep last 2 versions of ${{ matrix.pkg }}
+        continue-on-error: true
+        uses: actions/delete-package-versions@v5
+        with:
+          package-name: ${{ matrix.pkg }}
+          package-type: container
+          min-versions-to-keep: 2
+          token: ${{ secrets.GHCR_CLEANUP_TOKEN || secrets.GHCR_PULL_TOKEN }}
