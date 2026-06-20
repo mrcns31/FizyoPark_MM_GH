@@ -38,7 +38,7 @@ export function AdminStaffScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <ScreenHeader title="Personel" />
+      <ScreenHeader title="Personel" onBack={() => router.push('/(admin)/more/settings')} />
       <ScrollView contentContainerStyle={[styles.list, wide]}>
         {(data ?? []).length === 0 ? <Card><Muted>Personel yok.</Muted></Card> : null}
         {(data ?? []).map((s) => {

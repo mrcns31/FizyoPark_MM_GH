@@ -3,7 +3,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 
-import { Badge, Card, Muted } from '../../../components/ui';
+import { Badge, Card, ErrorBox, Muted } from '../../../components/ui';
 import { Fab } from '../../../components/fab';
 import { ScreenHeader } from '../../../components/screen-header';
 import { useResponsive } from '../../../lib/responsive';
@@ -13,7 +13,7 @@ import { useDeletePackage, usePackages } from '../api/hooks';
 /** Admin paket katalog listesi — ekle/düzenle/sil. */
 export function AdminPackagesScreen() {
   const router = useRouter();
-  const { data, isLoading, refetch, isRefetching } = usePackages();
+  const { data, isLoading, isError, error, refetch, isRefetching } = usePackages();
   const del = useDeletePackage();
   const { contentMaxWidth, gutter, columns } = useResponsive();
 
@@ -52,7 +52,11 @@ export function AdminPackagesScreen() {
           styles.list,
           { paddingHorizontal: gutter, maxWidth: contentMaxWidth, alignSelf: 'center', width: '100%' },
         ]}
-        ListEmptyComponent={<Card><Muted>Paket yok.</Muted></Card>}
+        ListEmptyComponent={
+          isError
+            ? <ErrorBox>{(error as Error)?.message ?? 'Paketler yüklenemedi.'}</ErrorBox>
+            : <Card><Muted>Paket yok. Sağa çekerek yenileyin.</Muted></Card>
+        }
         renderItem={({ item }) => (
           <Pressable
             style={[styles.card, columns > 1 ? { flex: 1 } : undefined]}

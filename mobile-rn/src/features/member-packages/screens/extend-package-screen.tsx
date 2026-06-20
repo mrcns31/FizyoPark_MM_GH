@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 
 import { DateField } from '../../../components/date-field';
 import { FormField } from '../../../components/form';
@@ -21,6 +22,7 @@ function fmtTR(v: string): string {
 
 /** Paket Süresi Güncelle — üye ara, son paketini bul, bitiş tarihi + durumu güncelle (web `initExtendPackagePanel`). */
 export function ExtendPackageScreen() {
+  const router = useRouter();
   const { data: members } = useMembers();
   const update = useUpdateMemberPackage();
   const { contentMaxWidth, gutter } = useResponsive();
@@ -107,7 +109,7 @@ export function ExtendPackageScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <ScreenHeader title="Paket Süresi Güncelle" />
+      <ScreenHeader title="Paket Süresi Güncelle" onBack={() => router.push('/(admin)/more/settings')} />
       <ScrollView contentContainerStyle={[styles.content, wide]} showsVerticalScrollIndicator={false}>
         <Muted>Üye adını yazın, son paketini bulun, bitiş tarihini ve durumunu güncelleyin.</Muted>
 

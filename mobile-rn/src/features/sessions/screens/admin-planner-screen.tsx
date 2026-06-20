@@ -21,9 +21,9 @@ import { useResponsive } from '../../../lib/responsive';
 import { colors } from '../../../theme/colors';
 import { Fab } from '../../../components/fab';
 import { ScreenHeader } from '../../../components/screen-header';
-import { SelectField } from '../../../components/select-field';
 import { useStaff } from '../../staff/api/hooks';
 import { useRooms } from '../../rooms/api/hooks';
+import { staffColor } from '../../../lib/staff-color';
 import { useConfirmAttendance, useDeleteSession, useSessions } from '../api/hooks';
 import { isAttendanceConfirmed, type PlannerSession } from '../api/sessions';
 import { promptAdminPassword } from '../../../lib/admin-password';
@@ -63,26 +63,18 @@ export function AdminPlannerScreen() {
 
   // filtreler
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [search, setSearch] = useState('');
+
   const [filterStaffId, setFilterStaffId] = useState<number | null>(null);
-  const [filterRoom, setFilterRoom] = useState<number | null>(null);
-  const filterRoomName = rooms?.find((r) => r.id === filterRoom)?.name ?? null;
-  const filterActive = !!search.trim() || filterStaffId != null || filterRoom != null;
+  const [search, setSearch] = useState('');
+  const filterActive = !!search.trim() || filterStaffId != null;
 
   const sessions = useMemo(() => {
     let list = data ?? [];
     const q = search.trim().toLocaleLowerCase('tr-TR');
-    if (q) {
-      list = list.filter(
-        (s) =>
-          s.memberName.toLocaleLowerCase('tr-TR').includes(q) ||
-          s.staffName.toLocaleLowerCase('tr-TR').includes(q),
-      );
-    }
+    if (q) list = list.filter((s) => s.memberName.toLocaleLowerCase('tr-TR').includes(q));
     if (filterStaffId != null) list = list.filter((s) => s.staffId === filterStaffId);
-    if (filterRoomName) list = list.filter((s) => s.roomName === filterRoomName);
     return list;
-  }, [data, search, filterStaffId, filterRoomName]);
+  }, [data, search, filterStaffId]);
 
   // tarihe göre grupla (sadece seansı olan günler)
   const days = useMemo(() => {
@@ -201,24 +193,28 @@ export function AdminPlannerScreen() {
         <View style={[styles.filterPanel, wide]}>
           <TextInput
             style={styles.search}
-            placeholder="Üye veya personel ara"
+            placeholder="Üye adı, soyadı ara"
             placeholderTextColor={colors.textMuted}
             value={search}
             onChangeText={setSearch}
           />
-          <View style={styles.filterRow}>
-            <View style={styles.filterCol}>
-              <SelectField label="" placeholder="Personel (tümü)" value={filterStaffId} onChange={setFilterStaffId} options={(staff ?? []).map((s) => ({ label: s.fullName, value: s.id }))} />
-            </View>
-            <View style={styles.filterCol}>
-              <SelectField label="" placeholder="Oda (tümü)" value={filterRoom} onChange={setFilterRoom} options={(rooms ?? []).map((r) => ({ label: r.name, value: r.id }))} />
-            </View>
+          <View style={styles.staffChips}>
+            {(staff ?? []).map((s, idx) => {
+              const c = staffColor(idx, s.id);
+              const sel = filterStaffId === s.id;
+              const parts = s.fullName.trim().split(/\s+/);
+              const initials = (parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '');
+              return (
+                <Pressable
+                  key={s.id}
+                  style={[styles.staffChip, { borderColor: c.border, backgroundColor: sel ? c.bg : 'rgba(255,255,255,0.03)' }]}
+                  onPress={() => setFilterStaffId(sel ? null : s.id)}
+                >
+                  <Text style={[styles.staffChipInitial, { color: sel ? colors.text : c.border }]}>{initials.toUpperCase()}</Text>
+                </Pressable>
+              );
+            })}
           </View>
-          {filterActive ? (
-            <Pressable onPress={() => { setSearch(''); setFilterStaffId(null); setFilterRoom(null); }} style={styles.clearBtn}>
-              <Text style={styles.clearText}>Filtreleri temizle</Text>
-            </Pressable>
-          ) : null}
         </View>
       ) : null}
 
@@ -328,7 +324,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   filterBtnActive: { backgroundColor: 'rgba(124,92,255,0.20)', borderColor: 'rgba(124,92,255,0.5)' },
-  filterPanel: { gap: 8, paddingBottom: 10 },
+  filterPanel: { paddingBottom: 10, gap: 8 },
+  staffChips: { flexDirection: 'row', gap: 6, paddingVertical: 2, justifyContent: 'space-between' },
+  staffChip: {
+    flex: 1, height: 42,
+    borderRadius: 10, borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  staffChipAllOn: { borderColor: 'rgba(124,92,255,0.5)', backgroundColor: 'rgba(124,92,255,0.18)' },
+  staffChipInitial: { color: colors.muted, fontSize: 13, fontWeight: '800' },
+  staffChipTextOn: { color: colors.text },
   search: {
     backgroundColor: 'rgba(255,255,255,0.03)',
     borderRadius: 12,

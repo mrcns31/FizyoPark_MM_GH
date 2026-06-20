@@ -6,7 +6,7 @@ import { createPackage, deletePackage, getPackages, updatePackage } from './pack
 export const packageKeys = { all: ['packages'] as const };
 
 export function usePackages() {
-  return useQuery({ queryKey: packageKeys.all, queryFn: getPackages });
+  return useQuery({ queryKey: packageKeys.all, queryFn: getPackages, staleTime: 0, gcTime: 0 });
 }
 
 export function useCreatePackage() {

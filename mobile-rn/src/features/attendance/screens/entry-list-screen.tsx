@@ -108,7 +108,7 @@ export function EntryListScreen() {
       <View style={[styles.top, wide]}>
         <View style={styles.tabs}>
           <Pressable style={[styles.tab, tab === 'entry' && styles.tabOn]} onPress={() => setTab('entry')}>
-            <Text style={[styles.tabText, tab === 'entry' && styles.tabTextOn]}>Giriş Listesi</Text>
+            <Text style={[styles.tabText, tab === 'entry' && styles.tabTextOn]}>Randevulu</Text>
           </Pressable>
           <Pressable style={[styles.tab, tab === 'walkin' && styles.tabOn]} onPress={() => setTab('walkin')}>
             <Text style={[styles.tabText, tab === 'walkin' && styles.tabTextOn]}>Randevusuz</Text>
@@ -117,13 +117,28 @@ export function EntryListScreen() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
           {(tab === 'entry' ? STATUS_FILTERS : WALKIN_FILTERS).map((f) => {
             const sel = tab === 'entry' ? statusF === f.key : walkF === f.key;
+            const isPresent = f.key === 'present';
+            const isNoShow = f.key === 'no_show';
             return (
               <Pressable
                 key={f.key}
-                style={[styles.chip, sel && styles.chipOn]}
+                style={[
+                  styles.chip,
+                  sel && styles.chipOn,
+                  isPresent && styles.chipPresent,
+                  isNoShow && styles.chipNoShow,
+                  isPresent && sel && styles.chipPresentOn,
+                  isNoShow && sel && styles.chipNoShowOn,
+                ]}
                 onPress={() => (tab === 'entry' ? setStatusF(f.key as StatusFilter) : setWalkF(f.key as WalkInFilter))}
               >
-                <Text style={[styles.chipText, sel && styles.chipTextOn]}>{f.label}</Text>
+                {isPresent ? (
+                  <Ionicons name="checkmark" size={16} color={sel ? colors.ok : 'rgba(43,213,118,0.6)'} />
+                ) : isNoShow ? (
+                  <Ionicons name="close" size={16} color={sel ? colors.danger : 'rgba(255,77,109,0.6)'} />
+                ) : (
+                  <Text style={[styles.chipText, sel && styles.chipTextOn]}>{f.label}</Text>
+                )}
               </Pressable>
             );
           })}
@@ -212,6 +227,13 @@ export function EntryListScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
+  dateNav: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  navBtn: {
+    width: 30, height: 30, borderRadius: 8, borderWidth: 1,
+    borderColor: colors.border, backgroundColor: 'rgba(255,255,255,0.04)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  dateLabel: { fontSize: 13, fontWeight: '700', color: colors.text, width: 132, textAlign: 'center' },
   top: { gap: 10, paddingTop: 4, paddingBottom: 8 },
   tabs: { flexDirection: 'row', gap: 8 },
   tab: {
@@ -238,6 +260,10 @@ const styles = StyleSheet.create({
   chipOn: { backgroundColor: 'rgba(124,92,255,0.20)', borderColor: 'rgba(124,92,255,0.5)' },
   chipText: { color: colors.muted, fontSize: 13, fontWeight: '600' },
   chipTextOn: { color: colors.text },
+  chipPresent: { borderColor: 'rgba(43,213,118,0.4)', backgroundColor: 'rgba(43,213,118,0.08)' },
+  chipNoShow: { borderColor: 'rgba(255,77,109,0.4)', backgroundColor: 'rgba(255,77,109,0.08)' },
+  chipPresentOn: { borderColor: 'rgba(43,213,118,0.7)', backgroundColor: 'rgba(43,213,118,0.22)' },
+  chipNoShowOn: { borderColor: 'rgba(255,77,109,0.7)', backgroundColor: 'rgba(255,77,109,0.22)' },
   list: { paddingBottom: 24, gap: 8, flexGrow: 1 },
   row: {
     flexDirection: 'row',

@@ -15,9 +15,12 @@ const checkAdminOrManager = (req, res, next) => {
   next();
 };
 
-// Paket listesi (deleted_at IS NULL → sadece aktif paketler)
+// Paket listesi (deleted_at IS NULL → sadece aktif paketler; kolon yoksa otomatik ekle)
 router.get('/', async (req, res) => {
   try {
+    await db.query(
+      `ALTER TABLE packages ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP DEFAULT NULL`
+    );
     const result = await db.query(
       'SELECT * FROM packages WHERE deleted_at IS NULL ORDER BY name'
     );

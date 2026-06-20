@@ -9,21 +9,22 @@ import { colors } from '../../../theme/colors';
 
 type IoniconName = keyof typeof Ionicons.glyphMap;
 
-const ITEMS: { label: string; icon: IoniconName; path: string }[] = [
-  { label: 'Paket Tanımlama', icon: 'cube', path: '/(admin)/packages' },
+const ALL_ITEMS: { label: string; icon: IoniconName; path: string; tabletOnly?: boolean }[] = [
+  { label: 'Paket Tanımlama',    icon: 'cube',             path: '/(admin)/packages' },
   { label: 'Paket Süresi Güncelle', icon: 'hourglass-outline', path: '/(admin)/more/extend-package' },
-  { label: 'Personel', icon: 'people-circle', path: '/(admin)/more/staff' },
-  { label: 'Odalar / Alet', icon: 'business', path: '/(admin)/more/rooms' },
-  { label: 'Çalışma Saatleri', icon: 'time', path: '/(admin)/more/working-hours' },
-  { label: 'Kapalı Günler', icon: 'calendar-clear', path: '/(admin)/more/closure-days' },
-  { label: 'İşlem Logları', icon: 'list-outline', path: '/(admin)/more/activity-logs' },
-  { label: 'Hesabım', icon: 'person-circle', path: '/(admin)/more/account' },
+  { label: 'Personel',           icon: 'people-circle',    path: '/(admin)/more/staff' },
+  { label: 'Odalar / Alet',      icon: 'business',         path: '/(admin)/more/rooms',             tabletOnly: true },
+  { label: 'Çalışma Saatleri',   icon: 'time',             path: '/(admin)/more/working-hours',     tabletOnly: true },
+  { label: 'Kapalı Günler',      icon: 'calendar-clear',   path: '/(admin)/more/closure-days',      tabletOnly: true },
+  { label: 'İşlem Logları',      icon: 'list-outline',     path: '/(admin)/more/activity-logs',     tabletOnly: true },
+  { label: 'Hesabım',            icon: 'person-circle',    path: '/(admin)/more/account' },
 ];
 
 /** Ayarlar hub — web admin "Ayarlar" modalıyla birebir; yönetim ekranlarına giriş. */
 export function SettingsHubScreen() {
   const router = useRouter();
-  const { contentMaxWidth, gutter } = useResponsive();
+  const { contentMaxWidth, gutter, isTablet } = useResponsive();
+  const items = ALL_ITEMS.filter((it) => !it.tabletOnly || isTablet);
 
   const wide = {
     maxWidth: contentMaxWidth,
@@ -36,7 +37,7 @@ export function SettingsHubScreen() {
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <ScreenHeader title="Ayarlar" />
       <ScrollView contentContainerStyle={[styles.list, wide]} showsVerticalScrollIndicator={false}>
-        {ITEMS.map((it) => (
+        {items.map((it) => (
           <Pressable key={it.path} style={styles.row} onPress={() => router.push(it.path as never)}>
             <View style={styles.icon}>
               <Ionicons name={it.icon} size={20} color={colors.accent} />

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
 
 import { FormField } from '../../../components/form';
@@ -16,6 +17,7 @@ import { getInstitutionWhatsApp } from '../api/settings';
 
 /** Hesap İşlemleri / Profil (admin) — web `openAdminAccountScreen`. Bilgi güncelle + şifre + çıkış. */
 export function AccountScreen() {
+  const router = useRouter();
   const { user, role, signOut } = useAuth();
   const qc = useQueryClient();
   const { contentMaxWidth, gutter } = useResponsive();
@@ -66,7 +68,7 @@ export function AccountScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <ScreenHeader title="Hesap İşlemleri" />
+      <ScreenHeader title="Hesap İşlemleri" onBack={() => router.push('/(admin)/more/settings')} />
       <ScrollView contentContainerStyle={[styles.content, wide]} showsVerticalScrollIndicator={false}>
         <Card style={styles.card}>
           <SectionTitle>Bilgilerim</SectionTitle>
