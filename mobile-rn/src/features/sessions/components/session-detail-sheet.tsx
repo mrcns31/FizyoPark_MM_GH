@@ -1,33 +1,20 @@
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { BottomSheet } from '../../../components/bottom-sheet';
 import { Badge, Button } from '../../../components/ui';
-import { formatSessionRange, formatDayLabel } from '../../../lib/datetime';
+import { formatDayLabel, formatTime } from '../../../lib/datetime';
 import { colors } from '../../../theme/colors';
 import type { PlannerSession } from '../api/sessions';
 
-type IoniconName = keyof typeof Ionicons.glyphMap;
-
-function Row({ icon, value }: { icon: IoniconName; value: string }) {
-  if (!value) return null;
-  return (
-    <View style={styles.row}>
-      <Ionicons name={icon} size={16} color={colors.muted} style={styles.rowIcon} />
-      <Text style={styles.rowValue}>{value}</Text>
-    </View>
-  );
-}
-
-function attendance(outcome: string | null): { label: string; tone: 'green' | 'red' | 'neutral' } {
+function attendanceBadge(outcome: string | null): { label: string; tone: 'green' | 'red' | 'neutral' } {
   if (outcome === 'present') return { label: 'Geldi', tone: 'green' };
   if (outcome === 'no_show') return { label: 'Gelmedi', tone: 'red' };
-  return { label: 'Yoklama bekliyor', tone: 'neutral' };
+  return { label: 'Bekliyor', tone: 'neutral' };
 }
 
 /**
- * Seans detay + aksiyon sheet'i (admin planner). Bir slot grubunu (aynı personel+saat)
- * gösterir: her üye için yoklama (Geldi/Gelmedi), grup için Düzenle / Sil.
+ * Seans detay + aksiyon sheet'i (admin planner, long-press ile açılır).
  */
 export function SessionDetailSheet({
   group,
@@ -46,44 +33,54 @@ export function SessionDetailSheet({
 }) {
   const anchor = group && group.length ? group[0] : null;
   const isGroup = !!group && group.length > 1;
-  const title = anchor ? (isGroup ? `Grup seans (${group!.length})` : anchor.memberName || 'Seans') : 'Seans';
 
   return (
-    <BottomSheet visible={!!anchor} onClose={onClose} title={title}>
+    <BottomSheet visible={!!anchor} onClose={onClose} title="Girişler">
       {anchor ? (
         <View style={styles.body}>
-          <View style={styles.headRow}>
-            <Text style={styles.time}>{formatSessionRange(anchor.startTs, anchor.endTs)}</Text>
-          </View>
-          <Text style={styles.date}>{formatDayLabel(anchor.startTs)}</Text>
-
-          <View style={styles.info}>
-            <Row icon="people-outline" value={anchor.staffName} />
-            <Row icon="business-outline" value={anchor.roomName} />
+          {/* Başlık: Personel - Saat + Tarih */}
+          <View style={styles.header}>
+            <Text style={styles.staffTime}>
+              {anchor.staffName} — {formatTime(anchor.startTs)}
+            </Text>
+            <Text style={styles.date}>{formatDayLabel(anchor.startTs)}</Text>
           </View>
 
-          {/* Üyeler — her biri için yoklama */}
+          {/* Üye kartları */}
           {group!.map((s) => {
-            const att = attendance(s.attendanceOutcome);
+            const att = attendanceBadge(s.attendanceOutcome);
+            const canApprove = !s.attendanceOutcome;
             return (
               <View key={s.id} style={styles.memberCard}>
                 <View style={styles.memberTop}>
-                  <Text style={styles.memberName} numberOfLines={1}>
-                    {s.memberName || 'İsimsiz'}
-                  </Text>
-                  <Badge label={att.label} tone={att.tone} />
-                </View>
-                {!s.attendanceOutcome ? (
-                  <View style={styles.attRow}>
-                    <View style={styles.flex}>
-                      <Button title="Geldi" variant="primary" onPress={() => onAttendance(s, 'present')} disabled={busy} />
-                    </View>
-                    <View style={styles.flex}>
-                      <Button title="Gelmedi" variant="danger" onPress={() => onAttendance(s, 'no_show')} disabled={busy} />
-                    </View>
+                  <View style={styles.memberInfo}>
+                    <Text style={styles.memberName} numberOfLines={1}>
+                      {s.memberName || 'İsimsiz'}
+                    </Text>
+                    <Text style={styles.memberStatus}>{att.label}</Text>
                   </View>
-                ) : null}
-                {s.note ? <Row icon="document-text-outline" value={s.note} /> : null}
+                  {canApprove ? (
+                    <View style={styles.attRow}>
+                      <Pressable
+                        style={[styles.attBtn, styles.attPresent]}
+                        disabled={busy}
+                        onPress={() => onAttendance(s, 'present')}
+                      >
+                        <Ionicons name="checkmark" size={17} color={colors.ok} />
+                      </Pressable>
+                      <Pressable
+                        style={[styles.attBtn, styles.attNoShow]}
+                        disabled={busy}
+                        onPress={() => onAttendance(s, 'no_show')}
+                      >
+                        <Ionicons name="close" size={17} color={colors.danger} />
+                      </Pressable>
+                    </View>
+                  ) : (
+                    <Badge label={att.label} tone={att.tone} />
+                  )}
+                </View>
+                {s.note ? <Text style={styles.note}>{s.note}</Text> : null}
               </View>
             );
           })}
@@ -103,32 +100,34 @@ export function SessionDetailSheet({
 }
 
 const styles = StyleSheet.create({
-  body: { gap: 12 },
-  headRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
-  time: { color: colors.accent, fontSize: 18, fontWeight: '800' },
-  date: { color: colors.muted, fontSize: 13, marginTop: -6 },
-  info: {
-    gap: 10,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    padding: 12,
-  },
+  body: { gap: 10 },
+  header: { gap: 2, marginBottom: 2 },
+  staffTime: { color: colors.text, fontSize: 16, fontWeight: '800' },
+  date: { color: colors.muted, fontSize: 13 },
   memberCard: {
-    gap: 10,
+    gap: 8,
     backgroundColor: 'rgba(255,255,255,0.03)',
     borderWidth: 1,
     borderColor: colors.border,
-    borderRadius: 12,
-    padding: 12,
+    borderRadius: 10,
+    padding: 10,
   },
-  memberTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
-  memberName: { flex: 1, color: colors.text, fontSize: 15, fontWeight: '700' },
-  attRow: { flexDirection: 'row', gap: 10 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  rowIcon: { width: 18 },
-  rowValue: { flex: 1, color: colors.text, fontSize: 14 },
-  actions: { flexDirection: 'row', gap: 10 },
+  memberTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+  memberInfo: { flex: 1, gap: 2 },
+  memberName: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  memberStatus: { color: colors.muted, fontSize: 12 },
+  attRow: { flexDirection: 'row', gap: 6 },
+  attBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 9,
+    borderWidth: 1.5,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  attPresent: { borderColor: 'rgba(43,213,118,0.6)', backgroundColor: 'rgba(43,213,118,0.18)' },
+  attNoShow: { borderColor: 'rgba(255,77,109,0.6)', backgroundColor: 'rgba(255,77,109,0.18)' },
+  note: { color: colors.muted, fontSize: 12 },
+  actions: { flexDirection: 'row', gap: 10, marginTop: 2 },
   flex: { flex: 1 },
 });

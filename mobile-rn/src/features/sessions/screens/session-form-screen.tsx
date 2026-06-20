@@ -46,7 +46,7 @@ function mergeTime(base: Date, timeStr: string): Date {
  */
 export function SessionFormScreen() {
   const router = useRouter();
-  const params = useLocalSearchParams<{ id?: string; date?: string; defaultTs?: string }>();
+  const params = useLocalSearchParams<{ id?: string; date?: string; defaultTs?: string; singleEdit?: string }>();
   const create = useCreateSession();
   const update = useUpdateSession();
   const del = useDeleteSession();
@@ -56,9 +56,10 @@ export function SessionFormScreen() {
   );
   const editing = params.id ? daySessions?.find((s) => s.id === Number(params.id)) : undefined;
 
-  // Düzenlemede: aynı slottaki tüm seanslar (grup) = aynı personel + başlangıç + bitiş + oda.
+  // singleEdit=1 → sadece bu seans (paket listesinden açılış); aksi halde aynı slottaki grup.
   const groupSessions = useMemo<PlannerSession[]>(() => {
     if (!editing) return [];
+    if (params.singleEdit === '1') return [editing];
     return (daySessions ?? []).filter(
       (s) =>
         s.staffId === editing.staffId &&
@@ -66,7 +67,7 @@ export function SessionFormScreen() {
         s.endTs === editing.endTs &&
         (s.roomId ?? null) === (editing.roomId ?? null),
     );
-  }, [editing, daySessions]);
+  }, [editing, daySessions, params.singleEdit]);
 
   const membersQ = useQuery({ queryKey: ['members'], queryFn: getMembers });
   const staffQ = useQuery({ queryKey: ['staff'], queryFn: getStaff });

@@ -9,8 +9,9 @@ import { ScreenHeader } from '../../../components/screen-header';
 import { useResponsive } from '../../../lib/responsive';
 import { colors } from '../../../theme/colors';
 import { useDeletePackage, usePackages } from '../api/hooks';
+import { verifyAdminPassword } from '../../auth/api/auth';
 
-/** Admin paket katalog listesi — ekle/düzenle/sil. */
+/** Admin paket katalog listesi — ekle/düzenle/sil (web `deletePackage` + `renderPackages` paritesi). */
 export function AdminPackagesScreen() {
   const router = useRouter();
   const { data, isLoading, isError, error, refetch, isRefetching } = usePackages();
@@ -18,20 +19,55 @@ export function AdminPackagesScreen() {
   const { contentMaxWidth, gutter, columns } = useResponsive();
 
   function onDelete(id: number, name: string) {
-    Alert.alert('Paketi sil', `${name} silinsin mi?`, [
-      { text: 'Vazgeç', style: 'cancel' },
-      {
-        text: 'Sil',
-        style: 'destructive',
-        onPress: () => del.mutate(id, { onError: (e) => Alert.alert('Hata', (e as Error).message) }),
-      },
-    ]);
+    // Web'deki gibi: önce bilgilendirici onay, sonra admin şifresi
+    Alert.alert(
+      'Paketi Pasife Al',
+      `"${name}" pasife alınacak.\n\nPaket tamamen silinmez; mevcut üye kayıtları korunur, yeni atamalarda görünmez.`,
+      [
+        { text: 'Vazgeç', style: 'cancel' },
+        {
+          text: 'Pasife Al',
+          style: 'destructive',
+          onPress: () => {
+            Alert.prompt(
+              'Yönetici Onayı',
+              'Admin şifrenizi girin:',
+              [
+                { text: 'Vazgeç', style: 'cancel' },
+                {
+                  text: 'Onayla',
+                  style: 'destructive',
+                  onPress: async (pwd?: string) => {
+                    if (!pwd) return;
+                    try {
+                      await verifyAdminPassword(pwd);
+                      del.mutate(id, {
+                        onError: (e) => Alert.alert('Hata', (e as Error).message),
+                      });
+                    } catch {
+                      Alert.alert('Hata', 'Şifre hatalı.');
+                    }
+                  },
+                },
+              ],
+              'secure-text',
+            );
+          },
+        },
+      ],
+    );
   }
+
+  const refreshBtn = (
+    <Pressable onPress={() => refetch()} hitSlop={10} style={styles.refreshBtn}>
+      <Ionicons name="refresh" size={20} color={isRefetching ? colors.accent : colors.muted} />
+    </Pressable>
+  );
 
   if (isLoading) {
     return (
       <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-        <ScreenHeader title="Paketler" />
+        <ScreenHeader title="Paketler" onBack={() => router.push('/(admin)/more/settings')} right={refreshBtn} />
         <ActivityIndicator color={colors.accent} style={{ marginTop: 40 }} />
       </SafeAreaView>
     );
@@ -39,7 +75,7 @@ export function AdminPackagesScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <ScreenHeader title="Paketler" />
+      <ScreenHeader title="Paketler" onBack={() => router.push('/(admin)/more/settings')} right={refreshBtn} />
       <FlatList
         key={columns}
         data={data ?? []}
@@ -82,7 +118,7 @@ export function AdminPackagesScreen() {
             </View>
             <View style={styles.meta}>
               <Text style={styles.metaText}>{item.lessonCount} seans</Text>
-              <Text style={styles.metaText}>Haftalık {item.weeklyLessonCount}</Text>
+              {item.weeklyLessonCount ? <Text style={styles.metaText}>Haftalık {item.weeklyLessonCount}</Text> : null}
             </View>
           </Pressable>
         )}
@@ -94,6 +130,7 @@ export function AdminPackagesScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
+  refreshBtn: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
   list: { paddingTop: 16, paddingBottom: 96, gap: 10 },
   card: {
     padding: 12,
@@ -104,7 +141,7 @@ const styles = StyleSheet.create({
   },
   head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 },
   nameWrap: { flex: 1, minWidth: 0, gap: 6, alignItems: 'flex-start' },
-  name: { fontSize: 15, fontWeight: '750' as '700', color: colors.text },
+  name: { fontSize: 15, fontWeight: '700', color: colors.text },
   headActions: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 0 },
   iconBtn: {
     width: 30,

@@ -176,7 +176,12 @@ export function ExtendPackageScreen() {
                 </View>
               ) : null}
 
-              <Button title="Kaydet" variant="primary" onPress={onSave} loading={update.isPending} />
+              <View style={styles.divider} />
+
+              <View style={styles.btnRow}>
+                <Button title="Vazgeç" variant="ghost" onPress={reset} style={styles.btnHalf} />
+                <Button title="Kaydet" variant="primary" onPress={onSave} loading={update.isPending} style={styles.btnHalf} />
+              </View>
             </>
           ) : error && !loadingPkg ? (
             <ErrorBox>{error}</ErrorBox>
@@ -227,4 +232,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   doneText: { color: 'rgba(216,255,232,0.96)', fontSize: 13 },
+  divider: { height: 1, backgroundColor: colors.border, marginVertical: 4 },
+  btnRow: { flexDirection: 'row', gap: 10 },
+  btnHalf: { flex: 1 },
 });

@@ -10,6 +10,7 @@ export default function MembersLayout() {
       <Stack.Screen name="form" options={{ ...modalScreenOptions, title: 'Üye' }} />
       <Stack.Screen name="member-packages" options={{ ...modalScreenOptions, title: 'Paketler' }} />
       <Stack.Screen name="package-sessions" options={{ ...modalScreenOptions, title: 'Paket Seansları' }} />
+      <Stack.Screen name="session-form" options={{ ...modalScreenOptions, title: 'Seans' }} />
     </Stack>
   );
 }

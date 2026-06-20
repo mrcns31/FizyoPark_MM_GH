@@ -144,6 +144,11 @@ export function AdminPlannerScreen() {
     view === 'day' ? formatDayShort(anchor) : view === 'month' ? monthLabel(anchor) : weekRangeLabel(range.start, range.end);
   const isToday = view === 'day' && toDateStr(anchor) === toDateStr(Date.now());
 
+  function goToday() {
+    setAnchor(Date.now());
+    setView('day');
+  }
+
   const wide = { maxWidth: contentMaxWidth, alignSelf: 'center' as const, width: '100%' as const, paddingHorizontal: gutter };
 
   return (
@@ -180,7 +185,7 @@ export function AdminPlannerScreen() {
           ))}
         </View>
         {!isToday ? (
-          <Pressable onPress={() => setAnchor(Date.now())} style={styles.todayBtn}>
+          <Pressable onPress={goToday} style={styles.todayBtn}>
             <Text style={styles.todayText}>Bugün</Text>
           </Pressable>
         ) : null}

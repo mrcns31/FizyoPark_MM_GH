@@ -1,4 +1,6 @@
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useRef } from 'react';
+import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Swipeable } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -9,8 +11,53 @@ import { ScreenHeader } from '../../../components/screen-header';
 import { useResponsive } from '../../../lib/responsive';
 import { colors } from '../../../theme/colors';
 import { useDeleteStaff, useStaff } from '../api/hooks';
+import type { StaffMember } from '../api/staff';
 
-/** Personel listesi — kart + FAB ile ekle, modal form ile düzenle/sil. */
+function StaffCard({
+  s,
+  onEdit,
+  onDelete,
+}: {
+  s: StaffMember;
+  onEdit: () => void;
+  onDelete: () => void;
+}) {
+  const swipeRef = useRef<Swipeable>(null);
+
+  return (
+    <Swipeable
+      ref={swipeRef}
+      overshootLeft={false}
+      overshootRight={false}
+      renderLeftActions={() => (
+        <TouchableOpacity
+          style={styles.swipeEdit}
+          onPress={() => { swipeRef.current?.close(); onEdit(); }}
+        >
+          <Ionicons name="create-outline" size={22} color="#fff" />
+        </TouchableOpacity>
+      )}
+      renderRightActions={() => (
+        <TouchableOpacity
+          style={styles.swipeDelete}
+          onPress={() => { swipeRef.current?.close(); onDelete(); }}
+        >
+          <Ionicons name="trash-outline" size={22} color="#fff" />
+        </TouchableOpacity>
+      )}
+    >
+      <View style={styles.card}>
+        <Text style={styles.name} numberOfLines={2}>{s.fullName}</Text>
+        <View style={styles.meta}>
+          {s.phone ? <Text style={styles.metaText}>{s.phone}</Text> : null}
+          {s.email ? <Text style={styles.metaText}>{s.email}</Text> : null}
+        </View>
+      </View>
+    </Swipeable>
+  );
+}
+
+/** Personel listesi — swipe düzenle/sil, FAB ile ekle. */
 export function AdminStaffScreen() {
   const router = useRouter();
   const { data } = useStaff();
@@ -39,31 +86,20 @@ export function AdminStaffScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <ScreenHeader title="Personel" onBack={() => router.push('/(admin)/more/settings')} />
-      <ScrollView contentContainerStyle={[styles.list, wide]}>
-        {(data ?? []).length === 0 ? <Card><Muted>Personel yok.</Muted></Card> : null}
-        {(data ?? []).map((s) => {
-          const edit = () => router.push({ pathname: '/(admin)/more/staff-form', params: { id: String(s.id) } });
-          return (
-            <Pressable key={s.id} style={styles.card} onPress={edit}>
-              <View style={styles.head}>
-                <Text style={styles.name} numberOfLines={2}>{s.fullName}</Text>
-                <View style={styles.headActions}>
-                  <Pressable style={styles.iconBtn} hitSlop={6} onPress={edit}>
-                    <Ionicons name="create-outline" size={16} color={colors.muted} />
-                  </Pressable>
-                  <Pressable style={styles.iconBtn} hitSlop={6} onPress={() => onDelete(s.id, s.fullName)}>
-                    <Ionicons name="trash-outline" size={16} color={colors.danger} />
-                  </Pressable>
-                </View>
-              </View>
-              <View style={styles.meta}>
-                {s.phone ? <Text style={styles.metaText}>{s.phone}</Text> : null}
-                {s.email ? <Text style={styles.metaText}>{s.email}</Text> : null}
-              </View>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+      <FlatList
+        data={data ?? []}
+        keyExtractor={(s) => String(s.id)}
+        contentContainerStyle={[styles.list, wide]}
+        showsVerticalScrollIndicator={false}
+        ListEmptyComponent={<Card><Muted>Personel yok.</Muted></Card>}
+        renderItem={({ item: s }) => (
+          <StaffCard
+            s={s}
+            onEdit={() => router.push({ pathname: '/(admin)/more/staff-form', params: { id: String(s.id) } })}
+            onDelete={() => onDelete(s.id, s.fullName)}
+          />
+        )}
+      />
       <Fab onPress={() => router.push('/(admin)/more/staff-form')} />
     </SafeAreaView>
   );
@@ -77,21 +113,25 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.03)',
+    backgroundColor: colors.panel,
   },
-  head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 },
-  name: { flex: 1, fontSize: 15, fontWeight: '750' as '700', color: colors.text },
-  headActions: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 0 },
-  iconBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  meta: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
+  name: { fontSize: 15, fontWeight: '700', color: colors.text, marginBottom: 4 },
+  meta: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   metaText: { fontSize: 12, color: colors.muted, marginRight: 8 },
+  swipeEdit: {
+    backgroundColor: colors.accent,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 64,
+    borderRadius: 12,
+    marginRight: 4,
+  },
+  swipeDelete: {
+    backgroundColor: colors.danger,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 64,
+    borderRadius: 12,
+    marginLeft: 4,
+  },
 });

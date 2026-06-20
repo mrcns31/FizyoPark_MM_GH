@@ -188,7 +188,13 @@ export function FormerMembersScreen() {
           ) : null
         }
         renderItem={({ item: m }) => (
-          <View style={styles.card}>
+          <Pressable
+            style={styles.card}
+            onPress={() => {
+              setPkgSheetMemberId(m.id);
+              setPkgSheetMemberName(m.name);
+            }}
+          >
             <View style={styles.cardLeft}>
               <Text style={styles.name} numberOfLines={1}>
                 {m.name}
@@ -207,27 +213,15 @@ export function FormerMembersScreen() {
                 ) : null}
               </View>
             </View>
-            <View style={styles.actions}>
-              <Pressable
-                style={styles.iconBtn}
-                hitSlop={6}
-                onPress={() => {
-                  setPkgSheetMemberId(m.id);
-                  setPkgSheetMemberName(m.name);
-                }}
-              >
-                <Ionicons name="list-outline" size={18} color={colors.muted} />
-              </Pressable>
-              <Pressable
-                style={styles.reactivateBtn}
-                onPress={() => onReactivate(m.id, m.name)}
-                disabled={reactivate.isPending}
-              >
-                <Ionicons name="refresh" size={16} color={colors.accent} />
-                <Text style={styles.reactivateText}>Aktif Et</Text>
-              </Pressable>
-            </View>
-          </View>
+            <Pressable
+              style={styles.reactivateBtn}
+              onPress={(e) => { e.stopPropagation?.(); onReactivate(m.id, m.name); }}
+              disabled={reactivate.isPending}
+            >
+              <Ionicons name="refresh" size={16} color={colors.accent} />
+              <Text style={styles.reactivateText}>Aktif Et</Text>
+            </Pressable>
+          </Pressable>
         )}
       />
       <PackagesSheet
@@ -257,16 +251,6 @@ const styles = StyleSheet.create({
   name: { fontSize: 15, fontWeight: '700', color: colors.text },
   metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   meta: { fontSize: 12, color: colors.muted },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  iconBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   reactivateBtn: {
     flexDirection: 'row',
     alignItems: 'center',
