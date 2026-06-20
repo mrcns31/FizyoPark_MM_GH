@@ -85,6 +85,8 @@ export interface MemberPackageSession {
   isPast: boolean;
   status: string;
   statusLabel: string | null;
+  approvalLabel: string | null;
+  approvalKind: string | null;
 }
 
 export async function getMemberPackageSessions(id: number): Promise<MemberPackageSession[]> {
@@ -103,6 +105,8 @@ export async function getMemberPackageSessions(id: number): Promise<MemberPackag
     isPast: !!row.isPast,
     status: row.status || 'scheduled',
     statusLabel: row.statusLabel || row.status_label || null,
+    approvalLabel: row.approvalLabel || row.approval_label || null,
+    approvalKind: row.approvalKind || row.approval_kind || null,
   }));
 }
 

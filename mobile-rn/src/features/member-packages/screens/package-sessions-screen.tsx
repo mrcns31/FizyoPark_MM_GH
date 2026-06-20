@@ -20,38 +20,52 @@ function fmtDate(v: string): string {
   return `${d}-${m}-${y}`;
 }
 
-function firstName(fullName: string): string {
-  return fullName.trim().split(/\s+/)[0] ?? fullName;
-}
 
-function methodLabel(m: string | null): string {
-  if (m === 'qr') return 'QR';
-  if (m === 'phone') return 'Telefon';
-  if (m === 'card') return 'Kart';
-  return 'Giriş';
-}
-
+/**
+ * Web buildPackageSessionApprovalInfo mantığıyla birebir eşleşen badge.
+ * approvalLabel backend'den geliyorsa direkt kullanılır.
+ */
 function badgeFor(s: {
-  status: string;
-  statusLabel: string | null;
-  attendanceOutcome: string | null;
   isCancelled: boolean;
-  checkInMethod: string | null;
+  approvalLabel: string | null;
+  approvalKind: string | null;
   checkedInAt: string | null;
-  staffName: string;
+  status: string;
 }): { label: string; tone: 'green' | 'red' | 'orange' | 'neutral' | 'accent' } {
   if (s.isCancelled) return { label: 'İptal edildi', tone: 'red' };
-  if (s.status === 'locked') return { label: 'İptal Edilemez', tone: 'orange' };
-  if (PHYSICAL.includes(s.checkInMethod ?? '') && s.checkedInAt) {
-    return { label: `${methodLabel(s.checkInMethod)} - ${formatTime(new Date(s.checkedInAt).getTime())}`, tone: 'green' };
+
+  const lbl = s.approvalLabel;
+  const kind = s.approvalKind;
+
+  if (!lbl || !kind) {
+    // Fallback: approvalLabel gelmemişse basit durum
+    return { label: 'Planlandı', tone: 'accent' };
   }
-  if (s.attendanceOutcome === 'present' || s.status === 'completed') {
-    return { label: `${firstName(s.staffName)} - ✓`, tone: 'green' };
+
+  switch (kind) {
+    case 'phone':
+    case 'card':
+    case 'qr': {
+      // "Kart - Geldi" → "Kart - 07:59" şeklinde gerçek saati göster
+      const time = s.checkedInAt ? formatTime(new Date(s.checkedInAt).getTime()) : null;
+      const displayLabel = time ? `${lbl.replace(' - Geldi', '')} - ${time}` : lbl;
+      return { label: displayLabel, tone: 'green' };
+    }
+    case 'admin_present':
+    case 'staff_present':
+    case 'present':
+      return { label: lbl, tone: 'green' };
+    case 'no_show':
+      return { label: lbl, tone: 'red' };
+    case 'burned':
+      return { label: lbl, tone: 'red' }; // "Otomatik Düşen Seans"
+    case 'pending':
+      return { label: lbl, tone: 'orange' }; // "Onaylanmadı"
+    case 'scheduled':
+      return { label: lbl, tone: 'accent' }; // "Planlandı"
+    default:
+      return { label: lbl, tone: 'neutral' };
   }
-  if (s.attendanceOutcome === 'no_show') {
-    return { label: `${firstName(s.staffName)} - ✗`, tone: 'red' };
-  }
-  return { label: 'Randevu Oluşturuldu', tone: 'accent' };
 }
 
 const PHYSICAL = ['qr', 'phone', 'card'];

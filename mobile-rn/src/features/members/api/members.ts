@@ -42,6 +42,19 @@ export async function getFormerMembers(): Promise<FormerMember[]> {
   }));
 }
 
+/** Ad / soyad / telefon ile eski üye ara — on-demand, ekran açılışında çağrılmaz. */
+export async function searchFormerMembers(params: { name?: string; phone?: string }): Promise<FormerMember[]> {
+  const q = new URLSearchParams();
+  if (params.name?.trim()) q.set('name', params.name.trim());
+  if (params.phone?.trim()) q.set('phone', params.phone.trim());
+  const { data } = await apiClient.get(`/members/former?${q.toString()}`);
+  return (Array.isArray(data) ? data : []).map((row: any) => ({
+    ...memberFromApi(row),
+    packageCount: row.package_count ?? row.packageCount ?? null,
+    sessionCount: row.session_count ?? row.sessionCount ?? null,
+  }));
+}
+
 /** Eski üyeyi yeniden aktif et — PUT /members/:id/reactivate. */
 export async function reactivateMember(id: number): Promise<Member> {
   const { data } = await apiClient.put(`/members/${id}/reactivate`, {});

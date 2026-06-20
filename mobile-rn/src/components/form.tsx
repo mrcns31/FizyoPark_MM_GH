@@ -1,18 +1,10 @@
-import { StyleSheet, Text, TextInput, View, type KeyboardTypeOptions } from 'react-native';
+import { forwardRef } from 'react';
+import { StyleSheet, Text, TextInput, View, type KeyboardTypeOptions, type ReturnKeyTypeOptions } from 'react-native';
 
 import { colors } from '../theme/colors';
 
 /** Form etiket + input — tüm CRUD formlarında kullanılır. */
-export function FormField({
-  label,
-  value,
-  onChangeText,
-  placeholder,
-  keyboardType,
-  required,
-  autoCapitalize,
-  multiline,
-}: {
+export const FormField = forwardRef<TextInput | null, {
   label?: string;
   value: string;
   onChangeText: (t: string) => void;
@@ -21,7 +13,22 @@ export function FormField({
   required?: boolean;
   autoCapitalize?: 'none' | 'sentences' | 'words' | 'characters';
   multiline?: boolean;
-}) {
+  returnKeyType?: ReturnKeyTypeOptions;
+  onSubmitEditing?: () => void;
+  blurOnSubmit?: boolean;
+}>(({
+  label,
+  value,
+  onChangeText,
+  placeholder,
+  keyboardType,
+  required,
+  autoCapitalize,
+  multiline,
+  returnKeyType,
+  onSubmitEditing,
+  blurOnSubmit,
+}, ref) => {
   return (
     <View style={styles.wrap}>
       {label ? (
@@ -31,6 +38,7 @@ export function FormField({
         </Text>
       ) : null}
       <TextInput
+        ref={ref}
         style={[styles.input, multiline && styles.inputMultiline]}
         value={value}
         onChangeText={onChangeText}
@@ -39,17 +47,18 @@ export function FormField({
         keyboardType={keyboardType}
         autoCapitalize={autoCapitalize ?? 'sentences'}
         multiline={multiline}
+        returnKeyType={returnKeyType}
+        onSubmitEditing={onSubmitEditing}
+        blurOnSubmit={blurOnSubmit ?? !returnKeyType}
       />
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   wrap: { marginBottom: 4 },
-  // web .label
   label: { color: colors.muted, fontSize: 12, marginBottom: 6 },
   req: { color: colors.danger },
-  // web .input
   input: {
     backgroundColor: 'rgba(255,255,255,0.03)',
     borderRadius: 12,

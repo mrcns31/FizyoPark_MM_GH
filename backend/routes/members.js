@@ -53,11 +53,30 @@ router.get('/', async (req, res) => {
 });
 
 // Eski üyeler: üyeliği iptal edilmiş (soft delete) kayıtlar
+// ?name=Ayşe&phone=053... ile arama yapılabilir; parametresiz çağrılırsa tüm liste döner
 router.get('/former', async (req, res) => {
   try {
     if (req.user.role !== 'admin' && req.user.role !== 'manager') {
       return res.status(403).json({ error: 'Bu işlem için yetkiniz yok' });
     }
+    const { name, phone } = req.query;
+    const params = [];
+    const conditions = ['m.deleted_at IS NOT NULL'];
+
+    if (name && name.trim()) {
+      params.push(`%${name.trim().toLowerCase()}%`);
+      conditions.push(`lower(COALESCE(m.name, m.first_name || ' ' || m.last_name, '')) LIKE $${params.length}`);
+    }
+    if (phone && phone.trim()) {
+      params.push(`%${phone.trim().replace(/\D/g, '')}%`);
+      conditions.push(`regexp_replace(COALESCE(m.phone,''), '\\D', '', 'g') LIKE $${params.length}`);
+    }
+
+    // Arama parametresi yoksa boş dizi döndür (tüm listeyi yükleme)
+    if (!name && !phone) {
+      return res.json([]);
+    }
+
     let result;
     try {
       result = await db.query(
@@ -65,13 +84,13 @@ router.get('/former', async (req, res) => {
                 (SELECT COUNT(*)::int FROM member_packages mp WHERE mp.member_id = m.id) AS package_count,
                 (SELECT COUNT(*)::int FROM sessions s WHERE s.member_id = m.id AND (s.deleted_at IS NULL)) AS session_count
          FROM members m
-         WHERE m.deleted_at IS NOT NULL
-         ORDER BY m.deleted_at DESC`
+         WHERE ${conditions.join(' AND ')}
+         ORDER BY m.name ASC
+         LIMIT 20`,
+        params
       );
     } catch (colErr) {
-      if (colErr.code === '42703') {
-        return res.json([]);
-      }
+      if (colErr.code === '42703') return res.json([]);
       throw colErr;
     }
     res.json(result.rows);

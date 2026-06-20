@@ -143,6 +143,7 @@ export function AdminMembersScreen() {
 
   function renderCard(item: Member) {
     const active = activeByMember.get(item.id);
+    const lowSessions = active != null && active.remainingSessions != null && active.remainingSessions <= 4;
     return (
       <Pressable
         style={({ pressed }) => [styles.card, columns > 1 ? { flex: 1 } : undefined, pressed && styles.cardPressed]}
@@ -150,7 +151,8 @@ export function AdminMembersScreen() {
       >
         <View style={styles.head}>
           <View style={styles.nameWrap}>
-            <Text style={styles.name} numberOfLines={2}>{item.name}</Text>
+            <Text style={[styles.name, lowSessions && styles.nameLow]} numberOfLines={2}>{item.name}</Text>
+            {lowSessions ? <View style={styles.nameLine} /> : null}
             {item.memberNo ? <Text style={styles.memberNo}>No: {item.memberNo}</Text> : null}
             {item.deletionRequestedAt ? (
               <View style={styles.delBadge}>
@@ -234,7 +236,7 @@ export function AdminMembersScreen() {
           data={visible}
           keyExtractor={(m) => String(m.id)}
           numColumns={columns}
-          columnWrapperStyle={columns > 1 ? { gap: 12 } : undefined}
+          columnWrapperStyle={columns > 1 ? { gap: 12, justifyContent: 'space-between' } : undefined}
           refreshing={isRefetching}
           onRefresh={refetch}
           onEndReached={() => hasMore && loadMore()}
@@ -315,6 +317,8 @@ const styles = StyleSheet.create({
   head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 },
   nameWrap: { flex: 1, minWidth: 0, gap: 3 },
   name: { fontSize: 15, fontWeight: '700', color: colors.text },
+  nameLow: { color: '#FF6B35' },
+  nameLine: { height: 2, backgroundColor: '#FF6B35', borderRadius: 1, marginTop: 2 },
   memberNo: { fontSize: 11, color: colors.muted },
   delBadge: {
     alignSelf: 'flex-start',

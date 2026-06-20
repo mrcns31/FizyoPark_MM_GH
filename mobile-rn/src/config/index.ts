@@ -34,6 +34,11 @@ export const API_BASE = (
   'http://localhost:3000/api'
 ).replace(/\/$/, '');
 
+// Production build'de HTTP kullanılıyorsa uyar
+if (__DEV__ === false && API_BASE.startsWith('http://')) {
+  console.warn('[GÜVENLİK] API_BASE HTTP ile başlıyor. Production için EXPO_PUBLIC_API_BASE=https://... ayarlayın.');
+}
+
 /** SecureStore'da JWT anahtarı (web'de localStorage 'seans_planner_token' idi). */
 export const TOKEN_KEY = 'seans_planner_token';
 

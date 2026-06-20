@@ -25,8 +25,9 @@ export function useResponsive(): Responsive {
   const isLandscape = width > height;
 
   const columns = isTablet ? (isLandscape ? 3 : 2) : 1;
-  const contentMaxWidth = isTablet ? 720 : width;
-  const gutter = isTablet ? 24 : 16;
+  // Yatay tablette tam genişlik (sola-sağa yayılsın), dikey tablette ortalansın
+  const contentMaxWidth = isTablet ? (isLandscape ? width : 720) : width;
+  const gutter = isTablet ? (isLandscape ? 16 : 24) : 16;
 
   return { width, height, isTablet, isLandscape, contentMaxWidth, columns, gutter };
 }

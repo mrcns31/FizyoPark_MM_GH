@@ -21,6 +21,7 @@ import { useResponsive } from '../../../lib/responsive';
 import { colors } from '../../../theme/colors';
 import { Fab } from '../../../components/fab';
 import { ScreenHeader } from '../../../components/screen-header';
+import { HamburgerButton } from '../../../components/hamburger-button';
 import { useStaff } from '../../staff/api/hooks';
 import { useRooms } from '../../rooms/api/hooks';
 import { staffColor } from '../../../lib/staff-color';
@@ -33,9 +34,14 @@ import { SessionDetailSheet } from '../components/session-detail-sheet';
 
 const DAY = 24 * 3600 * 1000;
 type ViewMode = 'day' | 'week' | 'month';
-const VIEWS: { key: ViewMode; label: string }[] = [
+const PHONE_VIEWS: { key: ViewMode; label: string }[] = [
   { key: 'day', label: 'Günlük' },
   { key: 'week', label: 'Haftalık' },
+];
+const TABLET_VIEWS: { key: ViewMode; label: string }[] = [
+  { key: 'day', label: 'Günlük' },
+  { key: 'week', label: 'Haftalık' },
+  { key: 'month', label: 'Aylık' },
 ];
 
 /**
@@ -149,52 +155,106 @@ export function AdminPlannerScreen() {
     setView('day');
   }
 
+  const { isTablet } = useResponsive();
+  const VIEWS = isTablet ? TABLET_VIEWS : PHONE_VIEWS;
   const wide = { maxWidth: contentMaxWidth, alignSelf: 'center' as const, width: '100%' as const, paddingHorizontal: gutter };
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <ScreenHeader
-        title="Takvim"
-        right={
-          <View style={styles.navInline}>
-            <Pressable onPress={() => setAnchor((t) => t - step)} hitSlop={10} style={styles.navBtn}>
-              <Ionicons name="chevron-back" size={20} color={colors.text} />
-            </Pressable>
-            <DateField
-              value={toDateStr(anchor)}
-              onChange={(v) => {
-                const [y, m, d] = v.split('-').map(Number);
-                setAnchor(new Date(y, m - 1, d).getTime());
-              }}
-              trigger={<Text style={styles.dayLabel}>{rangeLabel}</Text>}
-            />
-            <Pressable onPress={() => setAnchor((t) => t + step)} hitSlop={10} style={styles.navBtn}>
-              <Ionicons name="chevron-forward" size={20} color={colors.text} />
-            </Pressable>
+      {isTablet ? (
+        /* Tablet: tek satır, tam genişlik, ortalanmış */
+        <View style={[styles.tabletBar, wide]}>
+          <HamburgerButton />
+          {/* Görünüm butonları */}
+          <View style={styles.viewGroupInline}>
+            {VIEWS.map((v) => (
+              <Pressable key={v.key} onPress={() => setView(v.key)} style={[styles.viewBtnInline, view === v.key && styles.viewBtnActive]}>
+                <Text style={[styles.viewText, view === v.key && styles.viewTextActive]}>{v.label}</Text>
+              </Pressable>
+            ))}
           </View>
-        }
-      />
-
-      {/* görünüm seçici + Bugün */}
-      <View style={[styles.toolbar, wide]}>
-        <View style={styles.viewGroup}>
-          {VIEWS.map((v) => (
-            <Pressable key={v.key} onPress={() => setView(v.key)} style={[styles.viewBtn, view === v.key && styles.viewBtnActive]}>
-              <Text style={[styles.viewText, view === v.key && styles.viewTextActive]}>{v.label}</Text>
-            </Pressable>
-          ))}
-        </View>
-        {!isToday ? (
-          <Pressable onPress={goToday} style={styles.todayBtn}>
-            <Text style={styles.todayText}>Bugün</Text>
+          {/* Tarih nav */}
+          <Pressable onPress={() => setAnchor((t) => t - step)} hitSlop={10} style={styles.navBtn}>
+            <Ionicons name="chevron-back" size={20} color={colors.text} />
           </Pressable>
-        ) : null}
-        <Pressable onPress={() => setFiltersOpen((v) => !v)} style={[styles.filterBtn, filterActive && styles.filterBtnActive]}>
-          <Ionicons name="filter" size={18} color={filterActive ? colors.text : colors.muted} />
-        </Pressable>
-      </View>
+          <DateField
+            value={toDateStr(anchor)}
+            onChange={(v) => { const [y, m, d] = v.split('-').map(Number); setAnchor(new Date(y, m - 1, d).getTime()); }}
+            trigger={<Text style={styles.dayLabel}>{rangeLabel}</Text>}
+          />
+          <Pressable onPress={() => setAnchor((t) => t + step)} hitSlop={10} style={styles.navBtn}>
+            <Ionicons name="chevron-forward" size={20} color={colors.text} />
+          </Pressable>
+          {!isToday ? (
+            <Pressable onPress={goToday} style={styles.todayBtn}>
+              <Text style={styles.todayText}>Bugün</Text>
+            </Pressable>
+          ) : null}
+          {/* Arama */}
+          <TextInput
+            style={styles.searchInline}
+            placeholder="Üye Ara (Ad Soyad)"
+            placeholderTextColor={colors.textMuted}
+            value={search}
+            onChangeText={setSearch}
+          />
+          {/* Personel dot'ları */}
+          {(staff ?? []).map((s, idx) => {
+            const c = staffColor(idx, s.id);
+            const sel = filterStaffId === s.id;
+            const parts = s.fullName.trim().split(/\s+/);
+            const initials = ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase();
+            return (
+              <Pressable key={s.id} style={[styles.staffDot, { borderColor: c.border, backgroundColor: sel ? c.bg : 'transparent' }]} onPress={() => setFilterStaffId(sel ? null : s.id)}>
+                <Text style={[styles.staffDotText, { color: sel ? colors.text : c.border }]}>{initials}</Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : (
+        <ScreenHeader
+          title="Takvim"
+          right={
+            <View style={styles.navInline}>
+              <Pressable onPress={() => setAnchor((t) => t - step)} hitSlop={10} style={styles.navBtn}>
+                <Ionicons name="chevron-back" size={20} color={colors.text} />
+              </Pressable>
+              <DateField
+                value={toDateStr(anchor)}
+                onChange={(v) => { const [y, m, d] = v.split('-').map(Number); setAnchor(new Date(y, m - 1, d).getTime()); }}
+                trigger={<Text style={styles.dayLabel}>{rangeLabel}</Text>}
+              />
+              <Pressable onPress={() => setAnchor((t) => t + step)} hitSlop={10} style={styles.navBtn}>
+                <Ionicons name="chevron-forward" size={20} color={colors.text} />
+              </Pressable>
+            </View>
+          }
+        />
+      )}
 
-      {filtersOpen ? (
+      {/* Görünüm seçici + filtre — sadece telefonda ayrı satır */}
+      {!isTablet ? (
+        <View style={[styles.toolbar, wide]}>
+          <View style={styles.viewGroup}>
+            {VIEWS.map((v) => (
+              <Pressable key={v.key} onPress={() => setView(v.key)} style={[styles.viewBtn, view === v.key && styles.viewBtnActive]}>
+                <Text style={[styles.viewText, view === v.key && styles.viewTextActive]}>{v.label}</Text>
+              </Pressable>
+            ))}
+          </View>
+          {!isToday ? (
+            <Pressable onPress={goToday} style={styles.todayBtn}>
+              <Text style={styles.todayText}>Bugün</Text>
+            </Pressable>
+          ) : null}
+          <Pressable onPress={() => setFiltersOpen((v) => !v)} style={[styles.filterBtn, filterActive && styles.filterBtnActive]}>
+            <Ionicons name="filter" size={18} color={filterActive ? colors.text : colors.muted} />
+          </Pressable>
+        </View>
+      ) : null}
+
+      {/* Filtre paneli — sadece telefonda */}
+      {!isTablet && filtersOpen ? (
         <View style={[styles.filterPanel, wide]}>
           <TextInput
             style={styles.search}
@@ -208,14 +268,14 @@ export function AdminPlannerScreen() {
               const c = staffColor(idx, s.id);
               const sel = filterStaffId === s.id;
               const parts = s.fullName.trim().split(/\s+/);
-              const initials = (parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '');
+              const initials = ((parts[0]?.[0] ?? '') + (parts[1]?.[0] ?? '')).toUpperCase();
               return (
                 <Pressable
                   key={s.id}
                   style={[styles.staffChip, { borderColor: c.border, backgroundColor: sel ? c.bg : 'rgba(255,255,255,0.03)' }]}
                   onPress={() => setFilterStaffId(sel ? null : s.id)}
                 >
-                  <Text style={[styles.staffChipInitial, { color: sel ? colors.text : c.border }]}>{initials.toUpperCase()}</Text>
+                  <Text style={[styles.staffChipInitial, { color: sel ? colors.text : c.border }]}>{initials}</Text>
                 </Pressable>
               );
             })}
@@ -250,6 +310,26 @@ export function AdminPlannerScreen() {
           ))}
         </ScrollView>
       )}
+      {sessions.length > 0 ? (
+        <View style={[styles.staffSummary, wide]}>
+          {Object.entries(
+            sessions.reduce<Record<string, number>>((acc, s) => {
+              const name = s.staffName || 'Atanmamış';
+              acc[name] = (acc[name] ?? 0) + 1;
+              return acc;
+            }, {})
+          )
+            .sort(([a], [b]) => a.localeCompare(b, 'tr'))
+            .map(([name, count]) => (
+              <Text key={name} style={styles.staffSummaryText}>
+                {name}: {count}
+              </Text>
+            ))}
+          <Text style={[styles.staffSummaryText, styles.staffSummaryTotal]}>
+            Toplam: {sessions.length}
+          </Text>
+        </View>
+      ) : null}
       <Fab onPress={() => router.push('/(admin)/planner/session-form')} />
 
       <SessionDetailSheet
@@ -282,7 +362,38 @@ const styles = StyleSheet.create({
   titleRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 8, paddingBottom: 2 },
   title: { fontSize: 20, fontWeight: '800', color: colors.text },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 12 },
+  tabletBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 6,
+    flexWrap: 'nowrap',
+    justifyContent: 'center',
+  },
   navInline: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  viewGroupInline: { flexDirection: 'row', gap: 3, marginRight: 2 },
+  viewBtnInline: {
+    paddingHorizontal: 8, paddingVertical: 5,
+    borderRadius: 7, borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  searchInline: {
+    height: 36, width: 200,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 7, borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 8,
+    color: colors.text, fontSize: 12,
+    marginHorizontal: 4,
+  },
+  staffDot: {
+    width: 24, height: 24,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  staffDotText: { fontSize: 9, fontWeight: '800' },
   navBtn: {
     width: 30,
     height: 30,
@@ -294,7 +405,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   headCenter: { alignItems: 'center', flex: 1 },
-  dayLabel: { fontSize: 13, fontWeight: '700', color: colors.text, width: 132, textAlign: 'center' },
+  dayLabel: { fontSize: 12, fontWeight: '700', color: colors.text, width: 116, textAlign: 'center' },
   toolbar: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingBottom: 10 },
   viewGroup: { flex: 1, flexDirection: 'row', gap: 6 },
   viewBtn: {
@@ -307,7 +418,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.04)',
   },
   viewBtnActive: { backgroundColor: 'rgba(124,92,255,0.20)', borderColor: 'rgba(124,92,255,0.5)' },
-  viewText: { color: colors.muted, fontWeight: '700', fontSize: 13 },
+  viewText: { color: colors.muted, fontWeight: '700', fontSize: 12 },
   viewTextActive: { color: colors.text },
   todayBtn: {
     paddingVertical: 8,
@@ -359,5 +470,17 @@ const styles = StyleSheet.create({
   empty: { paddingTop: 12 },
   scroll: { paddingBottom: 96, flexGrow: 1 },
   dayBlock: { marginBottom: 6 },
+  staffSummary: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: colors.bg,
+  },
+  staffSummaryText: { color: colors.muted, fontSize: 11, fontWeight: '600' },
+  staffSummaryTotal: { color: colors.text, fontWeight: '800', marginLeft: 4 },
   dayHeader: { color: colors.muted, fontSize: 13, fontWeight: '700', marginTop: 10, marginBottom: 2 },
 });
