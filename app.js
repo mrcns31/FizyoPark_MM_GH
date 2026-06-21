@@ -4621,7 +4621,7 @@ var STALE_SESSION_MSG = "Bu seans artık geçerli değil (üye iptal etmiş veya
 
 var notificationTimer = null;
 var notificationSince = 0;
-var NOTIFICATION_INTERVAL_MS = 20000;
+var NOTIFICATION_INTERVAL_MS = 3000;
 var NOTIFICATION_LIST_LIMIT = 50;
 var NOTIFICATION_SEEN_KEY = "lastSeenNotificationAt";
 
@@ -4672,11 +4672,14 @@ async function pollNotifications() {
   if (!notificationSince) notificationSince = Date.now();
   try {
     var rows = await window.API.getNotifications({ since: notificationSince });
-    (rows || []).forEach(function (row) {
-      showTopNotification(formatNotificationToast(row));
-      if (row.at > notificationSince) notificationSince = row.at;
-      if (isAdminUser()) addNotificationToList(row);
-    });
+    if (rows && rows.length > 0) {
+      rows.forEach(function (row) {
+        showTopNotification(formatNotificationToast(row));
+        if (row.at > notificationSince) notificationSince = row.at;
+        if (isAdminUser()) addNotificationToList(row);
+      });
+      if (window.API.getSessions) syncSessionsFromServer({ silent: true });
+    }
   } catch (_) {}
 }
 
