@@ -25,6 +25,7 @@ jobs:
       api: ${{ steps.f.outputs.api }}
       web: ${{ steps.f.outputs.web }}
       db: ${{ steps.f.outputs.db }}
+      scripts: ${{ steps.f.outputs.scripts }}
     steps:
       - uses: actions/checkout@v5
       - uses: dorny/paths-filter@v4
@@ -38,6 +39,9 @@ jobs:
               - 'backend/database/migration_*.sql'
               - 'deploy/db-migrations.sh'
               - 'Dockerfile.db'
+            scripts:
+              - 'deploy/deploy.sh'
+              - 'deploy/compose.yml'
             web:
               - 'index.html'
               - 'app.js'
@@ -140,8 +144,8 @@ jobs:
           cache-to: type=gha,scope=db,mode=max
 
   deploy:
-    needs: [build-api, build-web, build-db]
-    if: ${{ !cancelled() && (needs.build-api.result == 'success' || needs.build-web.result == 'success' || needs.build-db.result == 'success') }}
+    needs: [changes, build-api, build-web, build-db]
+    if: ${{ !cancelled() && (needs.build-api.result == 'success' || needs.build-web.result == 'success' || needs.build-db.result == 'success' || needs.changes.outputs.scripts == 'true' || github.event_name == 'workflow_dispatch') }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
