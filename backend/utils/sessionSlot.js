@@ -221,8 +221,8 @@ export async function rebalanceSlotRooms(db, { startTs, endTs }) {
  * @param {object} params - { staffId, startTs, endTs, memberId, memberPackageId }
  * @returns {Promise<{ ok: boolean, sessionId?: number, error?: string }>}
  */
-export async function placeSessionWithRebalance(db, { staffId, startTs, endTs, memberId, memberPackageId }) {
-  // 1) Çalışma saati kontrolleri (validateAndPickRoom adım 1-2 ile aynı)
+export async function placeSessionWithRebalance(db, { staffId, startTs, endTs, memberId, memberPackageId, skipStaffHoursCheck = false }) {
+  // 1) Çalışma saati kontrolleri — skipStaffHoursCheck=true ise personel saati kontrolü atlanır (admin onaylı)
   const startDate = new Date(Number(startTs));
   const dayOfWeek = startDate.getDay();
   const startMin = startDate.getHours() * 60 + startDate.getMinutes();
@@ -242,20 +242,22 @@ export async function placeSessionWithRebalance(db, { staffId, startTs, endTs, m
     if (startMin < whStartMin || endMin > whEndMin) return { ok: false, error: 'Çalışma saati dışında' };
   }
 
-  const staffRow = await db.query('SELECT working_hours FROM staff WHERE id = $1', [staffId]);
-  if (staffRow.rows.length === 0) return { ok: false, error: 'Çalışma saati dışında' };
-  const staffWhRaw = staffRow.rows[0].working_hours;
-  const staffWh = typeof staffWhRaw === 'string' ? (() => { try { return JSON.parse(staffWhRaw); } catch { return {}; } })() : (staffWhRaw || {});
-  const dayWh = staffWh[String(dayOfWeek)] || staffWh[dayOfWeek];
-  if (dayWh && (dayWh.enabled === false || !dayWh.start || !dayWh.end)) return { ok: false, error: 'Çalışma saati dışında' };
-  if (dayWh && dayWh.start && dayWh.end) {
-    const toMin = (t) => {
-      const p = (t + '').split(':').map((x) => parseInt(x, 10) || 0);
-      return (p[0] || 0) * 60 + (p[1] || 0);
-    };
-    const sMin = toMin(dayWh.start);
-    const eMin = toMin(dayWh.end);
-    if (startMin < sMin || endMin > eMin) return { ok: false, error: 'Çalışma saati dışında' };
+  if (!skipStaffHoursCheck) {
+    const staffRow = await db.query('SELECT working_hours FROM staff WHERE id = $1', [staffId]);
+    if (staffRow.rows.length === 0) return { ok: false, error: 'Çalışma saati dışında' };
+    const staffWhRaw = staffRow.rows[0].working_hours;
+    const staffWh = typeof staffWhRaw === 'string' ? (() => { try { return JSON.parse(staffWhRaw); } catch { return {}; } })() : (staffWhRaw || {});
+    const dayWh = staffWh[String(dayOfWeek)] || staffWh[dayOfWeek];
+    if (dayWh && (dayWh.enabled === false || !dayWh.start || !dayWh.end)) return { ok: false, error: 'Çalışma saati dışında' };
+    if (dayWh && dayWh.start && dayWh.end) {
+      const toMin = (t) => {
+        const p = (t + '').split(':').map((x) => parseInt(x, 10) || 0);
+        return (p[0] || 0) * 60 + (p[1] || 0);
+      };
+      const sMin = toMin(dayWh.start);
+      const eMin = toMin(dayWh.end);
+      if (startMin < sMin || endMin > eMin) return { ok: false, error: 'Çalışma saati dışında' };
+    }
   }
 
   // 2) Hipotetik fizibilite kontrolü: mevcut taleplere staffId için +1 ekle

@@ -3,7 +3,7 @@ import { body, validationResult } from 'express-validator';
 import db from '../config/database.js';
 import { verifyToken } from './auth.js';
 import { log as activityLog } from '../utils/activityLogger.js';
-import { getInstitutionWhatsApp, setInstitutionWhatsApp } from '../utils/appSettings.js';
+import { getInstitutionWhatsApp, setInstitutionWhatsApp, getStaffCalendarRange, setStaffCalendarRange, clearStaffCalendarRange } from '../utils/appSettings.js';
 
 const router = express.Router();
 router.use(verifyToken);
@@ -143,6 +143,44 @@ router.put('/institution-whatsapp', checkAdminOrManager, [
     }
     console.error('Institution WhatsApp update error:', error);
     res.status(500).json({ error: 'Kurum WhatsApp numarası kaydedilirken hata oluştu' });
+  }
+});
+
+router.get('/staff-calendar-range', async (req, res) => {
+  try {
+    const range = await getStaffCalendarRange();
+    res.json(range || { daysBefore: null, daysAfter: null });
+  } catch (error) {
+    console.error('Staff calendar range get error:', error);
+    res.status(500).json({ error: 'Ayar alınırken hata oluştu' });
+  }
+});
+
+router.delete('/staff-calendar-range', checkAdminOrManager, async (req, res) => {
+  try {
+    await clearStaffCalendarRange();
+    await activityLog(req, { action: 'settings.staff_calendar_range_clear', entityType: 'settings', details: {} }).catch(() => {});
+    res.json({ daysBefore: null, daysAfter: null });
+  } catch (error) {
+    console.error('Staff calendar range clear error:', error);
+    res.status(500).json({ error: 'Ayar silinemedi' });
+  }
+});
+
+router.put('/staff-calendar-range', checkAdminOrManager, [
+  body('daysBefore').isInt({ min: 0, max: 365 }),
+  body('daysAfter').isInt({ min: 0, max: 365 }),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ error: errors.array()[0].msg });
+    const { daysBefore, daysAfter } = req.body;
+    await setStaffCalendarRange(daysBefore, daysAfter);
+    await activityLog(req, { action: 'settings.staff_calendar_range_update', entityType: 'settings', details: { daysBefore, daysAfter } }).catch(() => {});
+    res.json({ daysBefore, daysAfter });
+  } catch (error) {
+    console.error('Staff calendar range update error:', error);
+    res.status(500).json({ error: 'Ayar kaydedilirken hata oluştu' });
   }
 });
 

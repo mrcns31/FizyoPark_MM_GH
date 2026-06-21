@@ -708,6 +708,9 @@
     const row = await apiFetch('/member-packages/' + id);
     return memberPackageFromApi(row);
   }
+  async function getMemberPackageUpgradePreview(id, newPackageId) {
+    return apiFetch('/member-packages/' + id + '/upgrade-preview?new_package_id=' + encodeURIComponent(newPackageId));
+  }
   async function checkMemberPackageAvailability(body) {
     const payload = {
       member_id: body.memberId,
@@ -836,6 +839,7 @@
 
     const payload = { staffId, memberId, roomId, startTs, endTs, note };
     if (memberPackageId != null) payload.memberPackageId = memberPackageId;
+    if (body.skipStaffHoursCheck) payload.skipStaffHoursCheck = true;
 
     const row = await apiFetch('/sessions', {
       method: 'POST',
@@ -878,6 +882,21 @@
       method: 'PUT',
       body: JSON.stringify({ whatsapp: whatsapp != null ? String(whatsapp) : '' }),
     });
+  }
+
+  async function getStaffCalendarRange() {
+    return apiFetch('/settings/staff-calendar-range');
+  }
+
+  async function saveStaffCalendarRange(daysBefore, daysAfter) {
+    return apiFetch('/settings/staff-calendar-range', {
+      method: 'PUT',
+      body: JSON.stringify({ daysBefore: Number(daysBefore), daysAfter: Number(daysAfter) }),
+    });
+  }
+
+  async function clearStaffCalendarRange() {
+    return apiFetch('/settings/staff-calendar-range', { method: 'DELETE' });
   }
 
   async function getActivityLogs(params) {
@@ -1020,6 +1039,7 @@
     exportPackagesCsv,
     getMemberPackages,
     getMemberPackage,
+    getMemberPackageUpgradePreview,
     checkMemberPackageAvailability,
     createMemberPackage,
     updateMemberPackage,
@@ -1033,6 +1053,9 @@
     updateWorkingHours,
     getInstitutionWhatsapp,
     saveInstitutionWhatsapp,
+    getStaffCalendarRange,
+    saveStaffCalendarRange,
+    clearStaffCalendarRange,
     apiFetch,
     getActivityLogs,
     getDevResetMeta,

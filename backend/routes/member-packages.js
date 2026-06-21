@@ -397,6 +397,61 @@ router.get('/:id', async (req, res) => {
   }
 });
 
+// Paket yükseltme/düşürme önizlemesi: geçmiş/gelecek seans sayıları ve işlemin uygunluğunu döner.
+router.get('/:id/upgrade-preview', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const newPackageId = req.query.new_package_id;
+    if (!newPackageId) return res.status(400).json({ error: 'new_package_id gerekli' });
+
+    const mpRes = await db.query('SELECT * FROM member_packages WHERE id = $1', [id]);
+    if (!mpRes.rows.length) return res.status(404).json({ error: 'Üye paketi bulunamadı' });
+    const mp = mpRes.rows[0];
+
+    const [oldPkgRes, newPkgRes] = await Promise.all([
+      db.query('SELECT lesson_count, name FROM packages WHERE id = $1', [mp.package_id]),
+      db.query('SELECT lesson_count, name FROM packages WHERE id = $1', [newPackageId]),
+    ]);
+    if (!oldPkgRes.rows.length || !newPkgRes.rows.length) {
+      return res.status(404).json({ error: 'Paket bulunamadı' });
+    }
+
+    const oldLessonCount = Number(oldPkgRes.rows[0].lesson_count);
+    const newLessonCount = Number(newPkgRes.rows[0].lesson_count);
+    const nowMs = Date.now();
+
+    const [pastRes, futureRes] = await Promise.all([
+      db.query('SELECT COUNT(*)::int AS cnt FROM sessions WHERE member_package_id = $1 AND start_ts < $2 AND deleted_at IS NULL', [id, nowMs]),
+      db.query('SELECT COUNT(*)::int AS cnt FROM sessions WHERE member_package_id = $1 AND start_ts >= $2 AND deleted_at IS NULL', [id, nowMs]),
+    ]);
+
+    const pastCount = pastRes.rows[0]?.cnt ?? 0;
+    const futureCount = futureRes.rows[0]?.cnt ?? 0;
+    const action = newLessonCount > oldLessonCount ? 'upgrade' : newLessonCount < oldLessonCount ? 'downgrade' : 'same';
+
+    let canProceed = true;
+    let blockReason = null;
+    if (action === 'downgrade' && pastCount >= newLessonCount) {
+      canProceed = false;
+      blockReason = `Bu üye ${pastCount} seans kullanmış. En az ${pastCount + 1} seans içeren bir pakete geçiş yapılabilir.`;
+    }
+
+    res.json({
+      oldLessonCount,
+      newLessonCount,
+      pastCount,
+      futureCount,
+      action,
+      diff: Math.abs(newLessonCount - oldLessonCount),
+      canProceed,
+      blockReason,
+    });
+  } catch (error) {
+    console.error('Upgrade preview error:', error);
+    res.status(500).json({ error: 'Önizleme alınamadı' });
+  }
+});
+
 // Uygunluk kontrolü: verilen slot'lar ve tarih aralığında çakışma var mı?
 // Personel o saatte dolu olsa bile oda müsaitse çakışma sayılmaz; oda müsait değilse o gün için uyarı.
 router.post('/check-availability', [
@@ -650,12 +705,25 @@ router.put('/:id', [
       ? Number(attendedSessionRes.rows[0].first_ts)
       : null;
 
-    // İlk seans QR/TELEFON/KART ile katılındıysa paket türü değiştirilemez
+    // Paket türü değişiyorsa düşürme kontrolü
     if (body_package_id !== undefined && Number(body_package_id) !== Number(mp.package_id)) {
-      if (firstAttendedTs != null) {
-        return res.status(400).json({
-          error: 'İlk randevuya katılım gerçekleştiği için paket türü değiştirilemez. Bitiş tarihi, gün, saat veya personel değişikliği yapabilirsiniz.',
-        });
+      const [oldPkgChk, newPkgChk] = await Promise.all([
+        db.query('SELECT lesson_count FROM packages WHERE id = $1', [mp.package_id]),
+        db.query('SELECT lesson_count FROM packages WHERE id = $1', [body_package_id]),
+      ]);
+      const oldLessons = Number(oldPkgChk.rows[0]?.lesson_count ?? 0);
+      const newLessons = Number(newPkgChk.rows[0]?.lesson_count ?? 0);
+      if (newLessons < oldLessons) {
+        const pastChkRes = await db.query(
+          'SELECT COUNT(*)::int AS cnt FROM sessions WHERE member_package_id = $1 AND start_ts < $2 AND deleted_at IS NULL',
+          [id, nowMs]
+        );
+        const pastChkCount = pastChkRes.rows[0]?.cnt ?? 0;
+        if (pastChkCount >= newLessons) {
+          return res.status(400).json({
+            error: `Bu üye ${pastChkCount} seans kullanmış. En az ${pastChkCount + 1} seans içeren bir pakete geçiş yapılabilir.`,
+          });
+        }
       }
     }
 
@@ -846,6 +914,31 @@ router.put('/:id', [
           );
           sessionConflicts = fill.conflicts || [];
           sessionsCreated = fill.sessionsCreated || 0;
+
+          // Düşürme: gün/saat değişmedi ama limit azaldı → fazla gelecek seansları en uzak tarihten sil
+          const pastCntRes = await db.query(
+            'SELECT COUNT(*)::int AS cnt FROM sessions WHERE member_package_id = $1 AND start_ts < $2 AND deleted_at IS NULL',
+            [id, nowMs]
+          );
+          const futureCntRes = await db.query(
+            'SELECT COUNT(*)::int AS cnt FROM sessions WHERE member_package_id = $1 AND start_ts >= $2 AND deleted_at IS NULL',
+            [id, nowMs]
+          );
+          const pastCnt = pastCntRes.rows[0]?.cnt ?? 0;
+          const futureCnt = futureCntRes.rows[0]?.cnt ?? 0;
+          const futureNeeded = Math.max(0, lessonCount - pastCnt);
+          if (futureCnt > futureNeeded) {
+            await db.query(
+              `UPDATE sessions SET deleted_at = CURRENT_TIMESTAMP
+               WHERE id IN (
+                 SELECT id FROM sessions
+                 WHERE member_package_id = $1 AND start_ts >= $2 AND deleted_at IS NULL
+                 ORDER BY start_ts DESC
+                 LIMIT $3
+               )`,
+              [id, nowMs, futureCnt - futureNeeded]
+            );
+          }
         } else {
           // Gün/saat/personel değişti: geçmişe dokunma, gelecek seansları yeni dağılıma göre düzenle
           const effectiveDateStr = effective_date && /^\d{4}-\d{2}-\d{2}$/.test(String(effective_date).trim())

@@ -946,6 +946,7 @@
                 <button type="button" class="member-profile-nav__btn btn btn--ghost admin-hub-nav__item" data-admin-hub-section="rooms" data-admin-hub-admin-only="1">Odalar / Alet</button>
                 <button type="button" class="member-profile-nav__btn btn btn--ghost admin-hub-nav__item" data-admin-hub-section="packages" data-admin-hub-admin-only="1">Paket Tanımlama</button>
                 <button type="button" class="member-profile-nav__btn btn btn--ghost admin-hub-nav__item" data-admin-hub-section="staff-list" data-admin-hub-admin-only="1">Personel Listesi</button>
+                <button type="button" class="member-profile-nav__btn btn btn--ghost admin-hub-nav__item" data-admin-hub-section="staff-calendar-range" data-admin-hub-admin-only="1">Personel Takvim Aralığı</button>
                 <button type="button" class="member-profile-nav__btn btn btn--ghost admin-hub-nav__item" data-admin-hub-section="closure-days" data-admin-hub-admin-only="1">Kapalı Günler</button>
                 <button type="button" class="member-profile-nav__btn btn btn--ghost admin-hub-nav__item" data-admin-hub-open-logs="1" data-admin-hub-admin-only="1">İşlem Logları</button>
                 <button type="button" class="member-profile-nav__btn btn btn--ghost admin-hub-nav__item" data-admin-hub-section="extend-package" data-admin-hub-admin-only="1">Paket Süresi Güncelle</button>
@@ -1039,6 +1040,25 @@
                   <button id="openStaffAddBtn" class="btn btn--primary" type="button">Yeni Personel Ekle</button>
                 </div>
                 <div id="staffList" class="admin-hub-staff-grid"></div>
+              </section>
+              <section class="admin-hub-panel hidden" data-admin-hub-panel="staff-calendar-range" data-admin-hub-admin-only="1">
+                <h2 class="member-profile-panel__title">Personel Takvim Aralığı</h2>
+                <p class="hint" style="margin-top:0;">Personelin kendi panelinde takvimde görebileceği gün aralığını belirleyin. Boş bırakılırsa sınırsız erişim verilir.</p>
+                <div class="staff-hours-list" style="display:flex;flex-direction:column;gap:12px;margin-bottom:16px;">
+                  <label class="staff-hours-row" style="display:flex;align-items:center;gap:12px;">
+                    <span style="min-width:180px;">Bugünden kaç gün öncesini görsün</span>
+                    <input type="number" id="staffCalDaysBefore" min="0" max="365" placeholder="Sınırsız" style="width:100px;" class="form-input" />
+                  </label>
+                  <label class="staff-hours-row" style="display:flex;align-items:center;gap:12px;">
+                    <span style="min-width:180px;">Bugünden kaç gün sonrasını görsün</span>
+                    <input type="number" id="staffCalDaysAfter" min="0" max="365" placeholder="Sınırsız" style="width:100px;" class="form-input" />
+                  </label>
+                </div>
+                <div id="staffCalRangeError" class="error hidden"></div>
+                <div class="admin-hub-panel__actions">
+                  <button id="saveStaffCalRangeBtn" class="btn btn--primary" type="button">Kaydet</button>
+                  <button id="clearStaffCalRangeBtn" class="btn btn--ghost" type="button">Sınırsız Yap</button>
+                </div>
               </section>
               <section class="admin-hub-panel hidden" data-admin-hub-panel="closure-days" data-admin-hub-admin-only="1">
                 <h2 class="member-profile-panel__title">Kapalı Günler</h2>
@@ -1217,20 +1237,28 @@
           <div id="groupSessionCreateFields" class="group-session-modal__fields hidden">
             <div class="formRow">
               <label class="label" for="groupSessionNewDate">Tarih</label>
-              <div class="group-session-modal__input-wrap">
-                <input id="groupSessionNewDate" class="input group-session-modal__input" type="date" />
-                <span class="group-session-modal__input-icon" aria-hidden="true">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-                </span>
+              <div class="input-stepper">
+                <button type="button" class="input-stepper__btn" data-step="-1" data-target="groupSessionNewDate" data-type="date" aria-label="Önceki gün">&#8249;</button>
+                <div class="group-session-modal__input-wrap input-stepper__wrap">
+                  <input id="groupSessionNewDate" class="input group-session-modal__input" type="date" />
+                  <span class="group-session-modal__input-icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                  </span>
+                </div>
+                <button type="button" class="input-stepper__btn" data-step="1" data-target="groupSessionNewDate" data-type="date" aria-label="Sonraki gün">&#8250;</button>
               </div>
             </div>
             <div class="formRow">
               <label class="label" for="groupSessionNewTime">Saat</label>
-              <div class="group-session-modal__input-wrap">
-                <input id="groupSessionNewTime" class="input group-session-modal__input" type="time" />
-                <span class="group-session-modal__input-icon" aria-hidden="true">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-                </span>
+              <div class="input-stepper">
+                <button type="button" class="input-stepper__btn" data-step="-1" data-target="groupSessionNewTime" data-type="time" aria-label="1 saat geri">&#8249;</button>
+                <div class="group-session-modal__input-wrap input-stepper__wrap">
+                  <input id="groupSessionNewTime" class="input group-session-modal__input" type="time" />
+                  <span class="group-session-modal__input-icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                  </span>
+                </div>
+                <button type="button" class="input-stepper__btn" data-step="1" data-target="groupSessionNewTime" data-type="time" aria-label="1 saat ileri">&#8250;</button>
               </div>
             </div>
             <div class="formRow">
@@ -1242,20 +1270,28 @@
           <div id="groupSessionDisplayFields" class="group-session-modal__fields">
             <div class="formRow">
               <label class="label" for="groupSessionDate">Tarih</label>
-              <div class="group-session-modal__input-wrap">
-                <input id="groupSessionDate" class="input group-session-modal__input" type="date" />
-                <span class="group-session-modal__input-icon" aria-hidden="true">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-                </span>
+              <div class="input-stepper">
+                <button type="button" class="input-stepper__btn" data-step="-1" data-target="groupSessionDate" data-type="date" aria-label="Önceki gün">&#8249;</button>
+                <div class="group-session-modal__input-wrap input-stepper__wrap">
+                  <input id="groupSessionDate" class="input group-session-modal__input" type="date" />
+                  <span class="group-session-modal__input-icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+                  </span>
+                </div>
+                <button type="button" class="input-stepper__btn" data-step="1" data-target="groupSessionDate" data-type="date" aria-label="Sonraki gün">&#8250;</button>
               </div>
             </div>
             <div class="formRow">
               <label class="label" for="groupSessionTime">Saat</label>
-              <div class="group-session-modal__input-wrap">
-                <input id="groupSessionTime" class="input group-session-modal__input" type="time" />
-                <span class="group-session-modal__input-icon" aria-hidden="true">
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
-                </span>
+              <div class="input-stepper">
+                <button type="button" class="input-stepper__btn" data-step="-1" data-target="groupSessionTime" data-type="time" aria-label="1 saat geri">&#8249;</button>
+                <div class="group-session-modal__input-wrap input-stepper__wrap">
+                  <input id="groupSessionTime" class="input group-session-modal__input" type="time" />
+                  <span class="group-session-modal__input-icon" aria-hidden="true">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+                  </span>
+                </div>
+                <button type="button" class="input-stepper__btn" data-step="1" data-target="groupSessionTime" data-type="time" aria-label="1 saat ileri">&#8250;</button>
               </div>
             </div>
             <div class="formRow">
@@ -1430,7 +1466,7 @@
               <div class="member-package-form__cell">
                 <label class="label" for="mpPackage">Paket</label>
                 <select id="mpPackage" class="input"><option value="">Seçiniz</option></select>
-                <span id="mpPackageFirstSessionHint" class="hint hidden member-package-modal__hint">İlk randevuya QR/Telefon/Kart ile katılım gerçekleştiği için paket türü değiştirilemez; başlangıç tarihi ilk katılım tarihine sabitlendi.</span>
+                <span id="mpPackageFirstSessionHint" class="hint hidden member-package-modal__hint">Başlangıç tarihi ilk katılım tarihine sabitlenmiştir. Paketi yükseltebilir veya düşürebilirsiniz.</span>
               </div>
               <div class="member-package-form__cell">
                 <label class="label" for="mpMemberNo">Üye No</label>
@@ -1614,11 +1650,19 @@
           <div class="formGrid">
             <div class="formRow">
               <label class="label" for="sessionDate">Tarih</label>
-              <input id="sessionDate" class="input" type="date" />
+              <div class="input-stepper">
+                <button type="button" class="input-stepper__btn" data-step="-1" data-target="sessionDate" data-type="date" aria-label="Önceki gün">&#8249;</button>
+                <input id="sessionDate" class="input input-stepper__input" type="date" />
+                <button type="button" class="input-stepper__btn" data-step="1" data-target="sessionDate" data-type="date" aria-label="Sonraki gün">&#8250;</button>
+              </div>
             </div>
             <div class="formRow">
               <label class="label" for="sessionTime">Saat</label>
-              <input id="sessionTime" class="input" type="time" />
+              <div class="input-stepper">
+                <button type="button" class="input-stepper__btn" data-step="-1" data-target="sessionTime" data-type="time" aria-label="1 saat geri">&#8249;</button>
+                <input id="sessionTime" class="input input-stepper__input" type="time" />
+                <button type="button" class="input-stepper__btn" data-step="1" data-target="sessionTime" data-type="time" aria-label="1 saat ileri">&#8250;</button>
+              </div>
             </div>
             <div class="formRow">
               <label class="label" for="sessionMember">Üye</label>

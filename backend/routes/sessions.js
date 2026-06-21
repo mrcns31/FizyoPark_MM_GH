@@ -211,6 +211,7 @@ router.get('/notifications', [
     const params = [since];
     let cancelFilter = '';
     let checkinFilter = '';
+    let walkinFilter = '';
 
     if (req.user.role === 'staff') {
       const staffResult = await db.query('SELECT id FROM staff WHERE user_id = $1', [req.user.userId]);
@@ -218,8 +219,9 @@ router.get('/notifications', [
       // Personel sadece bugüne ait kendi seanslarına dair bildirimleri görür
       const { start, end } = resolveLocalDateRangeMs({ dateStr: localTodayDateStr() });
       params.push(staffResult.rows[0].id, start, end);
-      cancelFilter = ' AND s.staff_id = $2 AND s.start_ts >= $3 AND s.start_ts <= $4';
+      cancelFilter  = ' AND s.staff_id = $2 AND s.start_ts >= $3 AND s.start_ts <= $4';
       checkinFilter = ' AND s.staff_id = $2 AND al.created_at >= to_timestamp($3 / 1000.0) AND al.created_at <= to_timestamp($4 / 1000.0)';
+      walkinFilter  = ' AND fal.accessed_at >= to_timestamp($3 / 1000.0) AND fal.accessed_at <= to_timestamp($4 / 1000.0)';
     }
 
     params.push(limit);
@@ -228,10 +230,11 @@ router.get('/notifications', [
     const result = await db.query(
       `SELECT * FROM (
          SELECT al.id, 'cancel' AS type,
-                EXTRACT(EPOCH FROM al.created_at AT TIME ZONE 'Europe/Istanbul') * 1000 AS at_ts,
+                EXTRACT(EPOCH FROM al.created_at) * 1000 AS at_ts,
                 s.staff_id, s.start_ts,
                 COALESCE(NULLIF(TRIM(m.first_name || ' ' || m.last_name), ''), NULLIF(TRIM(m.name), '')) AS member_name,
-                TRIM(st.first_name || ' ' || st.last_name) AS staff_name
+                TRIM(st.first_name || ' ' || st.last_name) AS staff_name,
+                NULL AS source
          FROM activity_logs al
          JOIN sessions s ON s.id::text = al.entity_id
          LEFT JOIN members m ON m.id = s.member_id
@@ -242,16 +245,30 @@ router.get('/notifications', [
          UNION ALL
 
          SELECT al.id, 'checkin' AS type,
-                EXTRACT(EPOCH FROM al.created_at AT TIME ZONE 'Europe/Istanbul') * 1000 AS at_ts,
+                EXTRACT(EPOCH FROM al.created_at) * 1000 AS at_ts,
                 s.staff_id, s.start_ts,
                 COALESCE(NULLIF(TRIM(m.first_name || ' ' || m.last_name), ''), NULLIF(TRIM(m.name), '')) AS member_name,
-                TRIM(st.first_name || ' ' || st.last_name) AS staff_name
+                TRIM(st.first_name || ' ' || st.last_name) AS staff_name,
+                al.details->>'checkInMethod' AS source
          FROM activity_logs al
          JOIN sessions s ON s.id::text = al.entity_id
          LEFT JOIN members m ON m.id = s.member_id
          LEFT JOIN staff st ON st.id = s.staff_id
          WHERE al.action = 'session.check_in_qr'
            AND al.created_at > to_timestamp($1 / 1000.0)${checkinFilter}
+
+         UNION ALL
+
+         SELECT fal.id, 'checkin' AS type,
+                EXTRACT(EPOCH FROM fal.accessed_at) * 1000 AS at_ts,
+                NULL::int AS staff_id, NULL::bigint AS start_ts,
+                COALESCE(NULLIF(TRIM(m.first_name || ' ' || m.last_name), ''), NULLIF(TRIM(m.name), '')) AS member_name,
+                NULL AS staff_name,
+                fal.source
+         FROM facility_access_logs fal
+         LEFT JOIN members m ON m.id = fal.member_id
+         WHERE fal.accessed_at > to_timestamp($1 / 1000.0)
+           AND fal.member_id IS NOT NULL${walkinFilter}
        ) combined
        ORDER BY at_ts ${order}
        LIMIT ${limitParam}`,
@@ -265,7 +282,8 @@ router.get('/notifications', [
       staffId: r.staff_id,
       staffName: r.staff_name,
       memberName: r.member_name,
-      startTs: Number(r.start_ts),
+      startTs: r.start_ts ? Number(r.start_ts) : null,
+      source: r.source || null,
     })));
   } catch (error) {
     if (error.code === '42P01') return res.json([]);
@@ -282,7 +300,8 @@ router.post('/', [
   body('startTs').toInt().isInt().withMessage('Başlangıç zamanı gerekli'),
   body('endTs').toInt().isInt().withMessage('Bitiş zamanı gerekli'),
   body('note').optional({ values: 'null' }).custom((v) => v == null || typeof v === 'string').withMessage('Not metin olmalı'),
-  body('memberPackageId').optional({ nullable: true }).isInt()
+  body('memberPackageId').optional({ nullable: true }).isInt(),
+  body('skipStaffHoursCheck').optional().isBoolean(),
 ], async (req, res) => {
   try {
     if (req.user.role === 'member') {
@@ -294,6 +313,7 @@ router.post('/', [
     }
 
     let { staffId, memberId, roomId, startTs, endTs, note, memberPackageId } = req.body;
+    const skipStaffHoursCheck = !!req.body.skipStaffHoursCheck && ['admin', 'manager'].includes(req.user.role);
 
     if (memberPackageId == null || memberPackageId === '') {
       memberPackageId = await resolveMemberPackageId(db, memberId, startTs);
@@ -308,7 +328,7 @@ router.post('/', [
 
     // Oda gönderilmediyse: çalışma saati kontrolü + gerekirse oda dengeleme ile yerleştir.
     if (roomId == null || roomId === '') {
-      const placed = await placeSessionWithRebalance(db, { staffId, startTs, endTs, memberId, memberPackageId });
+      const placed = await placeSessionWithRebalance(db, { staffId, startTs, endTs, memberId, memberPackageId, skipStaffHoursCheck });
       if (!placed.ok) {
         return res.status(409).json({ error: placed.error || 'Bu saatte uygun oda yok (kapasite dolu veya çalışma saati dışında)' });
       }

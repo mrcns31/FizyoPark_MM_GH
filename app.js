@@ -78,6 +78,8 @@ async function applyTurkishPdfFont(doc) {
 const DEFAULT_STATE = {
   settings: {
     slotMinutes: 60,
+    staffCalDaysBefore: null,
+    staffCalDaysAfter: null,
   },
   // Gün bazlı çalışma saatleri: { dayOfWeek: { start, end, enabled } }
   // dayOfWeek: 0=Pazar, 1=Pzt, ..., 6=Cumartesi
@@ -4660,10 +4662,12 @@ function showTopNotification(message) {
 function formatNotificationToast(row) {
   var memberName = row.memberName || "Bir üye";
   if (row.type === "checkin") {
-    return memberName + " Kapıdan Giriş Yaptı";
+    var method = row.source === "phone" ? " (Telefon)" : row.source === "card" ? " (Kart)" : "";
+    var appt = row.startTs ? "" : " — Randevusuz";
+    return memberName + " Kapıdan Giriş Yaptı" + method + appt;
   }
-  var when = formatSessionDateTimeLabel(row.startTs);
-  return memberName + " randevusunu iptal etti (" + when + ").";
+  var apptWhen = formatSessionDateTimeLabel(row.startTs);
+  return memberName + ", " + apptWhen + " tarihli randevusunu iptal etti.";
 }
 
 async function pollNotifications() {
@@ -5487,8 +5491,11 @@ function updateNotificationsNavBadge() {
   }
 }
 
-function formatNotificationTypeLabel(type) {
-  return type === "checkin" ? "Kapıdan Giriş" : "İptal";
+function formatNotificationTypeLabel(type, source) {
+  if (type !== "checkin") return "İptal";
+  if (source === "phone") return "Giriş (Telefon)";
+  if (source === "card") return "Giriş (Kart)";
+  return "Giriş (QR)";
 }
 
 var notificationsPage = 1;
@@ -5539,7 +5546,7 @@ function renderNotificationsTable() {
   var table = document.createElement("table");
   table.className = "expired-memberships-table notifications-table";
   table.innerHTML =
-    "<thead><tr><th>Tarih/Saat</th><th>Tür</th><th>Üye</th><th>Personel</th></tr></thead><tbody></tbody>";
+    "<thead><tr><th>İptal Zamanı</th><th>Randevu</th><th>Tür</th><th>Üye</th><th>Personel</th></tr></thead><tbody></tbody>";
   var tbody = table.querySelector("tbody");
 
   var paginationEl = document.createElement("div");
@@ -5560,10 +5567,12 @@ function renderNotificationsTable() {
     var row = document.createElement("tr");
     row.className = "notifications-table__row";
     if (n.at > lastSeen) row.classList.add("notifications-table__row--unread");
-    var when = new Date(n.at).toLocaleString("tr-TR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+    var cancelledAt = new Date(n.at).toLocaleString("tr-TR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+    var apptTime = n.startTs ? formatSessionDateTimeLabel(n.startTs) : "—";
     row.innerHTML =
-      "<td>" + escapeHtml(when) + "</td>" +
-      "<td>" + escapeHtml(formatNotificationTypeLabel(n.type)) + "</td>" +
+      "<td>" + escapeHtml(cancelledAt) + "</td>" +
+      "<td>" + escapeHtml(apptTime) + "</td>" +
+      "<td>" + escapeHtml(formatNotificationTypeLabel(n.type, n.source)) + "</td>" +
       "<td>" + escapeHtml(n.memberName || "—") + "</td>" +
       "<td>" + escapeHtml(n.staffName || "—") + "</td>";
     tbody.appendChild(row);
@@ -6540,10 +6549,31 @@ function showAdminMainView(view) {
   if (isSidebarDrawerMode()) closeSidebar();
 }
 
+function getStaffCalendarBounds() {
+  if (!isStaffUser()) return null;
+  var before = state.settings.staffCalDaysBefore;
+  var after = state.settings.staffCalDaysAfter;
+  if (before == null && after == null) return null;
+  var today = startOfDay(new Date());
+  return {
+    min: before != null ? addDays(today, -before) : null,
+    max: after != null ? addDays(today, after) : null,
+  };
+}
+
+function clampDateToStaffBounds(d) {
+  var bounds = getStaffCalendarBounds();
+  if (!bounds) return d;
+  if (bounds.min && d < bounds.min) return bounds.min;
+  if (bounds.max && d > bounds.max) return bounds.max;
+  return d;
+}
+
 async function goToPrevPeriod() {
   if (isAdminUser() && ui.adminMainView && ui.adminMainView !== "calendar" && !isAdminMainViewActive("entry-list")) showAdminCalendarView();
   if (ui.viewMode === "day") {
-    await setCurrentDay(addDays(ui.currentDay, -1));
+    var target = clampDateToStaffBounds(addDays(ui.currentDay, -1));
+    await setCurrentDay(target);
   } else if (ui.viewMode === "month") {
     ui.currentMonth = addMonths(ui.currentMonth || startOfMonth(ui.currentDay), -1);
     saveUi();
@@ -6553,14 +6583,18 @@ async function goToPrevPeriod() {
     }
     await refreshEntryListIfActive();
   } else {
-    await setWeekStart(addDays(ui.weekStart, -7));
+    var prevWeek = addDays(ui.weekStart, -7);
+    var bounds = getStaffCalendarBounds();
+    if (bounds && bounds.min && prevWeek < bounds.min) prevWeek = startOfWeekMonday(bounds.min);
+    await setWeekStart(prevWeek);
   }
 }
 
 async function goToNextPeriod() {
   if (isAdminUser() && ui.adminMainView && ui.adminMainView !== "calendar" && !isAdminMainViewActive("entry-list")) showAdminCalendarView();
   if (ui.viewMode === "day") {
-    await setCurrentDay(addDays(ui.currentDay, 1));
+    var target = clampDateToStaffBounds(addDays(ui.currentDay, 1));
+    await setCurrentDay(target);
   } else if (ui.viewMode === "month") {
     ui.currentMonth = addMonths(ui.currentMonth || startOfMonth(ui.currentDay), 1);
     saveUi();
@@ -6570,7 +6604,10 @@ async function goToNextPeriod() {
     }
     await refreshEntryListIfActive();
   } else {
-    await setWeekStart(addDays(ui.weekStart, 7));
+    var nextWeek = addDays(ui.weekStart, 7);
+    var bounds = getStaffCalendarBounds();
+    if (bounds && bounds.max && nextWeek > bounds.max) nextWeek = startOfWeekMonday(bounds.max);
+    await setWeekStart(nextWeek);
   }
 }
 
@@ -7269,6 +7306,7 @@ function updateAdminHubNavVisibility() {
 
 function refreshAdminHubSection(section) {
   if (section === "working-hours") prepareWorkingHoursPanel();
+  else if (section === "staff-calendar-range") prepareStaffCalRangePanel();
   else if (section === "rooms") prepareRoomsPanel();
   else if (section === "packages") preparePackagesPanel();
   else if (section === "staff-list") prepareStaffListPanel();
@@ -8629,6 +8667,7 @@ function closeMemberCardModal() {
 }
 
 let editingMemberPackageId = null;
+let editingMemberPackageOriginalData = null; // paket değişikliği tespiti için
 
 /** Seçilen tarih aralığı ve slot'lara göre [startDate, endDate] içinde oluşturulabilecek randevu günü sayısı. */
 function countPossibleSessionsInRange(startDate, endDate, slots) {
@@ -8687,11 +8726,11 @@ function getMemberPackageDaySlotsValidation() {
   for (const row of rows) {
     const day = parseInt(row.dataset.day, 10);
     const chk = row.querySelector('input[type="checkbox"]');
-    const timeInput = row.querySelector('input[type="time"]');
-    const staffSelect = row.querySelector("select");
+    const timeSelect = row.querySelector("select.mp-hour-select");
+    const staffSelect = row.querySelector("select:not(.mp-hour-select)");
     if (!chk || !chk.checked) continue;
     checkedCount++;
-    const startTime = timeInput ? String(timeInput.value || "").trim() : "";
+    const startTime = timeSelect ? String(timeSelect.value || "").trim() : "";
     const staffId = staffSelect && staffSelect.value ? parseInt(staffSelect.value, 10) : null;
     if (!startTime || !staffId) {
       return { ok: false, error: "Seçili günler için saat ve personel seçiniz.", slots: [] };
@@ -8726,17 +8765,39 @@ function updateMemberPackageDaySlotsSelectable() {
   // skip false: gün checkbox'ları her zaman tıklanabilir; sadece o gün işaretliyse saat/personel seçilebilir
   els.mpDaySlots.querySelectorAll(".listItem").forEach((row) => {
     const cb = row.querySelector('input[type="checkbox"]');
-    const timeInput = row.querySelector('input[type="time"]');
-    const staffSelect = row.querySelector("select");
+    const timeSelect = row.querySelector("select.mp-hour-select");
+    const staffSelect = row.querySelector("select:not(.mp-hour-select)");
     if (cb) cb.disabled = false;
     const enabled = cb && cb.checked;
-    if (timeInput) timeInput.disabled = !enabled;
+    if (timeSelect) {
+      timeSelect.disabled = !enabled;
+      if (!enabled && timeSelect.value) timeSelect.value = "";
+    }
     if (staffSelect) staffSelect.disabled = !enabled;
   });
 }
 
 function getMemberPackageSlotDaysOrder() {
   return [1, 2, 3, 4, 5, 6, 0].filter((day) => isDayEnabled(day));
+}
+
+function buildHourOptions(selectedTime, day) {
+  var wh = state.workingHours && day != null ? state.workingHours[day] : null;
+  var fromH = 0;
+  var toH = 23;
+  if (wh && wh.start && wh.end) {
+    fromH = parseInt(wh.start.split(":")[0], 10) || 0;
+    // Son geçerli başlangıç: bitiş saatinden 1 saat önce (seans 1 saat → bitiş = çalışma bitişi)
+    var endH = parseInt(wh.end.split(":")[0], 10) || 23;
+    var endM = parseInt((wh.end.split(":")[1]) || "0", 10);
+    toH = endM > 0 ? endH : endH - 1;
+  }
+  var opts = '<option value="">__:__</option>';
+  for (var h = fromH; h <= toH; h++) {
+    var val = String(h).padStart(2, "0") + ":00";
+    opts += '<option value="' + val + '"' + (selectedTime === val ? " selected" : "") + ">" + val + "</option>";
+  }
+  return opts;
 }
 
 function renderMemberPackageDaySlots(slots) {
@@ -8748,6 +8809,9 @@ function renderMemberPackageDaySlots(slots) {
   for (const day of days) {
     const slot = (slots || []).find((s) => Number(s.dayOfWeek) === day);
     const checked = !!slot;
+    // Mevcut saat varsa saatbaşına yuvarla (ör. 18:30 → 18:00)
+    var rawTime = checked ? (slot.startTime || "") : "";
+    var slotTime = rawTime ? rawTime.slice(0, 2) + ":00" : (checked ? "08:00" : "");
     const item = document.createElement("div");
     item.className = "listItem mp-day-slot-row";
     item.dataset.day = String(day);
@@ -8761,25 +8825,27 @@ function renderMemberPackageDaySlots(slots) {
         </label>
       </div>
       <div class="mp-day-slot-row__time">
-        <input class="input" type="time" data-day="${day}" value="${checked ? (slot.startTime || "18:00") : ""}" ${checked ? "" : "disabled"} />
+        <select class="input mp-hour-select" data-day="${day}" data-type="time" ${checked ? "" : "disabled"}>
+          ${buildHourOptions(slotTime, day)}
+        </select>
       </div>
       <div class="mp-day-slot-row__staff">
         <select class="input" data-day="${day}" ${checked ? "" : "disabled"}><option value="">Seçiniz</option>${staffOptions}</select>
       </div>
     `;
     const checkbox = item.querySelector('input[type="checkbox"]');
-    const timeInput = item.querySelector('input[type="time"]');
-    const staffSelect = item.querySelector("select");
+    const timeSelect = item.querySelector("select.mp-hour-select");
+    const staffSelect = item.querySelector("select:not(.mp-hour-select)");
     if (staffSelect && slot && slot.staffId) staffSelect.value = String(slot.staffId);
-    if (checkbox && timeInput && staffSelect) {
+    if (checkbox && timeSelect && staffSelect) {
       checkbox.addEventListener("change", () => {
         const isChecked = checkbox.checked;
-        timeInput.disabled = !isChecked;
+        timeSelect.disabled = !isChecked;
         staffSelect.disabled = !isChecked;
         if (!isChecked) {
-          timeInput.value = "";
+          timeSelect.value = "";
           staffSelect.value = "";
-        } else if (!timeInput.value) timeInput.value = "";
+        } else if (!timeSelect.value) timeSelect.value = "08:00";
       });
     }
     els.mpDaySlots.appendChild(item);
@@ -9192,7 +9258,9 @@ function openMemberPackageModal(memberId, memberPackageId, options) {
   if (els.mpStartDate) { els.mpStartDate.removeAttribute("max"); els.mpStartDate.removeAttribute("readonly"); els.mpStartDate.disabled = false; }
 
   if (editingMemberPackageId && window.API && window.API.getMemberPackage) {
+    editingMemberPackageOriginalData = null;
     window.API.getMemberPackage(editingMemberPackageId).then((mp) => {
+      editingMemberPackageOriginalData = mp;
       if (els.mpStartDate) els.mpStartDate.value = (mp.startDate || "").toString().slice(0, 10);
       if (els.mpEndDate) els.mpEndDate.value = (mp.endDate || "").toString().slice(0, 10);
       if (els.mpSkipDayDistribution) els.mpSkipDayDistribution.checked = !!mp.skipDayDistribution;
@@ -9210,11 +9278,10 @@ function openMemberPackageModal(memberId, memberPackageId, options) {
             ? Math.min(...attendedSessions.map((s) => Number(s.startTs)))
             : null;
           if (firstAttendedTs != null) {
-            // İlk seans QR/TELEFON/KART ile katılındı: paket türü + başlangıç tarihi kilitli
-            if (els.mpPackage) els.mpPackage.disabled = true;
+            // İlk seans katılındı: paket değiştirilebilir (yükseltme/düşürme) ama başlangıç tarihi kilitli
             if (els.mpPackageFirstSessionHint) {
               els.mpPackageFirstSessionHint.classList.remove("hidden");
-              els.mpPackageFirstSessionHint.style.display = "block";
+              els.mpPackageFirstSessionHint.style.display = "";
             }
             if (els.mpStartDate) {
               const d = new Date(firstAttendedTs);
@@ -9255,6 +9322,7 @@ function openMemberPackageModal(memberId, memberPackageId, options) {
 function closeMemberPackageModal() {
   if (els.memberPackageModal) els.memberPackageModal.classList.add("hidden");
   editingMemberPackageId = null;
+  editingMemberPackageOriginalData = null;
   if (ui.pendingNewMember) {
     ui.pendingNewMember = null;
     ui.editingMemberId = null;
@@ -9306,6 +9374,72 @@ async function saveMemberPackageFromForm() {
 
   if (els.mpFormError) els.mpFormError.classList.add("hidden");
   if (els.mpAvailabilityError) els.mpAvailabilityError.classList.add("hidden");
+
+  // Düzenleme modunda ve paket değiştiyse: önizleme al + onay modal göster
+  if (editingMemberPackageId && editingMemberPackageOriginalData && packageId) {
+    const origPackageId = Number(editingMemberPackageOriginalData.packageId);
+    if (origPackageId && origPackageId !== packageId && window.API && window.API.getMemberPackageUpgradePreview) {
+      try {
+        const preview = await window.API.getMemberPackageUpgradePreview(editingMemberPackageId, packageId);
+        if (!preview.canProceed) {
+          if (els.mpFormError) {
+            els.mpFormError.textContent = preview.blockReason || "Bu pakete geçiş yapılamaz.";
+            els.mpFormError.classList.remove("hidden");
+          }
+          return;
+        }
+
+        // Slot değişti mi?
+        const origSlots = editingMemberPackageOriginalData.slots || [];
+        const currentSlots = skipDayDistribution ? [] : (() => {
+          const v = getMemberPackageDaySlotsValidation();
+          return v.ok ? v.slots : [];
+        })();
+        const slotKey = (s) => `${Number(s.dayOfWeek ?? s.day_of_week)}-${String((s.startTime ?? s.start_time) || "").trim()}-${Number(s.staffId ?? s.staff_id)}`;
+        const origSet = new Set(origSlots.map(slotKey));
+        const newSet = new Set(currentSlots.map(slotKey));
+        const slotsChanged = origSet.size !== newSet.size || [...origSet].some((k) => !newSet.has(k));
+
+        const oldPkg = (state.packages || []).find((p) => p.id === origPackageId);
+        const newPkg = (state.packages || []).find((p) => p.id === packageId);
+        const oldName = oldPkg ? oldPkg.name : `${preview.oldLessonCount} Seans`;
+        const newName = newPkg ? newPkg.name : `${preview.newLessonCount} Seans`;
+
+        let confirmMsg = `"${oldName}" → "${newName}"\n\n`;
+        confirmMsg += `• ${preview.pastCount} geçmiş seans korunacak.\n`;
+
+        if (preview.action === "upgrade") {
+          if (!slotsChanged) {
+            confirmMsg += `• ${preview.futureCount} gelecek seans korunacak.\n`;
+            confirmMsg += `• ${preview.diff} yeni seans mevcut programa eklenecek.`;
+          } else {
+            confirmMsg += `• ${preview.futureCount} gelecek seans silinecek.\n`;
+            confirmMsg += `• Yeni gün/saate göre ${preview.futureCount + preview.diff} seans oluşturulacak.`;
+          }
+        } else {
+          const futureNeeded = Math.max(0, preview.newLessonCount - preview.pastCount);
+          const willDelete = Math.max(0, preview.futureCount - futureNeeded);
+          if (!slotsChanged) {
+            confirmMsg += `• ${willDelete} uzak tarihli gelecek seans silinecek.\n`;
+            confirmMsg += `• ${futureNeeded} yakın tarihli seans korunacak.`;
+          } else {
+            confirmMsg += `• ${preview.futureCount} gelecek seans silinecek.\n`;
+            confirmMsg += `• Yeni gün/saate göre ${futureNeeded} seans oluşturulacak.`;
+          }
+        }
+
+        const confirmed = await showAppConfirm(confirmMsg, {
+          title: preview.action === "upgrade" ? "Paket Yükseltme Onayı" : "Paket Düşürme Onayı",
+          okLabel: "Onayla",
+          cancelLabel: "Vazgeç",
+          okClass: preview.action === "downgrade" ? "btn--danger" : "btn--primary",
+        });
+        if (!confirmed) return;
+      } catch (previewErr) {
+        // Preview başarısız olursa backend validasyonuna bırak
+      }
+    }
+  }
 
   if (!packageId) {
     if (els.mpFormError) { els.mpFormError.textContent = "Paket seçin."; els.mpFormError.classList.remove("hidden"); return; }
@@ -10205,7 +10339,10 @@ async function saveGroupSession() {
       state.sessions.push(session);
       if (window.API && window.API.getToken()) {
         try {
-          const created = await window.API.createSession(session);
+          const created = await window.API.createSession({
+            ...session,
+            skipStaffHoursCheck: !!session.skipStaffHoursCheck,
+          });
           const idx = state.sessions.findIndex(s => s.id === session.id);
           if (idx >= 0) state.sessions[idx] = created;
         } catch (e) {
@@ -10263,13 +10400,19 @@ async function saveGroupSession() {
         els.groupSessionError.classList.remove("hidden");
         return;
       }
+      let groupEditOverride = false;
       const selectedStaff = getStaffById(newStaffId);
       if (selectedStaff) {
         const staffWh = getStaffWorkingHoursForDay(selectedStaff, dayOfWeek);
+        const staffName = getStaffFullName(selectedStaff);
         if (!staffWh || startMinDay < staffWh.startMin || endMinDay > staffWh.endMin) {
-          els.groupSessionError.textContent = `Seçilen personel (${getStaffFullName(selectedStaff)}) bu gün/saatte çalışmıyor.`;
-          els.groupSessionError.classList.remove("hidden");
-          return;
+          const whLabel = staffWh ? `(${staffWh.start}–${staffWh.end})` : "(bu gün tanımsız)";
+          const confirmed = await showAdminPasswordConfirm(
+            `${staffName} bu saat aralığında çalışmıyor ${whLabel}.\n\nDevam etmek için admin şifresi gerekiyor.`,
+            "Çalışma Saati Dışı — Admin Onayı"
+          );
+          if (!confirmed) return;
+          groupEditOverride = true;
         }
       }
 
@@ -10459,18 +10602,19 @@ async function saveSessionFromModal() {
   }
 
   // Seçilen personelin o gün çalışma saatlerini kontrol et
+  let staffHoursOverride = false;
   const selectedStaff = getStaffById(staffId);
   if (selectedStaff) {
     const staffWh = getStaffWorkingHoursForDay(selectedStaff, dayOfWeek);
-    if (!staffWh) {
-      showError(`Seçilen personel (${getStaffFullName(selectedStaff)}) bu gün çalışmıyor.`);
-      return;
-    }
-    if (startMinDay < staffWh.startMin || endMinDay > staffWh.endMin) {
-      showError(
-        `Seçilen personel (${getStaffFullName(selectedStaff)}) bu saat aralığında çalışmıyor. (${staffWh.start}–${staffWh.end})`,
+    const staffName = getStaffFullName(selectedStaff);
+    if (!staffWh || startMinDay < staffWh.startMin || endMinDay > staffWh.endMin) {
+      const whLabel = staffWh ? `(${staffWh.start}–${staffWh.end})` : "(bu gün tanımsız)";
+      const confirmed = await showAdminPasswordConfirm(
+        `${staffName} bu saat aralığında çalışmıyor ${whLabel}.\n\nDevam etmek için admin şifresi gerekiyor.`,
+        "Çalışma Saati Dışı — Admin Onayı"
       );
-      return;
+      if (!confirmed) return;
+      staffHoursOverride = true;
     }
   }
 
@@ -10482,6 +10626,7 @@ async function saveSessionFromModal() {
     startTs: start.getTime(),
     endTs: end.getTime(),
     note,
+    ...(staffHoursOverride ? { skipStaffHoursCheck: true } : {}),
   };
 
   const ignoreSessionId = ui.editingSessionId;
@@ -12501,7 +12646,57 @@ function bindEvents() {
       closeGroupSessionModal();
     }
   });
-  els.groupSessionAddMemberBtn.addEventListener("click", () => {
+
+  // Tarih/Saat < > stepper butonları (groupSession + session modalları)
+  var TIME_TO_DATE_INPUT = {
+    "groupSessionNewTime": "groupSessionNewDate",
+    "groupSessionTime": "groupSessionDate",
+    "sessionTime": "sessionDate",
+  };
+
+  function getWorkingHourBoundsForDateInput(dateInputId) {
+    var dateEl = dateInputId ? document.getElementById(dateInputId) : null;
+    var dateVal = dateEl && dateEl.value;
+    if (!dateVal) return { minH: 0, maxH: 23 };
+    var d = new Date(dateVal + "T00:00:00");
+    var dow = d.getDay();
+    var wh = state.workingHours && state.workingHours[dow];
+    if (!wh || !wh.enabled || !wh.start || !wh.end) return { minH: 0, maxH: 23 };
+    var minH = parseInt(wh.start.split(":")[0], 10) || 0;
+    var endH = parseInt(wh.end.split(":")[0], 10) || 23;
+    var endM = parseInt((wh.end.split(":")[1]) || "0", 10);
+    var maxH = endM > 0 ? endH : endH - 1; // son tam saat başlangıcı
+    return { minH, maxH };
+  }
+
+  function handleStepperClick(e) {
+    const btn = e.target.closest(".input-stepper__btn");
+    if (!btn) return;
+    const step = parseInt(btn.dataset.step, 10);
+    const targetId = btn.dataset.target;
+    const type = btn.dataset.type;
+    const input = document.getElementById(targetId);
+    if (!input) return;
+
+    if (type === "date") {
+      const d = input.value ? new Date(input.value + "T00:00:00") : new Date();
+      d.setDate(d.getDate() + step);
+      input.value = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    } else if (type === "time") {
+      var parts = input.value ? input.value.split(":") : ["08", "00"];
+      var currentH = parseInt(parts[0], 10);
+      var bounds = getWorkingHourBoundsForDateInput(TIME_TO_DATE_INPUT[targetId]);
+      var newH = currentH + step;
+      if (newH < bounds.minH) newH = bounds.minH;
+      if (newH > bounds.maxH) newH = bounds.maxH;
+      input.value = String(newH).padStart(2, "0") + ":00";
+    }
+    input.dispatchEvent(new Event("change", { bubbles: true }));
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  }
+
+  document.addEventListener("click", handleStepperClick);
+  els.groupSessionAddMemberBtn.addEventListener("click", async () => {
     const selectedId = els.groupSessionNewMemberSelect?.value?.trim();
     if (!selectedId) {
       els.groupSessionError.textContent = "Listeden eklenecek üyeyi seçin.";
@@ -12549,16 +12744,23 @@ function bindEvents() {
         return;
       }
       const selectedStaff = getStaffById(staffId);
+      let memberAddOverride = false;
       if (selectedStaff) {
         const staffWh = getStaffWorkingHoursForDay(selectedStaff, dayOfWeek);
+        const staffName = getStaffFullName(selectedStaff);
         if (!staffWh || startMinDay < staffWh.startMin || startMinDay + durationMin > staffWh.endMin) {
-          els.groupSessionError.textContent = "Seçilen personel bu saatte çalışmıyor.";
-          els.groupSessionError.classList.remove("hidden");
-          return;
+          const whLabel = staffWh ? `(${staffWh.start}–${staffWh.end})` : "(bu gün tanımsız)";
+          const confirmed = await showAdminPasswordConfirm(
+            `${staffName} bu saat aralığında çalışmıyor ${whLabel}.\n\nDevam etmek için admin şifresi gerekiyor.`,
+            "Çalışma Saati Dışı — Admin Onayı"
+          );
+          if (!confirmed) return;
+          memberAddOverride = true;
         }
       }
       const candidateBase = { startTs, endTs, staffId, memberId: availableMember.id, roomId: "", note: "" };
       roomId = autoAssignRoom(candidateBase, { ignoreSessionId: null });
+      if (memberAddOverride) candidateBase.skipStaffHoursCheck = true;
     } else {
       const firstSession = currentGroupSessions[0];
       if (!firstSession) return;
@@ -12576,6 +12778,7 @@ function bindEvents() {
       staffId,
       roomId,
       note: "",
+      ...(typeof memberAddOverride !== "undefined" && memberAddOverride ? { skipStaffHoursCheck: true } : {}),
     };
 
     const conflicts = checkConflicts(newSession, { ignoreSessionId: null });
@@ -12754,6 +12957,60 @@ async function saveWorkingHours() {
   }
   updateWorkingHoursSummary();
   render();
+}
+
+function prepareStaffCalRangePanel() {
+  var beforeEl = document.getElementById("staffCalDaysBefore");
+  var afterEl = document.getElementById("staffCalDaysAfter");
+  var errEl = document.getElementById("staffCalRangeError");
+  var saveBtn = document.getElementById("saveStaffCalRangeBtn");
+  var clearBtn = document.getElementById("clearStaffCalRangeBtn");
+  if (!beforeEl || !afterEl) return;
+
+  if (errEl) errEl.classList.add("hidden");
+  beforeEl.value = state.settings.staffCalDaysBefore != null ? state.settings.staffCalDaysBefore : "";
+  afterEl.value = state.settings.staffCalDaysAfter != null ? state.settings.staffCalDaysAfter : "";
+
+  if (saveBtn) {
+    saveBtn.onclick = async function () {
+      if (errEl) errEl.classList.add("hidden");
+      var before = beforeEl.value.trim() === "" ? null : parseInt(beforeEl.value, 10);
+      var after = afterEl.value.trim() === "" ? null : parseInt(afterEl.value, 10);
+      if ((before != null && (isNaN(before) || before < 0)) || (after != null && (isNaN(after) || after < 0))) {
+        if (errEl) { errEl.textContent = "Geçerli bir gün sayısı girin."; errEl.classList.remove("hidden"); }
+        return;
+      }
+      try {
+        saveBtn.disabled = true;
+        var res = await window.API.saveStaffCalendarRange(before ?? 0, after ?? 0);
+        state.settings.staffCalDaysBefore = before != null ? Number(res.daysBefore) : null;
+        state.settings.staffCalDaysAfter = after != null ? Number(res.daysAfter) : null;
+        await showAppAlert("Personel takvim aralığı kaydedildi.");
+      } catch (e) {
+        if (errEl) { errEl.textContent = (e.data && e.data.error) || e.message || "Kaydedilemedi."; errEl.classList.remove("hidden"); }
+      } finally {
+        saveBtn.disabled = false;
+      }
+    };
+  }
+
+  if (clearBtn) {
+    clearBtn.onclick = async function () {
+      try {
+        clearBtn.disabled = true;
+        await window.API.clearStaffCalendarRange();
+        state.settings.staffCalDaysBefore = null;
+        state.settings.staffCalDaysAfter = null;
+        beforeEl.value = "";
+        afterEl.value = "";
+        await showAppAlert("Personel takvim kısıtı kaldırıldı (sınırsız).");
+      } catch (e) {
+        if (errEl) { errEl.textContent = (e.data && e.data.error) || e.message || "Kaydedilemedi."; errEl.classList.remove("hidden"); }
+      } finally {
+        clearBtn.disabled = false;
+      }
+    };
+  }
 }
 
 function render() {
@@ -13053,6 +13310,7 @@ document.addEventListener("DOMContentLoaded", async function () {
 
     var loaded;
     var fetchRange = getPlannerFetchRange();
+    var calRangePromise = (window.API.getStaffCalendarRange ? window.API.getStaffCalendarRange().catch(function () { return null; }) : Promise.resolve(null));
     if (loadP) {
       loaded = await loadP;
     } else if (me && me.role === "member" && window.API.loadMemberPortalState) {
@@ -13069,6 +13327,11 @@ document.addEventListener("DOMContentLoaded", async function () {
       applyMemberPortalState(loaded);
     } else {
       applyStateFromApi(loaded, fetchRange);
+      var calRange = await calRangePromise;
+      if (calRange && calRange.daysBefore != null) {
+        state.settings.staffCalDaysBefore = Number(calRange.daysBefore);
+        state.settings.staffCalDaysAfter = Number(calRange.daysAfter);
+      }
     }
     updateSidebarForRole();
     ensureAppInit();
