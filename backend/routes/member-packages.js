@@ -153,7 +153,7 @@ async function validatePackageSessionInserts(db, inserts, { excludeMemberPackage
         day_name: DAY_NAMES[row.day_of_week],
         start_time: row.start_time,
         staff_id: row.staff_id,
-        message: 'Bu saatte oda müsait değil (kapasite dolu veya çalışma saati dışında)',
+        message: validation.error || 'Bu saatte oda müsait değil (kapasite dolu veya çalışma saati dışında)',
       });
       continue;
     }

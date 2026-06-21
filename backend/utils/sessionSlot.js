@@ -119,18 +119,20 @@ export async function validateAndPickRoom(db, { staffId, startTs, endTs, exclude
   const endMin = startDate.getHours() * 60 + startDate.getMinutes() + Math.round((Number(endTs) - Number(startTs)) / 60000);
 
   // 1) Global çalışma saatleri: o gün açık mı, seans saati aralıkta mı?
+  // Tablo hiç yapılandırılmamışsa (satır yok) kısıt uygulanmaz.
   const whRow = await db.query(
     'SELECT enabled, start_time, end_time FROM working_hours WHERE day_of_week = $1',
     [dayOfWeek]
   );
-  if (whRow.rows.length === 0) return { ok: false };
-  const wh = whRow.rows[0];
-  if (!wh.enabled) return { ok: false };
-  const [whStartH, whStartM] = (wh.start_time + '').split(':').map((x) => parseInt(x, 10) || 0);
-  const [whEndH, whEndM] = (wh.end_time + '').split(':').map((x) => parseInt(x, 10) || 0);
-  const whStartMin = whStartH * 60 + whStartM;
-  const whEndMin = whEndH * 60 + whEndM;
-  if (startMin < whStartMin || endMin > whEndMin) return { ok: false };
+  if (whRow.rows.length > 0) {
+    const wh = whRow.rows[0];
+    if (!wh.enabled) return { ok: false };
+    const [whStartH, whStartM] = (wh.start_time + '').split(':').map((x) => parseInt(x, 10) || 0);
+    const [whEndH, whEndM] = (wh.end_time + '').split(':').map((x) => parseInt(x, 10) || 0);
+    const whStartMin = whStartH * 60 + whStartM;
+    const whEndMin = whEndH * 60 + whEndM;
+    if (startMin < whStartMin || endMin > whEndMin) return { ok: false };
+  }
 
   // 2) Personel çalışma saati: bu personel o gün o saatte çalışıyor mu?
   const staffRow = await db.query('SELECT working_hours FROM staff WHERE id = $1', [staffId]);
@@ -230,14 +232,15 @@ export async function placeSessionWithRebalance(db, { staffId, startTs, endTs, m
     'SELECT enabled, start_time, end_time FROM working_hours WHERE day_of_week = $1',
     [dayOfWeek]
   );
-  if (whRow.rows.length === 0) return { ok: false, error: 'Çalışma saati dışında' };
-  const wh = whRow.rows[0];
-  if (!wh.enabled) return { ok: false, error: 'Çalışma saati dışında' };
-  const [whStartH, whStartM] = (wh.start_time + '').split(':').map((x) => parseInt(x, 10) || 0);
-  const [whEndH, whEndM] = (wh.end_time + '').split(':').map((x) => parseInt(x, 10) || 0);
-  const whStartMin = whStartH * 60 + whStartM;
-  const whEndMin = whEndH * 60 + whEndM;
-  if (startMin < whStartMin || endMin > whEndMin) return { ok: false, error: 'Çalışma saati dışında' };
+  if (whRow.rows.length > 0) {
+    const wh = whRow.rows[0];
+    if (!wh.enabled) return { ok: false, error: 'Çalışma saati dışında' };
+    const [whStartH, whStartM] = (wh.start_time + '').split(':').map((x) => parseInt(x, 10) || 0);
+    const [whEndH, whEndM] = (wh.end_time + '').split(':').map((x) => parseInt(x, 10) || 0);
+    const whStartMin = whStartH * 60 + whStartM;
+    const whEndMin = whEndH * 60 + whEndM;
+    if (startMin < whStartMin || endMin > whEndMin) return { ok: false, error: 'Çalışma saati dışında' };
+  }
 
   const staffRow = await db.query('SELECT working_hours FROM staff WHERE id = $1', [staffId]);
   if (staffRow.rows.length === 0) return { ok: false, error: 'Çalışma saati dışında' };
