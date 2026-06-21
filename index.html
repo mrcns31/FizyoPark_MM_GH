@@ -686,8 +686,14 @@
           <header class="admin-main-panel__head">
             <div class="admin-main-panel__head-row">
               <h2 class="admin-main-panel__title">Eski Üyeler</h2>
-              <div id="formerAlphaFilter" class="admin-main-panel__alpha-filter" role="group" aria-label="Harf filtresi"></div>
             </div>
+            <div style="display:flex; gap:8px; flex-wrap:wrap; padding-top:10px;">
+              <input id="formerSearchFirstName" class="input" type="text" placeholder="Ad" style="flex:1; min-width:90px;" autocomplete="off" />
+              <input id="formerSearchLastName" class="input" type="text" placeholder="Soyad" style="flex:1; min-width:90px;" autocomplete="off" />
+              <input id="formerSearchPhone" class="input" type="tel" placeholder="Telefon" style="flex:1; min-width:110px;" autocomplete="off" />
+              <button id="formerSearchBtn" class="btn btn--primary" type="button">GETİR</button>
+            </div>
+            <div id="formerSearchError" style="color:var(--danger); font-size:0.85rem; margin-top:4px; display:none;"></div>
           </header>
           <div id="formerMembersContent" class="admin-main-panel__content"></div>
         </section>
@@ -1124,20 +1130,15 @@
               </section>
               <section class="admin-hub-panel hidden" data-admin-hub-panel="former-members" data-admin-hub-admin-only="1">
                 <h2 class="member-profile-panel__title">Eski Üyeler</h2>
-                <p class="hint" style="margin-top:0;">Ad veya soyad yazın, üyeyi seçin; eski paketleri inceleyin veya yeni paket tanımlayın.</p>
-                <div class="formRow" style="margin-top:16px;">
-                  <label class="label" for="formerMemberHubSearch">Üye Adı</label>
-                  <input id="formerMemberHubSearch" class="input" type="text" placeholder="Ad veya soyad yazın…" autocomplete="off" />
+                <p class="hint" style="margin-top:0;">Ad, soyad veya telefon girerek eski üyeyi arayın.</p>
+                <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:12px;">
+                  <input id="formerMemberHubFirstName" class="input" type="text" placeholder="Ad" style="flex:1; min-width:80px;" autocomplete="off" />
+                  <input id="formerMemberHubLastName" class="input" type="text" placeholder="Soyad" style="flex:1; min-width:80px;" autocomplete="off" />
+                  <input id="formerMemberHubPhone" class="input" type="tel" placeholder="Telefon" style="flex:1; min-width:100px;" autocomplete="off" />
+                  <button id="formerMemberHubGetBtn" class="btn btn--primary" type="button">GETİR</button>
                 </div>
-                <div id="formerMemberHubResults" style="margin-top:6px; max-height:220px; overflow-y:auto;"></div>
-                <div id="formerMemberHubSelected" class="hidden" style="margin-top:16px; padding:14px; border:1px solid var(--border); border-radius:8px; background:rgba(255,255,255,.04);">
-                  <div id="formerMemberHubInfo" style="font-weight:600; font-size:1rem; margin-bottom:14px;"></div>
-                  <div style="display:flex; gap:10px; flex-wrap:wrap;">
-                    <button id="formerMemberHubCardBtn" class="btn btn--ghost" type="button">Kimlik Kartı</button>
-                    <button id="formerMemberHubSessionsBtn" class="btn btn--ghost" type="button">Eski Paketler</button>
-                    <button id="formerMemberHubReactivateBtn" class="btn btn--primary" type="button">Paket Yeni</button>
-                  </div>
-                </div>
+                <div id="formerMemberHubError" style="color:var(--danger); font-size:0.85rem; margin-top:4px; display:none;"></div>
+                <div id="formerMemberHubResults" style="margin-top:8px; max-height:300px; overflow-y:auto;"></div>
               </section>
               <section class="admin-hub-panel hidden" data-admin-hub-panel="profile">
                 <h2 class="member-profile-panel__title">Hesap İşlemleri</h2>
