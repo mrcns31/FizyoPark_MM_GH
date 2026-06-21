@@ -578,8 +578,12 @@
     invalidateStaticCache();
     return memberFromApi(row);
   }
-  async function getFormerMembers() {
-    var rows = await apiFetch('/members/former');
+  async function getFormerMembers(params) {
+    var q = new URLSearchParams();
+    if (params && params.name && params.name.trim()) q.set('name', params.name.trim());
+    if (params && params.phone && params.phone.trim()) q.set('phone', params.phone.trim());
+    var qs = q.toString();
+    var rows = await apiFetch('/members/former' + (qs ? '?' + qs : ''));
     return (rows || []).map(function (row) {
       var m = memberFromApi(row);
       m.packageCount = row.package_count;

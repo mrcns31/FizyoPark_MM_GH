@@ -891,8 +891,7 @@ function updateTopbarFilterPlaceholder() {
   var onMemberList =
     isAdminPanelViewActive() &&
     (ui.adminMainView === "members-list" ||
-      ui.adminMainView === "expired-memberships" ||
-      ui.adminMainView === "former-members");
+      ui.adminMainView === "expired-memberships");
   var onEntryList = isAdminMainViewActive("entry-list");
   var onNotifications = isAdminMainViewActive("notifications");
   var placeholder = onMemberList
@@ -7951,101 +7950,88 @@ function initExtendPackagePanel() {
 }
 
 async function initFormerMembersHubPanel() {
-  var searchEl = document.getElementById("formerMemberHubSearch");
-  var resultsEl = document.getElementById("formerMemberHubResults");
-  var selectedEl = document.getElementById("formerMemberHubSelected");
-  var infoEl = document.getElementById("formerMemberHubInfo");
-  var cardBtn = document.getElementById("formerMemberHubCardBtn");
-  var sessionsBtn = document.getElementById("formerMemberHubSessionsBtn");
-  var reactivateBtn = document.getElementById("formerMemberHubReactivateBtn");
-  if (!searchEl) return;
+  var firstNameEl = document.getElementById("formerMemberHubFirstName");
+  var lastNameEl  = document.getElementById("formerMemberHubLastName");
+  var phoneEl     = document.getElementById("formerMemberHubPhone");
+  var getBtn      = document.getElementById("formerMemberHubGetBtn");
+  var resultsEl   = document.getElementById("formerMemberHubResults");
+  var errEl       = document.getElementById("formerMemberHubError");
+  if (!getBtn) return;
 
-  // Sıfırla
-  searchEl.value = "";
-  resultsEl.innerHTML = "";
-  selectedEl.classList.add("hidden");
+  if (firstNameEl) firstNameEl.value = "";
+  if (lastNameEl)  lastNameEl.value  = "";
+  if (phoneEl)     phoneEl.value     = "";
+  if (resultsEl)   resultsEl.innerHTML = "";
+  if (errEl)       errEl.style.display = "none";
 
-  // Eski üyeleri çek — hem local hem global listeyi doldur (openFormerMemberCard buna bakar)
-  var formerList = [];
-  try {
-    if (window.API && window.API.getFormerMembers) {
-      var rows = await window.API.getFormerMembers();
-      formerList = (rows || []).map(function (row) {
-        return Object.assign({}, row, {
-          packageCount: row.packageCount != null ? row.packageCount : row.package_count,
-          sessionCount: row.sessionCount != null ? row.sessionCount : row.session_count,
-        });
-      });
-      formerMembersBaseList = formerList;
-    }
-  } catch (_) {}
-
-  var selectedMember = null;
-
-  function selectFormerMember(m) {
-    selectedMember = m;
-    resultsEl.innerHTML = "";
-    searchEl.value = getMemberDisplayName(m);
-    var deletedDate = (m.deletedAt || m.deleted_at || "").toString().slice(0, 10);
-    if (infoEl) infoEl.textContent = getMemberDisplayName(m) + (deletedDate ? "  •  İptal: " + formatDateTR(deletedDate) : "") + (m.packageCount ? "  •  " + m.packageCount + " paket" : "");
-    selectedEl.classList.remove("hidden");
-  }
-
-  if (searchEl._formerHandler) searchEl.removeEventListener("input", searchEl._formerHandler);
-  searchEl._formerHandler = function () {
-    var q = searchEl.value.trim().toLowerCase();
-    resultsEl.innerHTML = "";
-    selectedEl.classList.add("hidden");
-    selectedMember = null;
-    if (q.length < 1) return;
-    var matches = formerList.filter(function (m) {
-      return getMemberDisplayName(m).toLowerCase().includes(q);
-    }).slice(0, 10);
-    if (!matches.length) {
-      resultsEl.innerHTML = '<p class="hint" style="padding:8px 0;">Eşleşen eski üye bulunamadı.</p>';
+  async function doHubSearch() {
+    var name = [
+      (firstNameEl ? firstNameEl.value.trim() : ""),
+      (lastNameEl  ? lastNameEl.value.trim()  : ""),
+    ].filter(Boolean).join(" ");
+    var phone = phoneEl ? phoneEl.value.trim() : "";
+    if (!name && !phone) {
+      if (errEl) { errEl.textContent = "En az ad/soyad veya telefon girin."; errEl.style.display = ""; }
       return;
     }
-    matches.forEach(function (m) {
-      var btn = document.createElement("button");
-      btn.type = "button";
-      btn.className = "btn btn--ghost";
-      btn.style.cssText = "width:100%; text-align:left; padding:8px 12px; border-radius:6px; margin-bottom:2px;";
-      btn.textContent = getMemberDisplayName(m) + (m.packageCount ? " (" + m.packageCount + " paket)" : "");
-      btn.addEventListener("click", function () { selectFormerMember(m); });
-      resultsEl.appendChild(btn);
-    });
-  };
-  searchEl.addEventListener("input", searchEl._formerHandler);
-
-  // Kimlik Kartı
-  if (cardBtn) {
-    if (cardBtn._formerCardHandler) cardBtn.removeEventListener("click", cardBtn._formerCardHandler);
-    cardBtn._formerCardHandler = function () {
-      if (!selectedMember) return;
-      openFormerMemberCard(selectedMember.id);
-    };
-    cardBtn.addEventListener("click", cardBtn._formerCardHandler);
+    if (errEl) errEl.style.display = "none";
+    if (getBtn) getBtn.disabled = true;
+    if (resultsEl) resultsEl.innerHTML = '<p class="hint" style="padding:8px 0;">Aranıyor…</p>';
+    try {
+      var rows = await window.API.getFormerMembers({ name: name || undefined, phone: phone || undefined });
+      var list = (rows || []).map(function (row) {
+        return Object.assign({}, row, {
+          packageCount: row.packageCount != null ? row.packageCount : row.package_count,
+        });
+      });
+      // Merge into formerMembersBaseList for openFormerMemberCard support
+      list.forEach(function (m) {
+        if (!formerMembersBaseList) formerMembersBaseList = [];
+        if (!formerMembersBaseList.some(function (x) { return normId(x.id) === normId(m.id); })) {
+          formerMembersBaseList.push(m);
+        }
+      });
+      resultsEl.innerHTML = "";
+      if (!list.length) {
+        resultsEl.innerHTML = '<p class="hint" style="padding:8px 0;">Eski üye bulunamadı.</p>';
+        return;
+      }
+      list.forEach(function (m) {
+        var deletedDate = (m.deletedAt || m.deleted_at || "").toString().slice(0, 10);
+        var infoText = getMemberDisplayName(m) +
+          (deletedDate ? " · İptal: " + formatDateTR(deletedDate) : "") +
+          (m.packageCount ? " · " + m.packageCount + " paket" : "");
+        var div = document.createElement("div");
+        div.style.cssText = "padding:10px 0; border-bottom:1px solid var(--border);";
+        div.innerHTML =
+          '<div style="font-weight:600; margin-bottom:8px;">' + escapeHtml(infoText) + '</div>' +
+          '<div style="display:flex; gap:8px; flex-wrap:wrap;">' +
+          '<button type="button" class="btn btn--xs btn--ghost" data-hub-former-card="' + m.id + '">Kimlik Kartı</button>' +
+          '<button type="button" class="btn btn--xs btn--ghost" data-hub-former-sessions="' + m.id + '">Eski Paketler</button>' +
+          '<button type="button" class="btn btn--xs btn--primary" data-hub-former-reactivate="' + m.id + '">Aktif Et</button>' +
+          '</div>';
+        div.querySelector("[data-hub-former-card]").addEventListener("click", function () { openFormerMemberCard(m.id); });
+        div.querySelector("[data-hub-former-sessions]").addEventListener("click", function () { openFormerMemberSessions(m.id); });
+        div.querySelector("[data-hub-former-reactivate]").addEventListener("click", function () { reactivateFormerMemberById(m.id); });
+        resultsEl.appendChild(div);
+      });
+    } catch (e) {
+      if (resultsEl) resultsEl.innerHTML = '<p class="hint" style="color:var(--danger); padding:8px 0;">' + escapeHtml((e.data && e.data.error) || e.message || "Arama başarısız.") + '</p>';
+    } finally {
+      if (getBtn) getBtn.disabled = false;
+    }
   }
 
-  // Eski Paketler
-  if (sessionsBtn) {
-    if (sessionsBtn._formerSessionsHandler) sessionsBtn.removeEventListener("click", sessionsBtn._formerSessionsHandler);
-    sessionsBtn._formerSessionsHandler = async function () {
-      if (!selectedMember) return;
-      await openFormerMemberSessions(selectedMember.id);
-    };
-    sessionsBtn.addEventListener("click", sessionsBtn._formerSessionsHandler);
-  }
+  if (getBtn._hubFormerHandler) getBtn.removeEventListener("click", getBtn._hubFormerHandler);
+  getBtn._hubFormerHandler = doHubSearch;
+  getBtn.addEventListener("click", doHubSearch);
 
-  // Paket Yeni (tekrar aktif et)
-  if (reactivateBtn) {
-    if (reactivateBtn._formerReactivateHandler) reactivateBtn.removeEventListener("click", reactivateBtn._formerReactivateHandler);
-    reactivateBtn._formerReactivateHandler = function () {
-      if (!selectedMember) return;
-      reactivateFormerMemberById(selectedMember.id);
-    };
-    reactivateBtn.addEventListener("click", reactivateBtn._formerReactivateHandler);
-  }
+  [firstNameEl, lastNameEl, phoneEl].forEach(function (el) {
+    if (!el) return;
+    if (el._hubFormerKeydown) el.removeEventListener("keydown", el._hubFormerKeydown);
+    el._hubFormerKeydown = function (e) { if (e.key === "Enter") doHubSearch(); };
+    el.addEventListener("keydown", el._hubFormerKeydown);
+  });
 }
 
 function clearPackageForm() {
@@ -11274,14 +11260,7 @@ function closeExpiredMembershipsModal() {
   showAdminCalendarView();
 }
 
-let formerMembersBaseList = [];
-
-/** Eski Üyeler tablosu için ad/soyad sıralaması: { column: 'name'|null, dir: 'asc'|'desc' } */
-let formerMembersSort = { column: null, dir: "asc" };
-let formerMembersPage = 1;
-let formerMembersPageSize = DEFAULT_LIST_PAGE_SIZE;
-let formerMembersFilterText = "";
-let formerMembersLetter = null;
+let formerMembersBaseList = null;
 
 function fmtFormerMemberDeletedAt(iso) {
   if (!iso) return "—";
@@ -11302,7 +11281,7 @@ function formerMemberPackageFromRow(row) {
 }
 
 function openFormerMemberCard(memberId) {
-  var m = formerMembersBaseList.find(function (x) { return normId(x.id) === normId(memberId); });
+  var m = (formerMembersBaseList || []).find(function (x) { return normId(x.id) === normId(memberId); });
   if (!m) return;
   if (!state.members.some(function (x) { return normId(x.id) === normId(memberId); })) {
     state.members.push(m);
@@ -11326,7 +11305,7 @@ function openExpiredMemberSessions(memberId) {
 
 async function openFormerMemberSessions(memberId) {
   if (!window.API || !window.API.getFormerMemberPackages) return;
-  var member = formerMembersBaseList.find(function (x) {
+  var member = (formerMembersBaseList || []).find(function (x) {
     return Number(x.id) === Number(memberId);
   });
   try {
@@ -11345,67 +11324,24 @@ async function openFormerMemberSessions(memberId) {
 function renderFormerMembersTable() {
   var content = els.formerMembersContent;
   if (!content) return;
-  var filterText = getAdminListFilterText();
-  if (filterText !== formerMembersFilterText) {
-    formerMembersFilterText = filterText;
-    formerMembersPage = 1;
-  }
-  var list = formerMembersBaseList.slice();
-  if (filterText) {
-    list = list.filter(function (m) { return memberMatchesListFilter(m, filterText); });
-  }
-  syncAlphaFilterBarUI(document.getElementById('formerAlphaFilter'), formerMembersLetter);
-  if (formerMembersLetter) {
-    list = list.filter(function (m) { return memberStartsWithLetter(m, formerMembersLetter); });
-  }
-  if (!list.length) {
-    content.innerHTML = '<div class="admin-panel-empty admin-panel-empty--compact"><p>' +
-      (formerMembersBaseList.length === 0 ? "Eski üye kaydı yok." : "Filtreye uyan kayıt yok.") +
-      "</p></div>";
+  if (formerMembersBaseList === null) {
+    content.innerHTML = '<div class="admin-panel-empty admin-panel-empty--compact"><p>Ad, soyad veya telefon girerek eski üyeyi arayın.</p></div>';
     return;
   }
-
-  if (formerMembersSort.column === "name") {
-    list.sort(function (a, b) {
-      var cmp = getMemberDisplayName(a).localeCompare(getMemberDisplayName(b), "tr");
-      return formerMembersSort.dir === "asc" ? cmp : -cmp;
-    });
+  if (!formerMembersBaseList.length) {
+    content.innerHTML = '<div class="admin-panel-empty admin-panel-empty--compact"><p>Eski üye bulunamadı.</p></div>';
+    return;
   }
-
-  var nameLabel = "Ad Soy." + (formerMembersSort.column === "name" ? (formerMembersSort.dir === "asc" ? " ▲" : " ▼") : "");
-
   var wrap = document.createElement("div");
   wrap.className = "expired-memberships-table-wrap former-members-table-wrap";
   var table = document.createElement("table");
   table.className = "expired-memberships-table former-members-table";
   table.innerHTML =
     "<thead><tr>" +
-    '<th>ÜyeNo</th><th data-sort="name" title="Tıklayın: A-Z / Z-A">' + nameLabel + "</th><th>Tel</th><th>İpt.Tar.</th><th>Paket</th><th></th>" +
+    "<th>ÜyeNo</th><th>Ad Soyad</th><th>Tel</th><th>İpt.Tar.</th><th>Paket</th><th></th>" +
     "</tr></thead><tbody></tbody>";
   var tbody = table.querySelector("tbody");
-
-  table.querySelector("th[data-sort='name']").addEventListener("click", function () {
-    if (formerMembersSort.column === "name") formerMembersSort.dir = formerMembersSort.dir === "asc" ? "desc" : "asc";
-    else { formerMembersSort.column = "name"; formerMembersSort.dir = "asc"; }
-    formerMembersPage = 1;
-    renderFormerMembersTable();
-  });
-
-  var paginationEl = document.createElement("div");
-  paginationEl.className = "list-pagination";
-  formerMembersPage = renderPaginationBar(paginationEl, {
-    page: formerMembersPage,
-    pageSize: formerMembersPageSize,
-    total: list.length,
-    onPageChange: function (p) { formerMembersPage = p; renderFormerMembersTable(); },
-    onPageSizeChange: function (size) { formerMembersPageSize = size; formerMembersPage = 1; renderFormerMembersTable(); },
-  });
-  var pageItems = list.slice(
-    (formerMembersPage - 1) * formerMembersPageSize,
-    formerMembersPage * formerMembersPageSize
-  );
-
-  pageItems.forEach(function (m) {
+  formerMembersBaseList.forEach(function (m) {
     var pkgCount = m.packageCount != null ? m.packageCount : (m.package_count != null ? m.package_count : "—");
     var row = document.createElement("tr");
     row.className = "expired-memberships-table__row former-members-table__row";
@@ -11440,28 +11376,44 @@ function renderFormerMembersTable() {
     }
     tbody.appendChild(row);
   });
-
   content.innerHTML = "";
   wrap.appendChild(table);
   content.appendChild(wrap);
-  content.appendChild(paginationEl);
 }
 
 async function openFormerMembersModal() {
+  showAdminMainView("former-members");
+  renderFormerMembersTable();
+  var btn = document.getElementById("formerSearchBtn");
+  if (btn && !btn._formerSearchWired) {
+    btn._formerSearchWired = true;
+    btn.addEventListener("click", doFormerMembersSearch);
+    ["formerSearchFirstName", "formerSearchLastName", "formerSearchPhone"].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) el.addEventListener("keydown", function (e) { if (e.key === "Enter") doFormerMembersSearch(); });
+    });
+  }
+}
+
+async function doFormerMembersSearch() {
   if (!window.API || !window.API.getFormerMembers) {
     await showAppAlert("Bu özellik sunucu bağlantısı gerektirir.");
     return;
   }
-  showAdminMainView("former-members");
-  formerMembersPage = 1;
-  formerMembersLetter = null;
-  initAlphaFilterBar(
-    document.getElementById('formerAlphaFilter'),
-    () => formerMembersLetter,
-    (letter) => { formerMembersLetter = formerMembersLetter === letter ? null : letter; formerMembersPage = 1; renderFormerMembersTable(); }
-  );
+  var firstName = (document.getElementById("formerSearchFirstName") || {}).value || "";
+  var lastName  = (document.getElementById("formerSearchLastName")  || {}).value || "";
+  var phone     = (document.getElementById("formerSearchPhone")     || {}).value || "";
+  var name = [firstName.trim(), lastName.trim()].filter(Boolean).join(" ");
+  var errEl = document.getElementById("formerSearchError");
+  if (!name && !phone.trim()) {
+    if (errEl) { errEl.textContent = "En az ad/soyad veya telefon girin."; errEl.style.display = ""; }
+    return;
+  }
+  if (errEl) errEl.style.display = "none";
+  var btn = document.getElementById("formerSearchBtn");
+  if (btn) btn.disabled = true;
   try {
-    var rows = await window.API.getFormerMembers();
+    var rows = await window.API.getFormerMembers({ name: name || undefined, phone: phone.trim() || undefined });
     formerMembersBaseList = (rows || []).map(function (row) {
       return Object.assign({}, row, {
         packageCount: row.packageCount != null ? row.packageCount : row.package_count,
@@ -11470,8 +11422,9 @@ async function openFormerMembersModal() {
     });
     renderFormerMembersTable();
   } catch (e) {
-    showAdminCalendarView();
     await showAppAlert((e.data && e.data.error) || e.message || "Eski üyeler yüklenemedi.");
+  } finally {
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -11481,7 +11434,7 @@ function closeFormerMembersModal() {
 
 async function reactivateFormerMemberById(memberId, profileUpdates) {
   if (!memberId || !window.API || !window.API.reactivateMember) return null;
-  var m = formerMembersBaseList.find(function (x) { return Number(x.id) === Number(memberId); });
+  var m = (formerMembersBaseList || []).find(function (x) { return Number(x.id) === Number(memberId); });
   var label = m ? getMemberDisplayName(m) : ("Üye #" + memberId);
   if (!(await showAppConfirm(label + " tekrar aktif edilsin mi?\n\nAynı üye numarası ve paket/seans geçmişi korunur; aktif paketler sonlandırılır."))) {
     return null;
@@ -11492,7 +11445,7 @@ async function reactivateFormerMemberById(memberId, profileUpdates) {
     var loaded = await window.API.loadFullState(fetchRange);
     applyStateFromApi(loaded, fetchRange);
     render();
-    formerMembersBaseList = formerMembersBaseList.filter(function (x) {
+    if (formerMembersBaseList) formerMembersBaseList = formerMembersBaseList.filter(function (x) {
       return Number(x.id) !== Number(restored.id);
     });
     renderFormerMembersTable();
