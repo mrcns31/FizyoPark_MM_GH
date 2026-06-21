@@ -1224,7 +1224,7 @@ function cacheEls() {
     "packagesRefreshBtn",
     "packageName",
     "packageLessonCount",
-
+    "packageMonthOverrun",
     "packageWeeklyLessonCount",
     "packageType",
     "packageSaveBtn",
@@ -4369,6 +4369,7 @@ function renderPackages() {
     tr.innerHTML = `
       <td class="packagesTable__name">${escapeHtml(p.name)}</td>
       <td class="packagesTable__stat" data-label="Ders adet">${Number(p.lessonCount ?? p.lesson_count ?? 0)}</td>
+      <td class="packagesTable__stat" data-label="Süre (Ay)">${Number(p.monthOverrun ?? p.month_overrun ?? 1)}</td>
       <td class="packagesTable__actions" colspan="2">
         <button class="btn btn--xs btn--ghost" type="button" data-package-edit="${p.id}" title="Düzelt">✎</button>
         <button class="btn btn--xs btn--ghost" type="button" data-package-delete="${p.id}" title="Sil">✕</button>
@@ -8010,6 +8011,7 @@ function clearPackageForm() {
   if (!els.packageName) return;
   els.packageName.value = "";
   els.packageLessonCount.value = "1";
+  els.packageMonthOverrun.value = "1";
   els.packageWeeklyLessonCount.value = "";
   els.packageType.value = "fixed";
   editingPackageId = null;
@@ -8021,6 +8023,7 @@ function editPackage(id) {
   editingPackageId = id;
   els.packageName.value = p.name || "";
   els.packageLessonCount.value = String(p.lessonCount ?? p.lesson_count ?? 1);
+  els.packageMonthOverrun.value = String(p.monthOverrun ?? p.month_overrun ?? 1);
   els.packageWeeklyLessonCount.value = p.weeklyLessonCount ?? p.weekly_lesson_count ?? "";
   els.packageType.value = p.packageType ?? p.package_type ?? "fixed";
   if (els.packagesFormError) els.packagesFormError.classList.add("hidden");
