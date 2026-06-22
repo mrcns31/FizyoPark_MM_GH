@@ -216,12 +216,13 @@ router.get('/notifications', [
     if (req.user.role === 'staff') {
       const staffResult = await db.query('SELECT id FROM staff WHERE user_id = $1', [req.user.userId]);
       if (staffResult.rows.length === 0) return res.json([]);
-      // Personel sadece bugüne ait kendi seanslarına dair bildirimleri görür
+      // Personel: yalnızca kendi seanslarına ait giriş/iptal bildirimleri gelir.
+      // Randevusuz (walk-in) girişler sadece admin'e gider; personele gitmez.
       const { start, end } = resolveLocalDateRangeMs({ dateStr: localTodayDateStr() });
       params.push(staffResult.rows[0].id, start, end);
       cancelFilter  = ' AND s.staff_id = $2 AND s.start_ts >= $3 AND s.start_ts <= $4';
       checkinFilter = ' AND s.staff_id = $2 AND al.created_at >= to_timestamp($3 / 1000.0) AND al.created_at <= to_timestamp($4 / 1000.0)';
-      walkinFilter  = ' AND fal.accessed_at >= to_timestamp($3 / 1000.0) AND fal.accessed_at <= to_timestamp($4 / 1000.0)';
+      walkinFilter  = ' AND 1=0'; // walk-in (randevusuz giriş) personele bildirim gitmez
     }
 
     params.push(limit);

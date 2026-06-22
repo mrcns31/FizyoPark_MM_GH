@@ -4692,9 +4692,16 @@ function showTopNotification(message) {
 function formatNotificationToast(row) {
   var memberName = row.memberName || "Bir üye";
   if (row.type === "checkin") {
-    var method = row.source === "phone" ? " (Telefon)" : row.source === "card" ? " (Kart)" : "";
-    var appt = row.startTs ? "" : " — Randevusuz";
-    return memberName + " Kapıdan Giriş Yaptı" + method + appt;
+    var methodLabel = row.source === "phone" ? "Telefon" : row.source === "card" ? "Kart" : "QR";
+    if (!row.startTs) {
+      // Randevusuz giriş (walk-in) — sadece admin görür
+      var dt = new Date(row.at || Date.now());
+      var dateStr = String(dt.getDate()).padStart(2,"0")+"."+String(dt.getMonth()+1).padStart(2,"0")+"."+dt.getFullYear();
+      var timeStr = String(dt.getHours()).padStart(2,"0")+":"+String(dt.getMinutes()).padStart(2,"0");
+      return memberName + " " + dateStr + " " + timeStr + "'te " + methodLabel + " ile randevusuz giriş yaptı.";
+    }
+    // Randevulu giriş — ilgili personel + admin görür
+    return memberName + " " + methodLabel + " ile giriş yaptı.";
   }
   var apptWhen = formatSessionDateTimeLabel(row.startTs);
   return memberName + ", " + apptWhen + " tarihli randevusunu iptal etti.";

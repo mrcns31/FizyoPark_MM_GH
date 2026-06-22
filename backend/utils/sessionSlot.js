@@ -113,10 +113,12 @@ async function isRoomAvailableForStaff(db, room, staffId, startTs, endTs, exclud
 }
 
 export async function validateAndPickRoom(db, { staffId, startTs, endTs, excludeSessionId = null }) {
-  const startDate = new Date(Number(startTs));
-  const dayOfWeek = startDate.getDay();
-  const startMin = startDate.getHours() * 60 + startDate.getMinutes();
-  const endMin = startDate.getHours() * 60 + startDate.getMinutes() + Math.round((Number(endTs) - Number(startTs)) / 60000);
+  // Türkiye saati (UTC+3) üzerinden gün ve dakika hesabı — sunucu TZ'den bağımsız
+  const TZ_OFFSET_MS = 3 * 60 * 60 * 1000;
+  const trDate = new Date(Number(startTs) + TZ_OFFSET_MS);
+  const dayOfWeek = trDate.getUTCDay();
+  const startMin = trDate.getUTCHours() * 60 + trDate.getUTCMinutes();
+  const endMin = startMin + Math.round((Number(endTs) - Number(startTs)) / 60000);
 
   // 1) Global çalışma saatleri: o gün açık mı, seans saati aralıkta mı?
   // Tablo hiç yapılandırılmamışsa (satır yok) kısıt uygulanmaz.
@@ -222,11 +224,12 @@ export async function rebalanceSlotRooms(db, { startTs, endTs }) {
  * @returns {Promise<{ ok: boolean, sessionId?: number, error?: string }>}
  */
 export async function placeSessionWithRebalance(db, { staffId, startTs, endTs, memberId, memberPackageId, skipStaffHoursCheck = false }) {
-  // 1) Çalışma saati kontrolleri — skipStaffHoursCheck=true ise personel saati kontrolü atlanır (admin onaylı)
-  const startDate = new Date(Number(startTs));
-  const dayOfWeek = startDate.getDay();
-  const startMin = startDate.getHours() * 60 + startDate.getMinutes();
-  const endMin = startDate.getHours() * 60 + startDate.getMinutes() + Math.round((Number(endTs) - Number(startTs)) / 60000);
+  // 1) Çalışma saati kontrolleri — Türkiye saati (UTC+3), sunucu TZ'den bağımsız
+  const TZ_OFFSET_MS = 3 * 60 * 60 * 1000;
+  const trDate = new Date(Number(startTs) + TZ_OFFSET_MS);
+  const dayOfWeek = trDate.getUTCDay();
+  const startMin = trDate.getUTCHours() * 60 + trDate.getUTCMinutes();
+  const endMin = startMin + Math.round((Number(endTs) - Number(startTs)) / 60000);
 
   const whRow = await db.query(
     'SELECT enabled, start_time, end_time FROM working_hours WHERE day_of_week = $1',
