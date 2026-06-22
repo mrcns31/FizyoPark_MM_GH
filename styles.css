@@ -2803,6 +2803,12 @@ body.body--sidebar-open{
 .input-stepper__input{
   width:100%;
 }
+.input-stepper__day{
+  font-size:12px;
+  color:rgba(232,236,255,.55);
+  white-space:nowrap;
+  flex-shrink:0;
+}
 .group-session-modal__members-list{
   display:flex;
   flex-direction:column;

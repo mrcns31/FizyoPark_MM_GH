@@ -2095,6 +2095,21 @@ function fmtPackageSessionTime(d) {
   return `${d.getHours()}:${pad2(d.getMinutes())}`;
 }
 
+var DATE_DAY_INPUTS = new Set(["sessionDate", "groupSessionDate", "groupSessionNewDate"]);
+var DATE_DAY_SPAN = { sessionDate: "sessionDateDay", groupSessionDate: "groupSessionDateDay", groupSessionNewDate: "groupSessionNewDateDay" };
+
+function updateDateDayLabel(inputId) {
+  var spanId = DATE_DAY_SPAN[inputId];
+  if (!spanId) return;
+  var input = document.getElementById(inputId);
+  var span = document.getElementById(spanId);
+  if (!input || !span) return;
+  var val = input.value;
+  if (!val) { span.textContent = ""; return; }
+  var d = new Date(val + "T00:00:00");
+  span.textContent = d.toLocaleDateString("tr-TR", { weekday: "long" });
+}
+
 function fmtSessionListDate(d) {
   return fmtPackageSessionDate(d);
 }
@@ -10030,6 +10045,7 @@ async function openSessionModal({ mode, date, time, sessionId }) {
     els.sessionDate.value = defaultDate;
     els.sessionTime.value = defaultTime;
     els.sessionNote.value = "";
+    updateDateDayLabel("sessionDate");
 
     // Varsayılan seçimler
     if (state.members[0]) els.sessionMember.value = state.members[0].id;
@@ -10056,6 +10072,7 @@ async function openSessionModal({ mode, date, time, sessionId }) {
 
     els.sessionDate.value = dateStr;
     els.sessionTime.value = timeStr;
+    updateDateDayLabel("sessionDate");
     // Üye alanı düzenlemede değiştirilemez; option value ile eşleşecek şekilde ata
     const memberVal = String(Number(s.memberId));
     if (els.sessionMember.querySelector(`option[value="${memberVal}"]`)) els.sessionMember.value = memberVal;
@@ -10143,6 +10160,7 @@ async function openGroupSessionModal(group, options = {}) {
       els.groupSessionNewDate.value = dateToInputValue(now);
       els.groupSessionNewTime.value = state.settings.startTime || "08:00";
     }
+    updateDateDayLabel("groupSessionNewDate");
 
     els.groupSessionNewStaff.innerHTML = "";
     for (const s of state.staff) {
@@ -10175,6 +10193,7 @@ async function openGroupSessionModal(group, options = {}) {
   els.groupSessionModalTitle.textContent = `Grup Seans (${currentGroupSessions.length} seans)`;
   els.groupSessionDate.value = dateStr;
   els.groupSessionTime.value = timeStr;
+  updateDateDayLabel("groupSessionDate");
 
   els.groupSessionStaff.innerHTML = "";
   for (const s of state.staff) {
@@ -12649,6 +12668,14 @@ function bindEvents() {
   }
 
   document.addEventListener("click", handleStepperClick);
+
+  document.addEventListener("change", function (e) {
+    if (e.target && DATE_DAY_INPUTS.has(e.target.id)) updateDateDayLabel(e.target.id);
+  });
+  document.addEventListener("input", function (e) {
+    if (e.target && DATE_DAY_INPUTS.has(e.target.id)) updateDateDayLabel(e.target.id);
+  });
+
   els.groupSessionAddMemberBtn.addEventListener("click", async () => {
     const selectedId = els.groupSessionNewMemberSelect?.value?.trim();
     if (!selectedId) {
