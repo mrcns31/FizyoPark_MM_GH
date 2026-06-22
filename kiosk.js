@@ -340,6 +340,48 @@
   setInterval(checkServer, 30000);
   setInterval(tickClock, 30000);
 
+  /* ─── Ekran uyanık tutma (07:30–22:00) ─────────────────────────────────── */
+  var WAKE_START_MIN = 7 * 60 + 30;  // 07:30
+  var WAKE_END_MIN   = 22 * 60;       // 22:00
+  var wakeLock = null;
+
+  function isWakeHours() {
+    var now = new Date();
+    var m = now.getHours() * 60 + now.getMinutes();
+    return m >= WAKE_START_MIN && m < WAKE_END_MIN;
+  }
+
+  function acquireWakeLock() {
+    if (!('wakeLock' in navigator)) return;
+    if (wakeLock && !wakeLock.released) return;
+    navigator.wakeLock.request('screen').then(function (lock) {
+      wakeLock = lock;
+    }).catch(function () {});
+  }
+
+  function releaseWakeLock() {
+    if (wakeLock && !wakeLock.released) {
+      wakeLock.release().catch(function () {});
+    }
+    wakeLock = null;
+  }
+
+  function syncWakeLock() {
+    if (isWakeHours()) {
+      acquireWakeLock();
+    } else {
+      releaseWakeLock();
+    }
+  }
+
+  syncWakeLock();
+  // Sayfa tekrar görünür olduğunda kilit yeniden alınır (tarayıcı gizlendikten sonra otomatik bırakır)
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') syncWakeLock();
+  });
+  // Her dakika sınır geçişini (07:30 / 22:00) yakala
+  setInterval(syncWakeLock, 60000);
+
   /* ─── Her saat :30'da otomatik yenileme ────────────────────────────────── */
   (function scheduleReload() {
     var now = new Date();
