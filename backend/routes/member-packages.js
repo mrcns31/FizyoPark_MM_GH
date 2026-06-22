@@ -819,23 +819,28 @@ router.put('/:id', [
             }
           }
         } else {
+          // effective_date verilmemişse Turkey bugününü kullan (UTC'den bağımsız: +03:00)
+          const todayTurkey = new Date(Date.now() + 3 * 3600 * 1000).toISOString().slice(0, 10);
           const effectiveDateStr = effective_date && /^\d{4}-\d{2}-\d{2}$/.test(String(effective_date).trim())
             ? String(effective_date).trim()
-            : new Date().toISOString().slice(0, 10);
-          const effectiveDateStart = new Date(effectiveDateStr + 'T00:00:00').getTime();
+            : todayTurkey;
+          // effectiveDateStart: Turkey gece yarısını UTC'ye çevir (TZ bağımsız)
+          const effectiveDateStart = new Date(effectiveDateStr + 'T00:00:00+03:00').getTime();
           const keptRes = await db.query(
             'SELECT COUNT(*)::int AS cnt FROM sessions WHERE member_package_id = $1 AND start_ts < $2 AND (deleted_at IS NULL)',
             [id, effectiveDateStart]
           );
           const keptCount = keptRes.rows[0]?.cnt ?? 0;
           const maxToCreate = Math.max(0, lessonCount - keptCount);
-          genStart = keptCount > 0 ? effectiveDateStr : String(finalStartDate).slice(0, 10);
+          // keptCount=0 ise geçmiş tarihleri atla: max(effectiveDateStr, paket başlangıcı)
+          const pkgStartStr = String(finalStartDate).slice(0, 10);
+          genStart = keptCount > 0
+            ? effectiveDateStr
+            : (effectiveDateStr >= pkgStartStr ? effectiveDateStr : pkgStartStr);
           const maxPossibleFromStart = countPossibleSessionsInRange(genStart, genEnd, validSlotsAfter);
           if (maxToCreate > 0 && maxPossibleFromStart < maxToCreate) {
             return res.status(400).json({
-              error: keptCount > 0
-                ? `Değişiklik tarihinden (${effectiveDateStr}) sonra seçilen günlere göre en fazla ${maxPossibleFromStart} randevu oluşturulabilir. Kalan hak: ${maxToCreate}. Bitiş tarihini uzatın veya haftalık gün sayısını artırın.`
-                : `Paket başlangıcından (${genStart}) itibaren seçilen günlere göre en fazla ${maxPossibleFromStart} randevu oluşturulabilir. Bu paket ${lessonCount} ders içeriyor. Bitiş tarihini uzatın veya haftalık gün sayısını artırın.`,
+              error: `Değişiklik tarihinden (${effectiveDateStr}) sonra seçilen günlere göre en fazla ${maxPossibleFromStart} randevu oluşturulabilir. Kalan hak: ${maxToCreate}. Bitiş tarihini uzatın veya haftalık gün sayısını artırın.`,
             });
           }
           genLimit = maxToCreate;
