@@ -1,9 +1,34 @@
 import { resolveLocalDateRangeMs } from './staffWorkingHours.js';
 
-/** Randevusuz kapı girişi kaydı (üye) */
+const DEBOUNCE_SECONDS = 30;
+
+/** Randevusuz kapı girişi kaydı (üye) — son 30 sn içinde aynı üye tekrar kaydedilmez. */
 export async function logWalkInQrAccess(db, memberId, source = 'qr') {
   if (!memberId) return false;
   try {
+    // Son 30 sn içinde bu üyeden zaten check-in (activity_logs) veya walk-in (facility_access_logs) var mı?
+    const [recentActivity, recentWalkIn] = await Promise.all([
+      db.query(
+        `SELECT id FROM activity_logs
+         WHERE action = 'session.check_in_qr'
+           AND (details->>'memberId')::text = $1::text
+           AND created_at >= NOW() - INTERVAL '${DEBOUNCE_SECONDS} seconds'
+         LIMIT 1`,
+        [memberId]
+      ).catch(() => ({ rows: [] })),
+      db.query(
+        `SELECT id FROM facility_access_logs
+         WHERE member_id = $1
+           AND accessed_at >= NOW() - INTERVAL '${DEBOUNCE_SECONDS} seconds'
+         LIMIT 1`,
+        [memberId]
+      ).catch(() => ({ rows: [] })),
+    ]);
+
+    if (recentActivity.rows.length > 0 || recentWalkIn.rows.length > 0) {
+      return false; // çok yakın zamanda zaten loglandı, tekrar kaydetme
+    }
+
     await db.query(
       `INSERT INTO facility_access_logs (member_id, accessed_at, source)
        VALUES ($1, CURRENT_TIMESTAMP, $2)`,
