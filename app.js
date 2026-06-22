@@ -3984,7 +3984,11 @@ function renderEvents({ startMin, slotMin, slotsCount }) {
     if (singleDeleteBtn) {
       singleDeleteBtn.addEventListener("click", async (e) => {
         e.stopPropagation();
-        if (!(await showAppConfirm("Bu seansı iptal etmek istediğinize emin misiniz?"))) return;
+        const _dt = new Date(s.startTs);
+        const _d = String(_dt.getDate()).padStart(2,"0")+"."+String(_dt.getMonth()+1).padStart(2,"0")+"."+_dt.getFullYear();
+        const _t = String(_dt.getHours()).padStart(2,"0")+":"+String(_dt.getMinutes()).padStart(2,"0");
+        const _mn = getSessionMemberDisplayName(s);
+        if (!(await showAppConfirm(_d+" "+_t+" - "+_mn+" randevusunu iptal etmek istediğinize emin misiniz?"))) return;
         const id = singleDeleteBtn.dataset.sessionId;
         if (isMemberUser()) {
           try {
@@ -4464,17 +4468,21 @@ function showSessionDeleteBtn(session) {
 
 async function confirmAndDeleteStaffSessionGroup(group) {
   if (!group || !canManageSessions()) return false;
-  const staff = getStaffById(group.staffId);
-  const staffName = getStaffFullName(staff);
-  const sessionCount = (group.sessions || []).length;
-  if (
-    !(await showAppConfirm(
-      staffName +
-        " personelinin bu saatteki " +
-        sessionCount +
-        " seansını iptal etmek istediğinize emin misiniz?"
-    ))
-  ) {
+  const sessions = group.sessions || [];
+  const sessionCount = sessions.length;
+  let confirmMsg;
+  if (sessionCount === 1) {
+    const sess = sessions[0];
+    const _dt = new Date(sess.startTs);
+    const _d = String(_dt.getDate()).padStart(2,"0")+"."+String(_dt.getMonth()+1).padStart(2,"0")+"."+_dt.getFullYear();
+    const _t = String(_dt.getHours()).padStart(2,"0")+":"+String(_dt.getMinutes()).padStart(2,"0");
+    const _mn = getSessionMemberDisplayName(sess);
+    confirmMsg = _d+" "+_t+" - "+_mn+" randevusunu iptal etmek istediğinize emin misiniz?";
+  } else {
+    const staff = getStaffById(group.staffId);
+    confirmMsg = getStaffFullName(staff)+" personelinin bu saatteki "+sessionCount+" seansını iptal etmek istediğinize emin misiniz?";
+  }
+  if (!(await showAppConfirm(confirmMsg))) {
     return false;
   }
   const toRemove = state.sessions.filter(function (s) {

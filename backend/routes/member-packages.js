@@ -108,19 +108,33 @@ const DAY_NAMES = ['Pazar', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
 const PACKAGE_CONFLICT_ERROR =
   'Seçilen gün/saat/personel için müsaitlik yok. Lütfen ilgili satırları düzenleyip tekrar kaydedin.';
 
-/** Paket slot'larına göre oluşturulacak seans planını (henüz DB'ye yazılmadan) üretir. */
+/** Paket slot'larına göre oluşturulacak seans planını (henüz DB'ye yazılmadan) üretir.
+ *  Tüm tarih/saat işlemleri UTC metotlarıyla yapılır (+03:00 ofsetiyle) — sunucu TZ'den bağımsız.
+ */
 function buildPackageSessionInsertPlan(startDate, endDate, slots, limit, { memberId, mpId = null }) {
   const inserts = [];
   if (!slots?.length || !limit || limit <= 0) return inserts;
-  const start = new Date(String(startDate).slice(0, 10) + 'T00:00:00');
-  const end = new Date(String(endDate).slice(0, 10) + 'T23:59:59');
-  for (let d = new Date(start); d <= end && inserts.length < limit; d.setDate(d.getDate() + 1)) {
-    const dayOfWeek = d.getDay();
+
+  // Tarihleri YYYY-MM-DD parçalarına ayır, UTC gece yarısı olarak başlat (TZ bağımsız)
+  const [sy, sm, sd] = String(startDate).slice(0, 10).split('-').map(Number);
+  const [ey, em, ed] = String(endDate).slice(0, 10).split('-').map(Number);
+  const endUtcMs = Date.UTC(ey, em - 1, ed);
+
+  let curUtcMs = Date.UTC(sy, sm - 1, sd);
+  while (inserts.length < limit && curUtcMs <= endUtcMs) {
+    const curDate = new Date(curUtcMs);
+    const year     = curDate.getUTCFullYear();
+    const month    = curDate.getUTCMonth();
+    const day      = curDate.getUTCDate();
+    const dayOfWeek = curDate.getUTCDay();
+    const dateStr  = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+
     for (const slot of slots) {
       if (inserts.length >= limit) break;
       if (Number(slot.day_of_week) !== dayOfWeek) continue;
       const [h, m] = (slot.start_time + '').split(':').map((x) => parseInt(x, 10) || 0);
-      const slotStart = new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m, 0, 0);
+      // Saati Türkiye yerel saati (+03:00) olarak oluştur
+      const slotStart = new Date(`${dateStr}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00+03:00`);
       const startTs = slotStart.getTime();
       inserts.push({
         staff_id: slot.staff_id,
@@ -129,10 +143,11 @@ function buildPackageSessionInsertPlan(startDate, endDate, slots, limit, { membe
         end_ts: startTs + SLOT_DURATION_MS,
         member_package_id: mpId,
         start_time: slot.start_time,
-        dateStr: localDateStrFromTs(startTs),
+        dateStr,
         day_of_week: dayOfWeek,
       });
     }
+    curUtcMs += 24 * 60 * 60 * 1000; // bir sonraki gün
   }
   return inserts;
 }

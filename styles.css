@@ -4413,6 +4413,9 @@ select option:checked{
   color:#fff;
   border-color:var(--accent);
 }
+@media (max-width: 767px){
+  .admin-main-panel__alpha-filter{ display:none; }
+}
 #adminEntryListView .admin-main-panel__head--tabs{
   display:flex;
   align-items:center;

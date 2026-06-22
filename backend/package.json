@@ -5,9 +5,9 @@
   "main": "server.js",
   "type": "module",
   "scripts": {
-    "start": "node server.js",
+    "start": "TZ=Europe/Istanbul node server.js",
     "predev": "node predev.cjs",
-    "dev": "nodemon server.js",
+    "dev": "TZ=Europe/Istanbul nodemon server.js",
     "seed": "node scripts/seed-admin.js",
     "migrate": "node scripts/run-migration.js migration_one_active_package_per_member.sql",
     "migrate:run": "node scripts/run-migration.js",
