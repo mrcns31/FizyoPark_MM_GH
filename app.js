@@ -275,8 +275,16 @@ function fmtPlannerDayNavLabel(d) {
   return day + "." + month + "." + year + " " + dayName;
 }
 
+function fmtMobileDayNavLabel(d) {
+  const day = String(d.getDate()).padStart(2, "0");
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const year = d.getFullYear();
+  const weekday = d.toLocaleDateString("tr-TR", { weekday: "short" });
+  return day + "." + month + "." + year + " " + weekday;
+}
+
 function fmtAdminMobileDayLabel(d) {
-  return fmtPlannerDayNavLabel(d);
+  return fmtMobileDayNavLabel(d);
 }
 
 function fmtWeekLabel(weekStart) {
@@ -1556,7 +1564,7 @@ function handleMobileEventTap(ev, onOpen) {
 }
 
 function isPlannerDatePickEnabled() {
-  return !isMemberUser() && isAdminUser();
+  return !isMemberUser() && (isAdminUser() || isMobilePlanner());
 }
 
 function syncPlannerJumpDateInput() {
@@ -1611,7 +1619,7 @@ function updateDateNavLabel() {
   if (ui.viewMode === "day") {
     const d = ui.currentDay;
     const dayOfWeek = d.getDay();
-    let label = fmtPlannerDayNavLabel(d);
+    let label = isMobilePlanner() ? fmtMobileDayNavLabel(d) : fmtPlannerDayNavLabel(d);
     if (!isDayEnabled(dayOfWeek)) {
       label += " · Kapalı";
     }

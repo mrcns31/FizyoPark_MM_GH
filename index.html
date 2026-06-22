@@ -1242,11 +1242,11 @@
                 <button type="button" class="input-stepper__btn" data-step="-1" data-target="groupSessionNewDate" data-type="date" aria-label="Önceki gün">&#8249;</button>
                 <div class="group-session-modal__input-wrap input-stepper__wrap">
                   <input id="groupSessionNewDate" class="input group-session-modal__input" type="date" />
+                  <span id="groupSessionNewDateDay" class="input-stepper__day"></span>
                   <span class="group-session-modal__input-icon" aria-hidden="true">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
                   </span>
                 </div>
-                <span id="groupSessionNewDateDay" class="input-stepper__day"></span>
                 <button type="button" class="input-stepper__btn" data-step="1" data-target="groupSessionNewDate" data-type="date" aria-label="Sonraki gün">&#8250;</button>
               </div>
             </div>
@@ -1276,11 +1276,11 @@
                 <button type="button" class="input-stepper__btn" data-step="-1" data-target="groupSessionDate" data-type="date" aria-label="Önceki gün">&#8249;</button>
                 <div class="group-session-modal__input-wrap input-stepper__wrap">
                   <input id="groupSessionDate" class="input group-session-modal__input" type="date" />
+                  <span id="groupSessionDateDay" class="input-stepper__day"></span>
                   <span class="group-session-modal__input-icon" aria-hidden="true">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
                   </span>
                 </div>
-                <span id="groupSessionDateDay" class="input-stepper__day"></span>
                 <button type="button" class="input-stepper__btn" data-step="1" data-target="groupSessionDate" data-type="date" aria-label="Sonraki gün">&#8250;</button>
               </div>
             </div>
@@ -1655,8 +1655,10 @@
               <label class="label" for="sessionDate">Tarih</label>
               <div class="input-stepper">
                 <button type="button" class="input-stepper__btn" data-step="-1" data-target="sessionDate" data-type="date" aria-label="Önceki gün">&#8249;</button>
-                <input id="sessionDate" class="input input-stepper__input" type="date" />
-                <span id="sessionDateDay" class="input-stepper__day"></span>
+                <div class="input-stepper__wrap">
+                  <input id="sessionDate" class="input input-stepper__input" type="date" />
+                  <span id="sessionDateDay" class="input-stepper__day"></span>
+                </div>
                 <button type="button" class="input-stepper__btn" data-step="1" data-target="sessionDate" data-type="date" aria-label="Sonraki gün">&#8250;</button>
               </div>
             </div>
