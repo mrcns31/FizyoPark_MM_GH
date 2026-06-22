@@ -55,7 +55,7 @@ services:
       - traefik.enable=true
       - traefik.docker.network=edge
       # Host bazli yonlendirme: yalniz ${APP_HOST}'a gelen istek bu app'e; gerisi mevcut app'te kalir.
-      - "traefik.http.routers.fizyo-mm-web.rule=Host(`${APP_HOST:-fizyopark-mm.local}`) || Host(`${APP_HOST2:-fizyopark-mm-2.local}`)"
+      - "traefik.http.routers.fizyo-mm-web.rule=Host(`${APP_HOST:-fizyopark-mm.local}`) || Host(`${APP_HOST2:-fizyopark-mm-2.local}`) || Host(`${APP_HOST3:-fizyopark-mm-3.local}`)"
       - traefik.http.routers.fizyo-mm-web.entrypoints=websecure
       - traefik.http.routers.fizyo-mm-web.tls=true
       # le-mm: bu app'e ozel ACME hesabi (mail: fizyoparkankara@gmail.com), infra'da tanimli.
