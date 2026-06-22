@@ -100,7 +100,6 @@ router.post('/verify-access', async (req, res) => {
       memberUserId = memberRow.rows[0]?.user_id || null;
     } catch (_) {}
 
-    await logWalkInQrAccess(db, result.memberId);
     if (checkIn.checkedIn) {
       await activityLog(req, {
         action: 'session.check_in_qr',
@@ -116,6 +115,8 @@ router.post('/verify-access', async (req, res) => {
           checkInMethod: 'qr',
         },
       }).catch(() => {});
+    } else {
+      await logWalkInQrAccess(db, result.memberId);
     }
 
     res.json({
@@ -161,7 +162,6 @@ router.post('/verify-card-access', async (req, res) => {
         console.warn('verify-card-access: checked_in_at sütunu yok; migration_sessions_check_in.sql çalıştırın');
       }
 
-      await logWalkInQrAccess(db, memberId, 'card');
       if (checkIn.checkedIn) {
         await activityLog(req, {
           action: 'session.check_in_qr',
@@ -172,6 +172,8 @@ router.post('/verify-card-access', async (req, res) => {
             : { actorName: memberName ? `Üye: ${memberName}` : `Üye#${memberId}` }),
           details: { memberId, memberName: memberName || undefined, startTs: checkIn.startTs, checkInMethod: 'card' },
         }).catch(() => {});
+      } else {
+        await logWalkInQrAccess(db, memberId, 'card');
       }
 
       const packageStats = await getActivePackageStats(db, memberId, checkIn.checkedIn ? checkIn.sessionId : null);
@@ -246,7 +248,6 @@ router.post('/verify-phone-access', async (req, res) => {
         console.warn('verify-phone-access: checked_in_at sütunu yok; migration_sessions_check_in.sql çalıştırın');
       }
 
-      await logWalkInQrAccess(db, memberId, 'phone');
       if (checkIn.checkedIn) {
         await activityLog(req, {
           action: 'session.check_in_qr',
@@ -257,6 +258,8 @@ router.post('/verify-phone-access', async (req, res) => {
             : { actorName: memberName ? `Üye: ${memberName}` : `Üye#${memberId}` }),
           details: { memberId, memberName: memberName || undefined, startTs: checkIn.startTs, checkInMethod: 'phone' },
         }).catch(() => {});
+      } else {
+        await logWalkInQrAccess(db, memberId, 'phone');
       }
 
       const packageStats = await getActivePackageStats(db, memberId, checkIn.checkedIn ? checkIn.sessionId : null);
