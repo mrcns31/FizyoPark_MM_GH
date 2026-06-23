@@ -803,6 +803,7 @@ let ui = {
   filterStaffId: "",
   filterRoomId: "",
   plannerFilter: "",
+  showCalendarRemaining: false,
   editingSessionId: null,
   editingMemberId: null, // Üye Kimlik Kartı düzenleme
   deleteMemberId: null,  // Üye silme modalında silinecek üye id
@@ -1836,14 +1837,33 @@ function renderHeader() {
   const header = els.plannerHeader;
   header.innerHTML = "";
 
+  const planner = document.getElementById("memberPlanner");
+  if (planner) planner.classList.toggle("show-remaining", !!ui.showCalendarRemaining);
+
+  function buildRemainingToggleBtn() {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "calendar-remaining-toggle" + (ui.showCalendarRemaining ? " calendar-remaining-toggle--on" : "");
+    btn.title = ui.showCalendarRemaining ? "Kalan seansı gizle" : "Kalan seansı göster";
+    btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
+    btn.addEventListener("click", () => {
+      ui.showCalendarRemaining = !ui.showCalendarRemaining;
+      if (planner) planner.classList.toggle("show-remaining", ui.showCalendarRemaining);
+      btn.classList.toggle("calendar-remaining-toggle--on", ui.showCalendarRemaining);
+      btn.title = ui.showCalendarRemaining ? "Kalan seansı gizle" : "Kalan seansı göster";
+    });
+    return btn;
+  }
+
   if (ui.viewMode === "day") {
     const d = ui.currentDay;
     const dayOfWeek = d.getDay();
     header.style.gridTemplateColumns = "74px 1fr";
 
     const blank = document.createElement("div");
-    blank.className = "headCell";
+    blank.className = "headCell headCell--saat";
     blank.textContent = "Saat";
+    blank.appendChild(buildRemainingToggleBtn());
     header.appendChild(blank);
 
     const cell = document.createElement("div");
@@ -1873,8 +1893,9 @@ function renderHeader() {
     header.style.gridTemplateColumns = `74px repeat(${enabledCount}, minmax(180px, 1fr))`;
 
     const blank = document.createElement("div");
-    blank.className = "headCell";
+    blank.className = "headCell headCell--saat";
     blank.textContent = "Saat";
+    blank.appendChild(buildRemainingToggleBtn());
     header.appendChild(blank);
 
     for (let i = 0; i < 7; i++) {
@@ -4235,9 +4256,9 @@ function getSessionMemberNameHtmlForCalendar(s) {
   const mp = getSessionMemberPackage(s);
   const pkgName = mp ? (mp.packageName || '') : '';
   const color = remainingSessionsColor(info.remaining, info.total);
-  const colorStyle = color ? ` style="color:${color};font-weight:700"` : '';
+  const colorStyle = color ? ` style="color:${color}"` : '';
   const titleAttr = pkgName ? ` title="${escapeHtml(pkgName)}"` : '';
-  return `${escapeHtml(name)} <span${colorStyle}${titleAttr}>(${info.remaining}/${info.total})</span>`;
+  return `${escapeHtml(name)} <span class="calendar-remaining-badge"${colorStyle}${titleAttr}>(${info.remaining}/${info.total})</span>`;
 }
 
 function formatDateTR(dateStr) {
