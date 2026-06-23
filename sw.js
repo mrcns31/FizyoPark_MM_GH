@@ -72,20 +72,16 @@ self.addEventListener("fetch", function (event) {
   if (!isStaticAsset(url)) return;
 
   event.respondWith(
-    caches.match(request).then(function (cached) {
-      var networkFetch = fetch(request).then(function (response) {
-        if (response && response.status === 200 && response.type === "basic") {
-          var copy = response.clone();
-          caches.open(CACHE_NAME).then(function (cache) {
-            cache.put(request, copy);
-          });
-        }
-        return response;
-      }).catch(function () {
-        return cached;
-      });
-
-      return cached || networkFetch;
+    fetch(request).then(function (response) {
+      if (response && response.status === 200 && response.type === "basic") {
+        var copy = response.clone();
+        caches.open(CACHE_NAME).then(function (cache) {
+          cache.put(request, copy);
+        });
+      }
+      return response;
+    }).catch(function () {
+      return caches.match(request);
     })
   );
 });
