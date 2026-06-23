@@ -4227,14 +4227,17 @@ function getSessionCalendarRemainingInfo(s) {
   return { remaining, total };
 }
 
-/** Takvim grid'i için üye adı + kalan seans sayısı HTML'i döndürür. */
+/** Takvim grid'i için üye adı + kalan/toplam seans HTML'i döndürür. */
 function getSessionMemberNameHtmlForCalendar(s) {
   const name = getSessionMemberShortName(s);
   const info = getSessionCalendarRemainingInfo(s);
   if (!info) return escapeHtml(name);
+  const mp = getSessionMemberPackage(s);
+  const pkgName = mp ? (mp.packageName || '') : '';
   const color = remainingSessionsColor(info.remaining, info.total);
   const colorStyle = color ? ` style="color:${color};font-weight:700"` : '';
-  return `${escapeHtml(name)} <span${colorStyle}>(${info.remaining})</span>`;
+  const titleAttr = pkgName ? ` title="${escapeHtml(pkgName)}"` : '';
+  return `${escapeHtml(name)} <span${colorStyle}${titleAttr}>(${info.remaining}/${info.total})</span>`;
 }
 
 function formatDateTR(dateStr) {
