@@ -4537,23 +4537,13 @@ select option:checked{
 }
 .calendar-remaining-badge{ font-weight:700; display:none; }
 #memberPlanner.show-remaining .calendar-remaining-badge{ display:inline; }
-.headCell--saat{ display:flex; align-items:center; justify-content:space-between; gap:4px; }
-.calendar-remaining-toggle{
-  display:inline-flex;
-  align-items:center;
-  justify-content:center;
-  width:22px;
-  height:22px;
-  border-radius:4px;
-  border:1px solid var(--border);
-  background:transparent;
-  color:var(--muted);
+.headCell--saat{
   cursor:pointer;
-  flex-shrink:0;
-  transition:color .15s, background .15s, border-color .15s;
+  user-select:none;
+  transition:color .15s;
 }
-.calendar-remaining-toggle:hover{ color:var(--text); border-color:var(--text); }
-.calendar-remaining-toggle--on{ color:var(--accent,#7c5cfc); border-color:var(--accent,#7c5cfc); background:rgba(124,92,252,.12); }
+.headCell--saat:hover{ color:var(--text); }
+.headCell--saat--on{ color:var(--accent,#7c5cfc) !important; }
 .planner-day-summary{
   display:flex;
   flex-wrap:wrap;

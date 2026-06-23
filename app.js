@@ -1840,19 +1840,15 @@ function renderHeader() {
   const planner = document.getElementById("memberPlanner");
   if (planner) planner.classList.toggle("show-remaining", !!ui.showCalendarRemaining);
 
-  function buildRemainingToggleBtn() {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "calendar-remaining-toggle" + (ui.showCalendarRemaining ? " calendar-remaining-toggle--on" : "");
-    btn.title = ui.showCalendarRemaining ? "Kalan seansı gizle" : "Kalan seansı göster";
-    btn.innerHTML = `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>`;
-    btn.addEventListener("click", () => {
+  function applySaatToggle(el) {
+    el.classList.toggle("headCell--saat--on", !!ui.showCalendarRemaining);
+    el.title = ui.showCalendarRemaining ? "Kalan seansı gizle" : "Kalan seansı göster";
+    el.addEventListener("click", () => {
       ui.showCalendarRemaining = !ui.showCalendarRemaining;
       if (planner) planner.classList.toggle("show-remaining", ui.showCalendarRemaining);
-      btn.classList.toggle("calendar-remaining-toggle--on", ui.showCalendarRemaining);
-      btn.title = ui.showCalendarRemaining ? "Kalan seansı gizle" : "Kalan seansı göster";
+      el.classList.toggle("headCell--saat--on", ui.showCalendarRemaining);
+      el.title = ui.showCalendarRemaining ? "Kalan seansı gizle" : "Kalan seansı göster";
     });
-    return btn;
   }
 
   if (ui.viewMode === "day") {
@@ -1863,7 +1859,7 @@ function renderHeader() {
     const blank = document.createElement("div");
     blank.className = "headCell headCell--saat";
     blank.textContent = "Saat";
-    blank.appendChild(buildRemainingToggleBtn());
+    applySaatToggle(blank);
     header.appendChild(blank);
 
     const cell = document.createElement("div");
@@ -1895,7 +1891,7 @@ function renderHeader() {
     const blank = document.createElement("div");
     blank.className = "headCell headCell--saat";
     blank.textContent = "Saat";
-    blank.appendChild(buildRemainingToggleBtn());
+    applySaatToggle(blank);
     header.appendChild(blank);
 
     for (let i = 0; i < 7; i++) {
