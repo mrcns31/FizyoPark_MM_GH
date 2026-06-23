@@ -4229,7 +4229,7 @@ function getSessionMemberPackage(s) {
 
 function getSessionCalendarRemainingInfo(s) {
   const mp = getSessionMemberPackage(s);
-  if (!mp || !isMemberPackageActive(mp)) return null;
+  if (!mp || (mp.status || 'active').toLowerCase() !== 'active') return null;
   const total = Number(mp.lessonCount ?? mp.lesson_count ?? 0);
   if (!total) return null;
   let remaining;

@@ -600,6 +600,7 @@
       method: 'POST',
       body: JSON.stringify(body ? memberToApi(body) : {}),
     });
+    invalidateStaticCache();
     return memberFromApi(row);
   }
   async function updateMember(id, body) {
