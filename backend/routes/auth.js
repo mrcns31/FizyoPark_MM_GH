@@ -527,4 +527,23 @@ router.post('/verify-password', verifyToken, [
   }
 });
 
+router.post('/push-token', verifyToken, async (req, res) => {
+  const { token } = req.body;
+  if (!token || typeof token !== 'string') {
+    return res.status(400).json({ error: 'Token gerekli' });
+  }
+  try {
+    await db.query(
+      `INSERT INTO push_tokens (user_id, token)
+       VALUES ($1, $2)
+       ON CONFLICT (user_id, token) DO UPDATE SET updated_at = CURRENT_TIMESTAMP`,
+      [req.user.userId, token]
+    );
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('Push token kayıt hatası:', error);
+    res.status(500).json({ error: 'Token kaydedilemedi' });
+  }
+});
+
 export default router;

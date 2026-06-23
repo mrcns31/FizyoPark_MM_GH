@@ -32,3 +32,7 @@ export async function listNotifications(unreadOnly = false): Promise<StaffNotifi
 export async function markNotificationRead(id: number): Promise<void> {
   await apiClient.post(`/session-attendance/notifications/${id}/read`, {});
 }
+
+export async function registerPushToken(token: string): Promise<void> {
+  await apiClient.post('/auth/push-token', { token });
+}

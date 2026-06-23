@@ -11,6 +11,26 @@ import { autoCompletePackageIfExhausted, isSessionCancelled } from './packageSes
 
 const ATTENDANCE_TYPE_SHIFT_REMINDER = 'attendance_pending_shift_end';
 
+async function sendExpoPush(db, userId, title, body) {
+  try {
+    const { rows } = await db.query('SELECT token FROM push_tokens WHERE user_id = $1', [userId]);
+    if (!rows.length) return;
+    const messages = rows.map((r) => ({
+      to: r.token,
+      title,
+      body,
+      sound: 'default',
+    }));
+    await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(messages),
+    });
+  } catch {
+    // push hatası bildirimi engellemesin
+  }
+}
+
 /** Yönetici manuel girişi (VARCHAR(10) uyumlu; eski manual_admin de okunur) */
 export function isAdminCheckInMethod(method) {
   return method === 'admin' || method === 'manual_admin';
@@ -432,6 +452,7 @@ async function createShiftReminderNotification(db, userId, dateStr, pendingCount
       JSON.stringify({ date: dateStr, pendingCount }),
     ]
   );
+  await sendExpoPush(db, userId, title, body);
 }
 
 /**

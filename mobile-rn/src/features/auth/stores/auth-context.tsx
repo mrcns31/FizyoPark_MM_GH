@@ -3,6 +3,8 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import { setUnauthorizedHandler } from '../../../lib/api-client';
 import { getToken } from '../../../lib/storage';
+import { getExpoPushToken } from '../../../lib/push-notifications';
+import { registerPushToken } from '../../notifications/api/notifications';
 import type { Role, UserProfile } from '../../../types/api';
 import { authKeys, useCurrentUser, useLogin, useLogout } from '../api/hooks';
 
@@ -56,6 +58,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await loginMutation.mutateAsync({ email, password, rememberMe });
       setHasToken(true);
       await queryClient.invalidateQueries({ queryKey: authKeys.me });
+      getExpoPushToken().then((token) => {
+        if (token) registerPushToken(token).catch(() => {});
+      });
     },
     [loginMutation, queryClient]
   );

@@ -13,6 +13,7 @@
     },
     "android": {
       "package": "com.fizyopark.mobilern",
+      "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
@@ -27,7 +28,22 @@
     "plugins": [
       "expo-secure-store",
       "@react-native-community/datetimepicker",
-      "expo-router"
-    ]
+      "expo-router",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/icon.png",
+          "color": "#1a6fba",
+          "defaultChannel": "fizyopark"
+        }
+      ]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "c69218e6-f372-4625-8359-1723351dc7f1"
+      },
+      "apiBase": "https://admin.fizyopark.com/api"
+    }
   }
 }
