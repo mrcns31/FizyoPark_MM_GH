@@ -1167,6 +1167,7 @@ function cacheEls() {
     "memberPackageModal",
     "mpPackage",
     "mpPackageFirstSessionHint",
+    "mpModalTitle",
     "mpMemberNo",
     "mpStartDate",
     "mpEndDate",
@@ -1806,6 +1807,31 @@ function buildStaffInitialsBar(className) {
   return bar;
 }
 
+function buildDayStaffSummaryHtml(dayDate) {
+  const startTs = startOfDay(dayDate).getTime();
+  const endTs = startTs + 24 * 60 * 60 * 1000;
+  const daySessions = (state.sessions || []).filter(
+    (s) => Number(s.startTs) >= startTs && Number(s.startTs) < endTs
+  );
+  if (!daySessions.length) return '';
+  const countsMap = new Map();
+  for (const s of daySessions) {
+    if (!countsMap.has(s.staffId)) {
+      const staff = getStaffById(s.staffId);
+      const name = staff ? getStaffFirstName(staff) : '?';
+      const color = staffColor(s.staffId);
+      countsMap.set(s.staffId, { name, count: 0, color });
+    }
+    countsMap.get(s.staffId).count++;
+  }
+  const items = [...countsMap.values()].sort((a, b) => a.name.localeCompare(b.name, 'tr'));
+  const chips = items.map(({ name, count, color }) =>
+    `<span class="planner-day-summary__chip" style="color:${color.border}">${escapeHtml(name)}: <strong>${count}</strong></span>`
+  ).join('');
+  const total = `<span class="planner-day-summary__total">Toplam: <strong>${daySessions.length}</strong></span>`;
+  return `<div class="planner-day-summary">${chips}${total}</div>`;
+}
+
 function renderHeader() {
   const header = els.plannerHeader;
   header.innerHTML = "";
@@ -1825,6 +1851,13 @@ function renderHeader() {
     const dateInfo = document.createElement("div");
     dateInfo.innerHTML = calendarHeadCellHtml(d, isDayEnabled(dayOfWeek) ? {} : { closed: true });
     cell.appendChild(dateInfo);
+
+    const summaryHtmlDay = buildDayStaffSummaryHtml(d);
+    if (summaryHtmlDay) {
+      const summaryEl = document.createElement("div");
+      summaryEl.innerHTML = summaryHtmlDay;
+      cell.appendChild(summaryEl.firstElementChild);
+    }
 
     const staffBar = buildStaffInitialsBar("staff-initials-bar staff-initials-bar--inline");
     if (staffBar) cell.appendChild(staffBar);
@@ -1850,6 +1883,12 @@ function renderHeader() {
       const cell = document.createElement("div");
       cell.className = "headCell headCell--day";
       cell.innerHTML = calendarHeadCellHtml(d);
+      const summaryHtmlWeek = buildDayStaffSummaryHtml(d);
+      if (summaryHtmlWeek) {
+        const summaryEl = document.createElement("div");
+        summaryEl.innerHTML = summaryHtmlWeek;
+        cell.appendChild(summaryEl.firstElementChild);
+      }
       header.appendChild(cell);
     }
 
@@ -2964,7 +3003,7 @@ function renderAdminStaffSlotCardHtml(group, entryIdx) {
   const color = staffColor(group.staffId);
   const memberLines = group.sessions
     .map(function (sess) {
-      return '<div class="event__member-name">' + escapeHtml(getSessionMemberShortName(sess)) + '</div>';
+      return '<div class="event__member-name">' + getSessionMemberNameHtmlForCalendar(sess) + '</div>';
     })
     .join("");
   const cardStyle =
@@ -3023,7 +3062,7 @@ function renderAdminPlannerListCardHtml(entry, entryIdx) {
     const staff = getStaffById(group.staffId);
     const memberLines = group.sessions
       .map(function (sess) {
-        return '<div class="event__member-name">' + escapeHtml(getSessionMemberShortName(sess)) + '</div>';
+        return '<div class="event__member-name">' + getSessionMemberNameHtmlForCalendar(sess) + '</div>';
       })
       .join("");
     return (
@@ -3060,7 +3099,7 @@ function renderAdminPlannerListCardHtml(entry, entryIdx) {
     escapeHtml(fmtStaffLabelWithRoomRemaining(staff, s.roomId, s.startTs, s.endTs)) +
     "</div>" +
     '<div class="planner-session-card__members">' +
-    '<div class="event__member-name">' + escapeHtml(getSessionMemberShortName(s)) + '</div>' +
+    '<div class="event__member-name">' + getSessionMemberNameHtmlForCalendar(s) + '</div>' +
     "</div>" +
     (note ? '<div class="planner-session-card__detail">' + escapeHtml(note) + "</div>" : "") +
     "</div></article>"
@@ -3792,7 +3831,7 @@ function renderEvents({ startMin, slotMin, slotsCount }) {
 
     const staff = getStaffById(group.staffId);
     const color = staffColor(group.staffId);
-    const memberShortNames = group.sessions.map((sess) => getSessionMemberShortName(sess));
+    const memberNamesHtml = group.sessions.map((sess) => `<div class="event__member-name">${getSessionMemberNameHtmlForCalendar(sess)}</div>`).join("");
 
     const startTime = minutesToTime(startMinOfDay);
     const endTime = minutesToTime(endMinOfDay);
@@ -3815,7 +3854,7 @@ function renderEvents({ startMin, slotMin, slotsCount }) {
           <div class="event__title" title="${escapeHtml(fullTitle)}">${escapeHtml(staffShort)}</div>
           ${groupDeleteBtn}
         </div>
-        <div class="event__members">${memberShortNames.map((n) => `<div class="event__member-name">${escapeHtml(n)}</div>`).join("")}</div>
+        <div class="event__members">${memberNamesHtml}</div>
       `;
     } else {
       ev.innerHTML = `
@@ -3823,7 +3862,7 @@ function renderEvents({ startMin, slotMin, slotsCount }) {
           <div class="event__title" title="${escapeHtml(fullTitle)}">${escapeHtml(staffShort)}</div>
           ${groupDeleteBtn}
         </div>
-        <div class="event__members">${memberShortNames.map((n) => `<div class="event__member-name">${escapeHtml(n)}</div>`).join("")}</div>
+        <div class="event__members">${memberNamesHtml}</div>
       `;
     }
 
@@ -3952,7 +3991,7 @@ function renderEvents({ startMin, slotMin, slotsCount }) {
       ? `${getSessionMemberDisplayName(s)} • ${getStaffFullName(staff)} • ${startTime}-${endTime}`
       : `${getSessionMemberDisplayName(s)} • ${getRoomById(s.roomId)?.name || "Oda"} • ${getStaffFullName(staff)} • ${startTime}-${endTime}`;
     const staffShort = fmtStaffLabelWithRoomRemaining(staff, s.roomId, s.startTs, s.endTs);
-    const memberShort = getSessionMemberShortName(s);
+    const memberNameHtml = getSessionMemberNameHtmlForCalendar(s);
 
     ev.style.borderColor = color.border;
     ev.style.background = `linear-gradient(180deg, ${color.bg}, rgba(255,255,255,.04))`;
@@ -3968,7 +4007,7 @@ function renderEvents({ startMin, slotMin, slotsCount }) {
           <div class="event__title" title="${escapeHtml(fullTitle)}">${escapeHtml(staffShort)}</div>
           ${singleDeleteBtnHtml}
         </div>
-        <div class="event__members"><div class="event__member-name">${escapeHtml(memberShort)}</div></div>
+        <div class="event__members"><div class="event__member-name">${memberNameHtml}</div></div>
       `;
     } else {
       ev.innerHTML = `
@@ -3976,7 +4015,7 @@ function renderEvents({ startMin, slotMin, slotsCount }) {
           <div class="event__title" title="${escapeHtml(fullTitle)}">${escapeHtml(staffShort)}</div>
           ${singleDeleteBtnHtml}
         </div>
-        <div class="event__members"><div class="event__member-name">${escapeHtml(memberShort)}</div></div>
+        <div class="event__members"><div class="event__member-name">${memberNameHtml}</div></div>
       `;
     }
 
@@ -4164,6 +4203,38 @@ function remainingSessionsHtml(remaining, total) {
   const color = remainingSessionsColor(remaining, total);
   const style = color ? ` style="color:${color}; font-weight:700;"` : "";
   return `<span${style}>${escapeHtml(String(remaining))}</span>`;
+}
+
+function getSessionMemberPackage(s) {
+  if (!s || !s.memberPackageId) return null;
+  return (state.memberPackages || []).find((mp) => normId(mp.id) === normId(s.memberPackageId)) || null;
+}
+
+function getSessionCalendarRemainingInfo(s) {
+  const mp = getSessionMemberPackage(s);
+  if (!mp || !isMemberPackageActive(mp)) return null;
+  const total = Number(mp.lessonCount ?? mp.lesson_count ?? 0);
+  if (!total) return null;
+  let remaining;
+  if (mp.remainingSessions != null) {
+    remaining = Math.max(0, Number(mp.remainingSessions));
+  } else {
+    const pkgSessions = (state.sessions || []).filter(
+      (ps) => normId(ps.memberPackageId) === normId(mp.id)
+    );
+    remaining = computePackageSessionCountsFromSessions(pkgSessions, total).remaining;
+  }
+  return { remaining, total };
+}
+
+/** Takvim grid'i için üye adı + kalan seans sayısı HTML'i döndürür. */
+function getSessionMemberNameHtmlForCalendar(s) {
+  const name = getSessionMemberShortName(s);
+  const info = getSessionCalendarRemainingInfo(s);
+  if (!info) return escapeHtml(name);
+  const color = remainingSessionsColor(info.remaining, info.total);
+  const colorStyle = color ? ` style="color:${color};font-weight:700"` : '';
+  return `${escapeHtml(name)} <span${colorStyle}>(${info.remaining})</span>`;
 }
 
 function formatDateTR(dateStr) {
@@ -9264,6 +9335,7 @@ function openMemberPackageModal(memberId, memberPackageId, options) {
   }
 
   if (els.mpMemberNo) els.mpMemberNo.value = pending ? "Yeni üye" : (m.memberNo || m.name || "");
+  if (els.mpModalTitle) els.mpModalTitle.textContent = m ? `${m.name} - Aldığı Paket Bilgisi` : "Aldığı Paket Bilgisi";
 
   if (els.mpPackage) {
     els.mpPackage.innerHTML = '<option value="">Seçiniz</option>' + (state.packages || []).map((p) => `<option value="${p.id}">${escapeHtml(p.name)}</option>`).join("");
