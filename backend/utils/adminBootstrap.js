@@ -47,7 +47,18 @@ export async function fetchBootstrapMemberPackages() {
   const result = await db.query(
     `SELECT mp.id, mp.member_id, mp.package_id, mp.start_date, mp.end_date, mp.status, mp.skip_day_distribution,
             p.name as package_name, p.lesson_count, p.month_overrun, p.package_type,
-            COALESCE(TRIM(m.first_name || ' ' || m.last_name), m.name, '') as member_name, m.member_no
+            COALESCE(TRIM(m.first_name || ' ' || m.last_name), m.name, '') as member_name, m.member_no,
+            GREATEST(0, p.lesson_count - (
+              SELECT COUNT(*) FROM sessions s
+              WHERE s.member_package_id = mp.id
+                AND s.deleted_at IS NULL
+                AND (
+                  s.checked_in_at IS NOT NULL
+                  OR s.attendance_outcome = 'no_show'
+                  OR (s.end_ts < EXTRACT(EPOCH FROM NOW()) * 1000
+                      AND EXTRACT(EPOCH FROM NOW()) * 1000 >= s.start_ts - 7200000)
+                )
+            )) AS remaining_sessions
      FROM member_packages mp
      JOIN packages p ON p.id = mp.package_id
      JOIN members m ON m.id = mp.member_id AND (m.deleted_at IS NULL)

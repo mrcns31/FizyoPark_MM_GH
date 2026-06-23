@@ -167,6 +167,7 @@
       slots: (row.slots || []).map(function (s) {
         return { id: s.id, dayOfWeek: s.day_of_week, startTime: s.start_time, staffId: s.staff_id };
       }),
+      remainingSessions: row.remaining_sessions != null ? Number(row.remaining_sessions) : null,
       sessionConflicts: row.sessionConflicts || [],
       sessionsCreated: row.sessions_created != null ? Number(row.sessions_created) : (row.sessionsCreated != null ? Number(row.sessionsCreated) : null),
     };
