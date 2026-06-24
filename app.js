@@ -1574,6 +1574,14 @@ function isPlannerDatePickEnabled() {
 function syncPlannerJumpDateInput() {
   if (!els.plannerJumpDate || !isPlannerDatePickEnabled()) return;
   els.plannerJumpDate.value = dateToInputValue(startOfDay(ui.currentDay || new Date()));
+  var bounds = getStaffCalendarBounds();
+  if (bounds) {
+    els.plannerJumpDate.min = bounds.min ? dateToInputValue(bounds.min) : "";
+    els.plannerJumpDate.max = bounds.max ? dateToInputValue(bounds.max) : "";
+  } else {
+    els.plannerJumpDate.min = "";
+    els.plannerJumpDate.max = "";
+  }
 }
 
 function openPlannerJumpDatePicker() {
@@ -1595,7 +1603,7 @@ function onPlannerJumpDateSelected() {
     ui.viewMode = "day";
     saveUi();
   }
-  setCurrentDay(startOfDay(makeLocalDate(v, "00:00")));
+  setCurrentDay(clampDateToStaffBounds(startOfDay(makeLocalDate(v, "00:00"))));
 }
 
 function updatePlannerDatePickUi() {
