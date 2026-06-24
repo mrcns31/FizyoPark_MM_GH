@@ -1187,6 +1187,7 @@ function cacheEls() {
     "packageInconsistencyCancelBtn",
     "packageSessionsModal",
     "packageSessionsTitle",
+    "packageSessionsAddBtn",
     "packageSessionsExportWrap",
     "packageSessionsExportBtn",
     "packageSessionsExportMenu",
@@ -8998,6 +8999,8 @@ async function renderMemberPackageHistory(memberId) {
 }
 
 let packageSessionsCurrent = null;
+// Paket seansları modalından "Seans Ekle" açıldığında dolu; kapanınca temizlenir.
+let packageSessionAddOverride = null;
 
 function hidePackageSessionsPackagePicker() {
   if (els.packageSessionsPackagePicker) {
@@ -9137,6 +9140,9 @@ function openPackageSessionsModal(mp, memberId, memberOverride, options) {
   }
   if (els.packageSessionsShareBtn) {
     els.packageSessionsShareBtn.classList.toggle("hidden", !(isAdminUser() && isMobilePlanner()));
+  }
+  if (els.packageSessionsAddBtn) {
+    els.packageSessionsAddBtn.classList.toggle("hidden", !isAdminUser());
   }
   els.packageSessionsModal.classList.remove("hidden");
 }
@@ -10022,35 +10028,37 @@ function getMemberIdsWithActivePackage() {
 }
 
 function refreshSessionFormOptions({ dateStr = null, timeStr = null } = {}) {
-  const memberIdsWithActivePackage = getMemberIdsWithActivePackage();
-  let membersToShow = state.members.filter((m) => memberIdsWithActivePackage.has(normId(m.id)));
-  if (ui.editingSessionId) {
-    const s = state.sessions.find((x) => x.id === ui.editingSessionId);
-    if (s) {
-      const currentMemberId = normId(s.memberId);
-      if (!membersToShow.some((m) => normId(m.id) === currentMemberId)) {
-        const currentMember = state.members.find((m) => normId(m.id) === currentMemberId);
-        if (currentMember) membersToShow = [currentMember, ...membersToShow];
+  // Paket override modunda üye listesine dokunma — üye zaten kilitli ve doğru seçili
+  if (!packageSessionAddOverride) {
+    const memberIdsWithActivePackage = getMemberIdsWithActivePackage();
+    let membersToShow = state.members.filter((m) => memberIdsWithActivePackage.has(normId(m.id)));
+    if (ui.editingSessionId) {
+      const s = state.sessions.find((x) => x.id === ui.editingSessionId);
+      if (s) {
+        const currentMemberId = normId(s.memberId);
+        if (!membersToShow.some((m) => normId(m.id) === currentMemberId)) {
+          const currentMember = state.members.find((m) => normId(m.id) === currentMemberId);
+          if (currentMember) membersToShow = [currentMember, ...membersToShow];
+        }
+      }
+    }
+    els.sessionMember.innerHTML = "";
+    for (const m of membersToShow) {
+      const o = document.createElement("option");
+      o.value = String(Number(m.id));
+      o.textContent = getMemberDisplayName(m);
+      els.sessionMember.appendChild(o);
+    }
+    if (ui.editingSessionId) {
+      const sess = state.sessions.find((x) => x.id === ui.editingSessionId);
+      if (sess) {
+        const memberVal = String(Number(sess.memberId));
+        if (els.sessionMember.querySelector(`option[value="${memberVal}"]`)) els.sessionMember.value = memberVal;
       }
     }
   }
-  els.sessionMember.innerHTML = "";
-  for (const m of membersToShow) {
-    const o = document.createElement("option");
-    o.value = String(Number(m.id));
-    o.textContent = getMemberDisplayName(m);
-    els.sessionMember.appendChild(o);
-  }
-  // Düzenleme modunda üye seçimini düzenlenen seansa kilitle (liste yeniden oluşunca kaybolmasın)
-  if (ui.editingSessionId) {
-    const sess = state.sessions.find((x) => x.id === ui.editingSessionId);
-    if (sess) {
-      const memberVal = String(Number(sess.memberId));
-      if (els.sessionMember.querySelector(`option[value="${memberVal}"]`)) els.sessionMember.value = memberVal;
-    }
-  }
 
-  // Staff - sadece personelin o gün çalışma saatlerine göre filtrele
+  // Staff - sadece personelin o gün çalışma saatlerine göre filtrele (her modda çalışır)
   els.sessionStaff.innerHTML = "";
   let filteredStaff = state.staff;
 
@@ -10082,6 +10090,8 @@ function refreshSessionFormOptions({ dateStr = null, timeStr = null } = {}) {
 
 function updateSessionPackageHint() {
   if (!els.sessionPackageHint) return;
+  // Paket override modunda hint zaten açılışta set edildi, değiştirme
+  if (packageSessionAddOverride) return;
   const memberId = els.sessionMember && els.sessionMember.value ? normId(els.sessionMember.value) : null;
   const dateStr = els.sessionDate && els.sessionDate.value ? els.sessionDate.value : null;
   if (!memberId || !dateStr) {
@@ -10143,7 +10153,8 @@ function bindSessionFormSlotListeners() {
   els.sessionTime.addEventListener("input", onSessionFormSlotChange);
 }
 
-async function openSessionModal({ mode, date, time, sessionId }) {
+async function openSessionModal({ mode, date, time, sessionId, packageOverride = null }) {
+  packageSessionAddOverride = packageOverride || null;
   refreshSessionFormOptions({ dateStr: date, timeStr: time });
   showError("");
 
@@ -10162,8 +10173,23 @@ async function openSessionModal({ mode, date, time, sessionId }) {
     els.sessionNote.value = "";
     updateDateDayLabel("sessionDate");
 
-    // Varsayılan seçimler
-    if (state.members[0]) els.sessionMember.value = state.members[0].id;
+    if (packageOverride) {
+      // Üyeyi zorla ekle (aktif paket filtresi bypass) ve kilitle
+      if (els.sessionMember) {
+        els.sessionMember.innerHTML = "";
+        const o = document.createElement("option");
+        o.value = String(Number(packageOverride.memberId));
+        o.textContent = packageOverride.memberName || `Üye #${packageOverride.memberId}`;
+        els.sessionMember.appendChild(o);
+        els.sessionMember.disabled = true;
+      }
+      if (els.sessionPackageHint) {
+        els.sessionPackageHint.textContent = `Bu seans "${packageOverride.packageName || "Eski Paket"}" paketine eklenecek.`;
+      }
+    } else {
+      // Varsayılan seçimler
+      if (state.members[0]) els.sessionMember.value = state.members[0].id;
+    }
     // Personel listesi zaten refreshSessionFormOptions ile filtrelenmiş
     if (els.sessionStaff.options.length > 0) {
       els.sessionStaff.value = els.sessionStaff.options[0].value;
@@ -10204,6 +10230,8 @@ async function openSessionModal({ mode, date, time, sessionId }) {
 function closeSessionModal() {
   setModal(false);
   ui.editingSessionId = null;
+  packageSessionAddOverride = null;
+  if (els.sessionMember) els.sessionMember.disabled = false;
   // Paket seansları modalı açıksa listeyi yenile (düzenleme sonrası güncel görünsün)
   if (packageSessionsCurrent && els.packageSessionsModal && !els.packageSessionsModal.classList.contains("hidden")) {
     window.API.getMemberPackageSessions(packageSessionsCurrent.mp.id).then((sessions) => {
@@ -10768,7 +10796,11 @@ async function saveSessionFromModal() {
     roomId = existingSession.roomId;
   }
 
-  const candidate = { ...candidateBase, roomId };
+  const candidate = {
+    ...candidateBase,
+    roomId,
+    ...(packageSessionAddOverride ? { memberPackageId: packageSessionAddOverride.memberPackageId } : {}),
+  };
 
   if (slotChanged) {
     const conflicts = checkConflicts(candidate, { ignoreSessionId });
@@ -10827,6 +10859,14 @@ async function saveSessionFromModal() {
   state.sessions.sort((a, b) => a.startTs - b.startTs);
   if (window.API && window.API.getToken()) {
     await syncSessionsFromServer({ silent: true });
+  }
+  // Paket seansları modalı açıksa eklenen seansı listeye yansıt
+  if (packageSessionAddOverride && packageSessionsCurrent) {
+    try {
+      const refreshed = await window.API.getMemberPackageSessions(packageSessionAddOverride.memberPackageId);
+      packageSessionsCurrent.sessions = refreshed || [];
+      renderPackageSessionsTable(packageSessionsCurrent.sessions);
+    } catch (_) {}
   }
   closeSessionModal();
   render();
@@ -12686,6 +12726,25 @@ function bindEvents() {
   els.deleteSessionBtn.addEventListener("click", deleteSessionFromModal);
   if (els.sessionMember) els.sessionMember.addEventListener("change", updateSessionPackageHint);
   if (els.sessionDate) els.sessionDate.addEventListener("change", updateSessionPackageHint);
+  if (els.packageSessionsAddBtn) {
+    els.packageSessionsAddBtn.addEventListener("click", function () {
+      if (!packageSessionsCurrent) return;
+      var mp = packageSessionsCurrent.mp;
+      var m = packageSessionsCurrent.memberOverride ||
+        (packageSessionsCurrent.memberId != null
+          ? state.members.find(function (x) { return normId(x.id) === normId(packageSessionsCurrent.memberId); })
+          : null);
+      openSessionModal({
+        mode: "new",
+        packageOverride: {
+          memberPackageId: mp.id,
+          memberId: packageSessionsCurrent.memberId,
+          memberName: m ? getMemberDisplayName(m) : (packageSessionsCurrent.memberDisplayName || "Üye"),
+          packageName: mp.packageName || mp.package_name || "Paket",
+        },
+      });
+    });
+  }
 
   els.saveWorkingHoursBtn.addEventListener("click", saveWorkingHours);
 
