@@ -7,6 +7,7 @@ import { validateRoomForSession, placeSessionWithRebalance, rebalanceSlotRooms }
 import { cancelPackageSessionsAtSlot, resolveMemberPackageId } from '../utils/packageSessions.js';
 import { log as activityLog } from '../utils/activityLogger.js';
 import { isSessionAttendanceConfirmed } from '../utils/sessionAttendance.js';
+import { matchWalkInToSession } from '../utils/facilityAccess.js';
 import { resolveLocalDateRangeMs } from '../utils/staffWorkingHours.js';
 import { localTodayDateStr } from '../utils/memberPackageStatus.js';
 
@@ -336,7 +337,10 @@ router.post('/', [
       const created = await db.query('SELECT * FROM sessions WHERE id = $1', [placed.sessionId]);
       const createdRow = created.rows[0];
       if (memberPackageId) await trimPackageSessionsIfOver(db, memberPackageId, createdRow?.id);
-      if (createdRow) await activityLog(req, { action: 'session.create', entityType: 'session', entityId: createdRow.id, details: { staffId, memberId, roomId: createdRow.room_id, startTs, endTs } }).catch(() => {});
+      if (createdRow) {
+        await activityLog(req, { action: 'session.create', entityType: 'session', entityId: createdRow.id, details: { staffId, memberId, roomId: createdRow.room_id, startTs, endTs } }).catch(() => {});
+        matchWalkInToSession(db, createdRow.id).catch(() => {});
+      }
       return res.status(201).json(createdRow);
     }
 
@@ -378,7 +382,10 @@ router.post('/', [
         await client.query('COMMIT');
         const createdRow = created.rows[0];
         if (memberPackageId) await trimPackageSessionsIfOver(db, memberPackageId, createdRow?.id);
-        if (createdRow) await activityLog(req, { action: 'session.create', entityType: 'session', entityId: createdRow.id, details: { staffId, memberId, roomId: createdRow.room_id, startTs, endTs } }).catch(() => {});
+        if (createdRow) {
+          await activityLog(req, { action: 'session.create', entityType: 'session', entityId: createdRow.id, details: { staffId, memberId, roomId: createdRow.room_id, startTs, endTs } }).catch(() => {});
+          matchWalkInToSession(db, createdRow.id).catch(() => {});
+        }
         return res.status(201).json(createdRow);
       }
 
@@ -391,7 +398,10 @@ router.post('/', [
       await client.query('COMMIT');
       const created = result.rows[0];
       if (memberPackageId) await trimPackageSessionsIfOver(db, memberPackageId, created?.id);
-      if (created) await activityLog(req, { action: 'session.create', entityType: 'session', entityId: created.id, details: { staffId, memberId, roomId, startTs, endTs } }).catch(() => {});
+      if (created) {
+        await activityLog(req, { action: 'session.create', entityType: 'session', entityId: created.id, details: { staffId, memberId, roomId, startTs, endTs } }).catch(() => {});
+        matchWalkInToSession(db, created.id).catch(() => {});
+      }
       return res.status(201).json(created);
     } catch (err) {
       if (client) await client.query('ROLLBACK').catch(() => {});

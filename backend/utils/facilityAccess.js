@@ -1,4 +1,5 @@
 import { resolveLocalDateRangeMs } from './staffWorkingHours.js';
+import { CHECK_IN_EARLY_MS, CHECK_IN_LATE_MS, autoCompletePackageIfExhausted } from './packageSessionCounts.js';
 
 const DEBOUNCE_SECONDS = 30;
 
@@ -105,5 +106,68 @@ export async function listWalkInAccessForDate(db, opts = {}) {
       return [];
     }
     throw err;
+  }
+}
+
+/**
+ * Seans oluşturulduğunda ya da güncellediğinde, zaman penceresinde bu üyeye ait
+ * randevusuz walk-in girişi varsa seansı otomatik "geldi" olarak işaretler.
+ * Zaten fiziksel girişi olan seansları dokunmaz.
+ * Returns: true if matched and updated, false otherwise
+ */
+export async function matchWalkInToSession(db, sessionId) {
+  try {
+    const sessionRes = await db.query(
+      `SELECT id, member_id, start_ts, end_ts, member_package_id, checked_in_at, check_in_method
+       FROM sessions WHERE id = $1 AND deleted_at IS NULL`,
+      [sessionId]
+    );
+    if (sessionRes.rows.length === 0) return false;
+    const session = sessionRes.rows[0];
+    if (!session.member_id) return false;
+
+    // Zaten fiziksel (QR/kart/telefon) girişi varsa dokunma
+    const PHYSICAL_METHODS = ['qr', 'phone', 'card'];
+    if (session.checked_in_at != null && PHYSICAL_METHODS.includes(session.check_in_method)) return false;
+
+    const startTs = Number(session.start_ts);
+    const endTs = Number(session.end_ts);
+    const windowStart = startTs - CHECK_IN_EARLY_MS;
+    const windowEnd = endTs + CHECK_IN_LATE_MS;
+
+    const walkInRes = await db.query(
+      `SELECT id, source, EXTRACT(EPOCH FROM accessed_at) * 1000 AS accessed_ts
+       FROM facility_access_logs
+       WHERE member_id = $1
+         AND accessed_at >= to_timestamp($2 / 1000.0)
+         AND accessed_at <= to_timestamp($3 / 1000.0)
+       ORDER BY ABS(EXTRACT(EPOCH FROM accessed_at) * 1000 - $4) ASC
+       LIMIT 1`,
+      [session.member_id, windowStart, windowEnd, startTs]
+    );
+    if (walkInRes.rows.length === 0) return false;
+
+    const walkIn = walkInRes.rows[0];
+    const result = await db.query(
+      `UPDATE sessions
+       SET checked_in_at = to_timestamp($2 / 1000.0),
+           check_in_method = $3,
+           attendance_outcome = 'present',
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $1
+         AND (checked_in_at IS NULL OR check_in_method NOT IN ('qr', 'phone', 'card'))
+       RETURNING id`,
+      [sessionId, Number(walkIn.accessed_ts), walkIn.source]
+    );
+    if (result.rows.length === 0) return false;
+
+    if (session.member_package_id) {
+      await autoCompletePackageIfExhausted(db, session.member_package_id).catch(() => {});
+    }
+    return true;
+  } catch (err) {
+    if (err.code === '42P01') return false;
+    console.error('[facilityAccess] matchWalkInToSession hatası:', err.message);
+    return false;
   }
 }

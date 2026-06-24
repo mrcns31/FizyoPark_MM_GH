@@ -96,10 +96,10 @@ export async function checkInSessionForMember(db, memberId, now = Date.now(), me
   const res = await db.query(
     `SELECT s.id, s.start_ts, s.end_ts, s.member_package_id
      FROM sessions s
-     JOIN member_packages mp ON mp.id = s.member_package_id AND mp.status = 'active'
+     JOIN member_packages mp ON mp.id = s.member_package_id AND mp.status IN ('active', 'completed')
      WHERE s.member_id = $1
        AND s.deleted_at IS NULL
-       AND s.checked_in_at IS NULL
+       AND (s.checked_in_at IS NULL OR s.check_in_method IN ('manual', 'admin'))
        AND s.start_ts <= $2
        AND s.end_ts >= $3
      ORDER BY ABS(s.start_ts - $4) ASC
