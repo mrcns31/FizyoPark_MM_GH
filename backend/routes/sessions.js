@@ -304,6 +304,7 @@ router.post('/', [
   body('note').optional({ values: 'null' }).custom((v) => v == null || typeof v === 'string').withMessage('Not metin olmalı'),
   body('memberPackageId').optional({ nullable: true }).isInt(),
   body('skipStaffHoursCheck').optional().isBoolean(),
+  body('skipTrim').optional().isBoolean(),
 ], async (req, res) => {
   try {
     if (req.user.role === 'member') {
@@ -316,6 +317,7 @@ router.post('/', [
 
     let { staffId, memberId, roomId, startTs, endTs, note, memberPackageId } = req.body;
     const skipStaffHoursCheck = !!req.body.skipStaffHoursCheck && ['admin', 'manager'].includes(req.user.role);
+    const skipTrim = !!req.body.skipTrim && ['admin', 'manager'].includes(req.user.role);
 
     if (memberPackageId == null || memberPackageId === '') {
       memberPackageId = await resolveMemberPackageId(db, memberId, startTs);
@@ -336,7 +338,7 @@ router.post('/', [
       }
       const created = await db.query('SELECT * FROM sessions WHERE id = $1', [placed.sessionId]);
       const createdRow = created.rows[0];
-      if (memberPackageId) await trimPackageSessionsIfOver(db, memberPackageId, createdRow?.id);
+      if (memberPackageId && !skipTrim) await trimPackageSessionsIfOver(db, memberPackageId, createdRow?.id);
       if (createdRow) {
         await activityLog(req, { action: 'session.create', entityType: 'session', entityId: createdRow.id, details: { staffId, memberId, roomId: createdRow.room_id, startTs, endTs } }).catch(() => {});
         matchWalkInToSession(db, createdRow.id).catch(() => {});
@@ -381,7 +383,7 @@ router.post('/', [
         const created = await client.query('SELECT * FROM sessions WHERE id = $1', [sessionId]);
         await client.query('COMMIT');
         const createdRow = created.rows[0];
-        if (memberPackageId) await trimPackageSessionsIfOver(db, memberPackageId, createdRow?.id);
+        if (memberPackageId && !skipTrim) await trimPackageSessionsIfOver(db, memberPackageId, createdRow?.id);
         if (createdRow) {
           await activityLog(req, { action: 'session.create', entityType: 'session', entityId: createdRow.id, details: { staffId, memberId, roomId: createdRow.room_id, startTs, endTs } }).catch(() => {});
           matchWalkInToSession(db, createdRow.id).catch(() => {});
@@ -397,7 +399,7 @@ router.post('/', [
       );
       await client.query('COMMIT');
       const created = result.rows[0];
-      if (memberPackageId) await trimPackageSessionsIfOver(db, memberPackageId, created?.id);
+      if (memberPackageId && !skipTrim) await trimPackageSessionsIfOver(db, memberPackageId, created?.id);
       if (created) {
         await activityLog(req, { action: 'session.create', entityType: 'session', entityId: created.id, details: { staffId, memberId, roomId, startTs, endTs } }).catch(() => {});
         matchWalkInToSession(db, created.id).catch(() => {});

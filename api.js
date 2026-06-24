@@ -846,6 +846,7 @@
     const payload = { staffId, memberId, roomId, startTs, endTs, note };
     if (memberPackageId != null) payload.memberPackageId = memberPackageId;
     if (body.skipStaffHoursCheck) payload.skipStaffHoursCheck = true;
+    if (body.skipTrim) payload.skipTrim = true;
 
     const row = await apiFetch('/sessions', {
       method: 'POST',

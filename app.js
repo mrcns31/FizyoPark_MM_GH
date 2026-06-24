@@ -10910,7 +10910,7 @@ async function saveSessionFromModal() {
   const candidate = {
     ...candidateBase,
     roomId,
-    ...(packageSessionAddOverride ? { memberPackageId: packageSessionAddOverride.memberPackageId } : {}),
+    ...(packageSessionAddOverride ? { memberPackageId: packageSessionAddOverride.memberPackageId, skipTrim: true } : {}),
   };
 
   if (slotChanged) {
