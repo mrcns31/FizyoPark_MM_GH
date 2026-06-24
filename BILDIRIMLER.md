@@ -78,3 +78,55 @@ Bu dosya, projede şu ana kadar eklenen tüm bildirim/uyarı özelliklerini öze
   - `?since=<ms>` → polling modu (yeni bildirimler, eskiden yeniye sıralı)
   - `?limit=<n>` (since olmadan) → liste modu (son N bildirim, yeniden eskiye sıralı, varsayılan 30 gün)
 - **Modal stili:** Yeni eklenen tüm "modal" tarzı bildirimler varsayılan olarak `compactDialog` / `.modal--compact` stilini kullanır (ortalanmış, ~400px, ortalı başlık/metin, yan yana butonlar).
+
+---
+
+## 5. Kapı Girişi → Mobil Push Bildirimi (Android APK)
+
+**Ne zaman tetiklenir:** Üye QR / KART / TELEFON ile kapıdan giriş yaptığında.
+
+**Alıcılar ve mesajlar:**
+
+| Alıcı | Başlık | Mesaj |
+|-------|--------|-------|
+| Admin / Manager | Kapı Girişi | `Ad Soyad - QR/KART/TELEFON ile SS:DD'deki randevusu için giriş yapmıştır.` |
+| Admin / Manager (randevusuz) | Kapı Girişi | `Ad Soyad - QR/KART/TELEFON ile randevusuz giriş yapmıştır.` |
+| O saatteki sorumlu personel | Kapı Girişi | Aynı mesaj (admin ile) |
+| Üyenin kendisi | `Merhaba Ad Soyad` | `PaketAdı paketinizden kalan seans: X` |
+
+**Backend:**
+- `backend/routes/member-portal.js` → `sendEntryPush(memberName, method, startTs, sessionId, memberId)`
+- Tetiklendiği endpoint'ler: `POST /verify-access` (QR), `POST /verify-card-access` (KART), `POST /verify-phone-access` (TELEFON)
+- Expo Push API (`https://exp.host/--/api/v2/push/send`) kullanılır
+- `push_tokens` tablosundan token'lar alınır
+
+**Mobil:**
+- `mobile-rn/src/lib/push-notifications.ts` → token alınır, giriş sonrası `/api/auth/push-token` ile backend'e kaydedilir
+- Token kaydı: kullanıcı giriş yaptığında (`signIn`) otomatik tetiklenir
+
+---
+
+## 6. Mesai Sonu Seans Onay Hatırlatması → Personel Push Bildirimi
+
+**Ne zaman tetiklenir:** Personelin mesai saati bittiğinde ve o günkü onaylanmamış seans varsa (günde bir kez).
+
+**Alıcılar:** İlgili personel
+
+**Mesaj:**
+- Başlık: `Onay bekleyen seanslar`
+- Gövde: `GG.AA.YYYY tarihinde X seans için geldi/gelmedi onayı verilmedi. Lütfen giriş onaylarını tamamlayın.`
+
+**Backend:**
+- `backend/utils/sessionAttendance.js` → `createShiftReminderNotification()` → `sendExpoPush()`
+- Aynı zamanda `staff_notifications` tablosuna da yazılır (uygulama içi bildirim listesi)
+
+---
+
+## Mobil Uygulama Push Altyapısı
+
+- **Paket:** `expo-notifications` (SDK 56)
+- **Servis:** Expo Push Notification Service → FCM V1 (Android)
+- **Token kaydı:** `push_tokens` tablosu (user_id, token, unique constraint)
+- **Firebase:** FizyoPark Ankara projesi (`fizyopark-ankara-89e46`)
+- **Gönderici:** Backend doğrudan `https://exp.host/--/api/v2/push/send` endpoint'ine POST atar
+- **iOS:** Henüz eklenmedi (Apple Developer hesabı gerektirir)

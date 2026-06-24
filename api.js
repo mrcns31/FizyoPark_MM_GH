@@ -855,7 +855,7 @@
   }
   async function updateSession(id, body) {
     const payload = {};
-    ['staffId', 'memberId', 'roomId', 'startTs', 'endTs', 'note', 'memberPackageId', 'adminPassword'].forEach(function (k) {
+    ['staffId', 'memberId', 'roomId', 'startTs', 'endTs', 'note', 'memberPackageId', 'adminPassword', 'skipTrim'].forEach(function (k) {
       if (body[k] !== undefined) payload[k] = body[k];
     });
     const res = await apiFetch('/sessions/' + id, { method: 'PUT', body: JSON.stringify(payload) });

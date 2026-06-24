@@ -414,7 +414,8 @@ router.put('/:id', [
   body('endTs').optional().isInt(),
   body('note').optional().isString(),
   body('memberPackageId').optional({ nullable: true }).isInt(),
-  body('adminPassword').optional().isString()
+  body('adminPassword').optional().isString(),
+  body('skipTrim').optional().isBoolean(),
 ], async (req, res) => {
   try {
     if (req.user.role === 'member') {
@@ -423,7 +424,9 @@ router.put('/:id', [
     const { id } = req.params;
     const updates = { ...req.body };
     const adminPassword = updates.adminPassword;
+    const skipTrim = !!updates.skipTrim;
     delete updates.adminPassword;
+    delete updates.skipTrim;
 
     // Seans var mı ve silinmemiş mi kontrol et
     const existing = await db.query('SELECT * FROM sessions WHERE id = $1', [id]);
@@ -518,7 +521,7 @@ router.put('/:id', [
           const result = await client.query('SELECT * FROM sessions WHERE id = $1', [id]);
           await client.query('COMMIT');
 
-          if (finalMpId) await trimPackageSessionsIfOver(db, finalMpId);
+          if (finalMpId && !skipTrim) await trimPackageSessionsIfOver(db, finalMpId);
           const updated = result.rows[0];
           if (updated) await activityLog(req, { action: 'session.update', entityType: 'session', entityId: id, details: { staffId: updated.staff_id, memberId: updated.member_id } }).catch(() => {});
           return res.json({ message: 'Seans güncellendi', session: updated });
@@ -535,7 +538,7 @@ router.put('/:id', [
     const query = `UPDATE sessions SET ${updateFields.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
 
     const result = await db.query(query, values);
-    if (finalMpId) await trimPackageSessionsIfOver(db, finalMpId);
+    if (finalMpId && !skipTrim) await trimPackageSessionsIfOver(db, finalMpId);
     const updated = result.rows[0];
     if (updated) await activityLog(req, { action: 'session.update', entityType: 'session', entityId: id, details: { staffId: updated.staff_id, memberId: updated.member_id } }).catch(() => {});
     res.json({ message: 'Seans güncellendi', session: updated });

@@ -1188,6 +1188,7 @@ function cacheEls() {
     "packageSessionsModal",
     "packageSessionsTitle",
     "packageSessionsAddBtn",
+    "packageSessionsMoveToggleBtn",
     "packageSessionsExportWrap",
     "packageSessionsExportBtn",
     "packageSessionsExportMenu",
@@ -2679,16 +2680,28 @@ function renderPackageSessionsTableRows(container, sessions, options) {
     if (role === "admin" && compact) {
       var approvalLabel = s.approvalLabel || "—";
       var approvalKind = s.approvalKind || "unknown";
+      var hasMoveOpts = !s.isCancelled && packageSessionsCurrent && packageSessionsCurrent.otherPackages && packageSessionsCurrent.otherPackages.length;
+      var moveWrapClass = "pkg-move-wrap" + (packageSessionsMoveMode ? "" : " hidden");
+      var moveSel = hasMoveOpts
+        ? '<div class="' + moveWrapClass + '" style="margin-top:4px"><select class="input input--xs pkg-move-select" data-session-id="' + s.id + '">' +
+          '<option value="">Pakete taşı…</option>' +
+          packageSessionsCurrent.otherPackages.map(function (p) {
+            return '<option value="' + p.id + '">' + escapeHtml(p.packageName || "Paket") +
+              ' (' + escapeHtml(String(p.startDate || "").slice(0, 10)) + ')</option>';
+          }).join("") +
+          '</select></div>'
+        : "";
       html =
         '<td' + PACKAGE_SESSIONS_TD + ' data-label="Sıra No">' + (i + 1) + "</td>" +
         '<td' + PACKAGE_SESSIONS_TD + ' data-label="Tarih">' + escapeHtml(dateStr) + "</td>" +
         '<td' + PACKAGE_SESSIONS_TD + ' data-label="Personel">' + escapeHtml(staffStr) + "</td>" +
         '<td' + PACKAGE_SESSIONS_TD + ' data-label="Ders Saati">' + escapeHtml(s.timeStr) + "</td>" +
         '<td' + PACKAGE_SESSIONS_TD + ' data-label="Giriş Saati">' + escapeHtml(s.checkInTimeStr) + "</td>" +
-        '<td' + PACKAGE_SESSIONS_TD + ' data-label="Onay">' +
+        '<td' + PACKAGE_SESSIONS_TD + ' data-label="Onay" style="white-space:normal">' +
         '<span class="package-session-approval package-session-approval--' + escapeHtml(approvalKind) + '">' +
-        escapeHtml(approvalLabel) +
-        "</span></td>";
+        escapeHtml(approvalLabel) + "</span>" +
+        moveSel +
+        "</td>";
     } else {
       html =
         '<td' + PACKAGE_SESSIONS_TD + ' data-label="Sıra No">' + (i + 1) + "</td>" +
@@ -2722,6 +2735,23 @@ function renderPackageSessionsTableRows(container, sessions, options) {
         cancelBtn.addEventListener("click", function (ev) {
           ev.stopPropagation();
           onCancel(Number(cancelBtn.dataset.sessionId));
+        });
+      }
+    }
+
+    if (role === "admin") {
+      var moveSelect = tr.querySelector(".pkg-move-select");
+      if (moveSelect) {
+        moveSelect.addEventListener("change", function (ev) {
+          ev.stopPropagation();
+          var targetMpId = moveSelect.value;
+          if (!targetMpId) return;
+          var sid = moveSelect.dataset.sessionId;
+          moveSessionToPackage(sid, targetMpId).then(function () {
+            moveSelect.value = "";
+          }).catch(function () {
+            moveSelect.value = "";
+          });
         });
       }
     }
@@ -2767,6 +2797,19 @@ function renderPackageSessionsCards(container, sessions, options) {
             ? '<div class="package-session-card__meta">Giriş: ' + escapeHtml(s.checkInTimeStr) + "</div>"
             : "";
         var clickable = options.clickable !== false;
+        var otherPkgsCard = (packageSessionsCurrent && packageSessionsCurrent.otherPackages) || [];
+        var moveHtml = "";
+        if (otherPkgsCard.length && !s.isCancelled) {
+          var cardMoveClass = "package-session-card__move pkg-move-wrap" + (packageSessionsMoveMode ? "" : " hidden");
+          moveHtml = '<div class="' + cardMoveClass + '">' +
+            '<select class="input input--xs pkg-move-select" data-session-id="' + s.id + '">' +
+            '<option value="">Pakete taşı…</option>' +
+            otherPkgsCard.map(function (p) {
+              return '<option value="' + p.id + '">' + escapeHtml(p.packageName || "Paket") +
+                ' (' + escapeHtml(String(p.startDate || "").slice(0, 10)) + ')</option>';
+            }).join("") +
+            '</select></div>';
+        }
         return (
           '<article class="package-session-card' + (clickable ? " package-session-card--clickable" : "") + '"' +
           (clickable ? ' data-session-id="' + s.id + '" tabindex="0" role="button" title="Gün, saat veya personel değiştirmek için dokunun"' : "") +
@@ -2789,6 +2832,7 @@ function renderPackageSessionsCards(container, sessions, options) {
           escapeHtml(approvalLabel) +
           "</span></div>" +
           checkInLine +
+          moveHtml +
           (clickable ? '<div class="package-session-card__hint hint">Düzenlemek için dokunun</div>' : "") +
           "</article>"
         );
@@ -2831,6 +2875,18 @@ function renderPackageSessionsCards(container, sessions, options) {
     btn.addEventListener("click", function (e) {
       e.stopPropagation();
       if (onCancel) onCancel(Number(btn.dataset.sessionId));
+    });
+  });
+  container.querySelectorAll(".pkg-move-select").forEach(function (sel) {
+    sel.addEventListener("change", function (e) {
+      e.stopPropagation();
+      var targetMpId = sel.value;
+      if (!targetMpId) return;
+      moveSessionToPackage(sel.dataset.sessionId, targetMpId).then(function () {
+        sel.value = "";
+      }).catch(function () {
+        sel.value = "";
+      });
     });
   });
   return true;
@@ -8999,6 +9055,7 @@ async function renderMemberPackageHistory(memberId) {
 }
 
 let packageSessionsCurrent = null;
+let packageSessionsMoveMode = false; // "Taşı" toggle açık mı
 // Paket seansları modalından "Seans Ekle" açıldığında dolu; kapanınca temizlenir.
 let packageSessionAddOverride = null;
 
@@ -9109,6 +9166,11 @@ function loadPackageSessionsForModal(mp) {
 
 function selectPackageSessionsModalPackage(mp) {
   if (!packageSessionsCurrent || !mp) return;
+  // Paket değişince otherPackages'ı yeniden hesapla (yeni mp hariç tut)
+  var allMemberPkgs = packageSessionsCurrent.otherPackages.concat([packageSessionsCurrent.mp]);
+  packageSessionsCurrent.otherPackages = allMemberPkgs.filter(function (p) {
+    return Number(p.id) !== Number(mp.id);
+  });
   updatePackageSessionsModalHeader(mp);
   loadPackageSessionsForModal(mp);
 }
@@ -9125,7 +9187,20 @@ function openPackageSessionsModal(mp, memberId, memberOverride, options) {
     memberId: memberId,
     memberOverride: memberOverride || null,
     allPackages: allPackages && allPackages.length > 1 ? allPackages : null,
+    otherPackages: [],
   };
+  // Üyenin diğer paketlerini API'den çek (state cache'e bağımlı değil)
+  if (memberId && window.API && window.API.getMemberPackages) {
+    window.API.getMemberPackages(memberId).then(function (pkgs) {
+      if (!packageSessionsCurrent || Number(packageSessionsCurrent.mp.id) !== Number(mp.id)) return;
+      packageSessionsCurrent.otherPackages = (pkgs || []).filter(function (p) {
+        return Number(p.id) !== Number(mp.id);
+      });
+      if (packageSessionsCurrent.sessions.length) {
+        renderPackageSessionsTable(packageSessionsCurrent.sessions);
+      }
+    }).catch(function () {});
+  }
   var m =
     memberOverride ||
     (memberId != null ? state.members.find(function (x) { return normId(x.id) === normId(memberId); }) : null);
@@ -9144,6 +9219,12 @@ function openPackageSessionsModal(mp, memberId, memberOverride, options) {
   if (els.packageSessionsAddBtn) {
     els.packageSessionsAddBtn.classList.toggle("hidden", !isAdminUser());
   }
+  packageSessionsMoveMode = false;
+  if (els.packageSessionsMoveToggleBtn) {
+    els.packageSessionsMoveToggleBtn.classList.toggle("hidden", !isAdminUser());
+    els.packageSessionsMoveToggleBtn.classList.remove("btn--primary");
+    els.packageSessionsMoveToggleBtn.classList.add("btn--ghost");
+  }
   els.packageSessionsModal.classList.remove("hidden");
 }
 
@@ -9151,6 +9232,28 @@ function closePackageSessionsModal() {
   if (els.packageSessionsModal) els.packageSessionsModal.classList.add("hidden");
   hidePackageSessionsPackagePicker();
   packageSessionsCurrent = null;
+  packageSessionsMoveMode = false;
+}
+
+async function moveSessionToPackage(sessionId, targetMpId) {
+  if (!packageSessionsCurrent || !window.API || !window.API.getToken()) return;
+  var session = (packageSessionsCurrent.sessions || []).find(function (s) { return normId(s.id) === normId(sessionId); });
+  var pwdResult = await resolveAdminPasswordForSessions(
+    session ? [session] : [],
+    "Seansı başka pakete taşımak için admin şifresi gerekiyor."
+  );
+  if (pwdResult.cancelled) return;
+  try {
+    var payload = { memberPackageId: Number(targetMpId), skipTrim: true };
+    if (pwdResult.adminPassword) payload.adminPassword = pwdResult.adminPassword;
+    await window.API.updateSession(Number(sessionId), payload);
+    var refreshed = await window.API.getMemberPackageSessions(packageSessionsCurrent.mp.id);
+    packageSessionsCurrent.sessions = refreshed || [];
+    renderPackageSessionsTable(packageSessionsCurrent.sessions);
+    updatePackageSessionsModalHeader(packageSessionsCurrent.mp);
+  } catch (e) {
+    await showAppAlert((e.data && e.data.error) || e.message || "Seans taşınamadı.");
+  }
 }
 
 function renderPackageSessionsTable(sessions) {
@@ -12726,6 +12829,15 @@ function bindEvents() {
   els.deleteSessionBtn.addEventListener("click", deleteSessionFromModal);
   if (els.sessionMember) els.sessionMember.addEventListener("change", updateSessionPackageHint);
   if (els.sessionDate) els.sessionDate.addEventListener("change", updateSessionPackageHint);
+  if (els.packageSessionsMoveToggleBtn) {
+    els.packageSessionsMoveToggleBtn.addEventListener("click", function () {
+      packageSessionsMoveMode = !packageSessionsMoveMode;
+      els.packageSessionsMoveToggleBtn.classList.toggle("btn--primary", packageSessionsMoveMode);
+      els.packageSessionsMoveToggleBtn.classList.toggle("btn--ghost", !packageSessionsMoveMode);
+      var wraps = document.querySelectorAll(".pkg-move-wrap");
+      wraps.forEach(function (el) { el.classList.toggle("hidden", !packageSessionsMoveMode); });
+    });
+  }
   if (els.packageSessionsAddBtn) {
     els.packageSessionsAddBtn.addEventListener("click", function () {
       if (!packageSessionsCurrent) return;
