@@ -33,6 +33,50 @@ async function expoPush(messages) {
   } catch { /* sessizce geç */ }
 }
 
+async function sendCancellationPush(memberName, startTs, staffId) {
+  try {
+    const date = new Date(startTs);
+    const dateStr = date.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Europe/Istanbul' });
+    const timeStr = date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' });
+    const body = `${memberName} - ${dateStr} ${timeStr} randevusunu iptal etmiştir.`;
+
+    // Admin/Manager her zaman alır
+    const { rows: adminRows } = await db.query(
+      `SELECT pt.token FROM push_tokens pt
+       JOIN users u ON u.id = pt.user_id
+       WHERE u.role IN ('admin', 'manager')`
+    );
+
+    // Personel sadece BUGÜNKÜ iptal ise alır
+    let staffRows = [];
+    const nowTs = Date.now();
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+    const isToday = startTs >= startOfDay.getTime() && startTs <= endOfDay.getTime();
+
+    if (isToday && staffId) {
+      const { rows } = await db.query(
+        `SELECT pt.token FROM push_tokens pt
+         JOIN staff s ON s.user_id = pt.user_id
+         WHERE s.id = $1`,
+        [staffId]
+      );
+      staffRows = rows;
+    }
+
+    const seen = new Set();
+    const messages = [...adminRows, ...staffRows]
+      .filter((r) => { if (seen.has(r.token)) return false; seen.add(r.token); return true; })
+      .map((r) => ({ to: r.token, title: 'Randevu İptali', body, sound: 'default' }));
+
+    await expoPush(messages);
+  } catch {
+    // push hatası iptal işlemini engellemesin
+  }
+}
+
 async function sendEntryPush(memberName, method, startTs, sessionId, memberId) {
   try {
     const methodLabel = METHOD_LABEL[method] || method.toUpperCase();
@@ -663,6 +707,14 @@ router.post('/sessions/:id/cancel', requireMember, async (req, res) => {
       actorId: req.user.userId,
       actorType: 'member',
     }).catch(() => {});
+
+    // Üyenin adını al ve iptal push'u gönder
+    db.query('SELECT name FROM members WHERE id = $1', [memberId])
+      .then(({ rows }) => {
+        const memberName = rows[0]?.name || 'Üye';
+        sendCancellationPush(memberName, session.start_ts, session.staff_id).catch(() => {});
+      })
+      .catch(() => {});
 
     res.json({
       message: replenished.added

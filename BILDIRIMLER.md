@@ -106,7 +106,26 @@ Bu dosya, projede şu ana kadar eklenen tüm bildirim/uyarı özelliklerini öze
 
 ---
 
-## 6. Mesai Sonu Seans Onay Hatırlatması → Personel Push Bildirimi
+## 6. Üye Randevu İptali → Admin/Personel Push Bildirimi
+
+**Ne zaman tetiklenir:** Üye kendi portalından randevusunu iptal ettiğinde.
+
+**Alıcılar:**
+| Alıcı | Koşul |
+|-------|-------|
+| Admin / Manager | Her zaman |
+| Sorumlu Personel | Sadece **bugünkü** randevular (gün içi iptal) |
+
+**Mesaj:**
+- Başlık: `Randevu İptali`
+- Gövde: `Ad Soyad - GG.AA.YYYY SS:DD randevusunu iptal etmiştir.`
+
+**Backend:**
+- `backend/routes/member-portal.js` → `POST /sessions/:id/cancel` → `sendCancellationPush(memberName, startTs, staffId)`
+
+---
+
+## 7. Mesai Sonu Seans Onay Hatırlatması → Personel Push Bildirimi
 
 **Ne zaman tetiklenir:** Personelin mesai saati bittiğinde ve o günkü onaylanmamış seans varsa (günde bir kez).
 

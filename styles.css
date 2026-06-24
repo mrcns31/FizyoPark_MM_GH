@@ -4500,7 +4500,7 @@ select option:checked{
 .reports-year-nav{
   display:flex;
   align-items:center;
-  gap:4px;
+  gap:6px;
   margin-left:auto;
 }
 .reports-year-label{
@@ -4509,6 +4509,20 @@ select option:checked{
   color:var(--text);
   min-width:44px;
   text-align:center;
+}
+.reports-toggle-former-btn{
+  font-size:11px;
+  font-weight:700;
+  color:var(--muted);
+  border-color:var(--border);
+  opacity:.7;
+  margin-right:6px;
+}
+.reports-toggle-former-btn--on{
+  color:var(--text);
+  border-color:rgba(124,92,255,.5);
+  background:rgba(124,92,255,.15);
+  opacity:1;
 }
 .reports-table-wrap{
   width:100%;
@@ -4539,6 +4553,15 @@ select option:checked{
 .reports-th--total{
   color:var(--text);
   border-left:1px solid var(--border);
+}
+.reports-th--former{
+  color:var(--muted);
+  border-left:1px solid var(--border);
+  font-style:italic;
+}
+.reports-td--former{
+  border-left:1px solid var(--border);
+  color:rgba(255,255,255,.5);
 }
 .reports-td{
   padding:7px 14px;

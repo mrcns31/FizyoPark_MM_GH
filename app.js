@@ -1334,6 +1334,7 @@ function cacheEls() {
     "reportsYearLabel",
     "reportsPrevYearBtn",
     "reportsNextYearBtn",
+    "reportsToggleFormerBtn",
     "notificationsFilterAll",
     "notificationsFilterCancel",
     "notificationsFilterCheckin",
@@ -5827,11 +5828,18 @@ function openNotificationsView() {
 }
 
 var reportsYear = new Date().getFullYear();
+var reportsShowFormer = false;
 
 function openReportsView() {
   showAdminMainView("reports");
   if (els.reportsYearLabel) els.reportsYearLabel.textContent = reportsYear;
+  updateReportsFormerToggleUI();
   loadAndRenderReports();
+}
+
+function updateReportsFormerToggleUI() {
+  if (!els.reportsToggleFormerBtn) return;
+  els.reportsToggleFormerBtn.classList.toggle("reports-toggle-former-btn--on", reportsShowFormer);
 }
 
 async function loadAndRenderReports() {
@@ -5854,49 +5862,94 @@ function renderReportsTable() {
     return s.startTs >= yearStart && s.startTs < yearEnd;
   });
 
-  // Personel listesi: state.staff sırasına göre
-  var staffList = (state.staff || []).slice().sort(function (a, b) {
+  // Aktif personel (state.staff'ta olanlar)
+  var activeStaffList = (state.staff || []).slice().sort(function (a, b) {
     return getStaffFullName(a).localeCompare(getStaffFullName(b), "tr");
   });
+  var activeIds = new Set(activeStaffList.map(function (s) { return normId(s.id); }));
 
-  // [month 0-11][staffId] → count
+  // Eski personel: seansları olan ama state.staff'ta olmayan staffId'ler
+  var formerMap = new Map(); // normId → { name, id }
+  yearSessions.forEach(function (s) {
+    if (s.staffId == null) return;
+    var sid = normId(s.staffId);
+    if (activeIds.has(sid)) return;
+    var rawName = (s.staffName && s.staffName !== "–") ? s.staffName.trim() : null;
+    if (!formerMap.has(sid)) {
+      formerMap.set(sid, { id: s.staffId, name: rawName || "" });
+    } else if (rawName && !formerMap.get(sid).name) {
+      formerMap.get(sid).name = rawName;
+    }
+  });
+  // İsim bulunamayanlar için fallback
+  formerMap.forEach(function (f) { if (!f.name) f.name = "Eski Personel #" + normId(f.id); });
+  var formerList = Array.from(formerMap.values()).sort(function (a, b) {
+    return (a.name || "").localeCompare(b.name || "", "tr");
+  });
+
+  // counts[month][staffNormId] → count
   var counts = {};
   var monthTotals = new Array(12).fill(0);
   var staffTotals = {};
-  staffList.forEach(function (s) { staffTotals[normId(s.id)] = 0; });
 
   yearSessions.forEach(function (s) {
     var month = new Date(s.startTs).getMonth();
-    var sid = normId(s.staffId);
+    var sid = s.staffId != null ? normId(s.staffId) : "__none__";
     if (!counts[month]) counts[month] = {};
     counts[month][sid] = (counts[month][sid] || 0) + 1;
     monthTotals[month]++;
-    if (sid in staffTotals) staffTotals[sid]++;
-    else staffTotals[sid] = (staffTotals[sid] || 0) + 1;
+    staffTotals[sid] = (staffTotals[sid] || 0) + 1;
   });
 
   var monthNames = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
 
-  var html = '<div class="reports-table-wrap"><table class="reports-table">';
-  // Başlık satırı
-  html += "<thead><tr><th class=\"reports-th reports-th--month\">Ay</th>";
-  staffList.forEach(function (s) {
+  var html = '<div class="reports-table-wrap"><table class="reports-table"><thead><tr>';
+  html += "<th class=\"reports-th reports-th--month\">Ay</th>";
+
+  // Aktif personel sütunları
+  activeStaffList.forEach(function (s) {
     var c = staffColor(s.id);
     html += "<th class=\"reports-th\" style=\"color:" + c.border + "\">" + escapeHtml(getStaffFullName(s)) + "</th>";
   });
-  html += "<th class=\"reports-th reports-th--total\">Toplam</th></tr></thead>";
+
+  // Eski personel sütunları
+  if (formerList.length > 0) {
+    if (reportsShowFormer) {
+      // Her eski personel ayrı sütun
+      formerList.forEach(function (f) {
+        html += "<th class=\"reports-th reports-th--former\">" + escapeHtml(f.name) + "</th>";
+      });
+    } else {
+      // Tek birleşik "Eski Personeller" sütunu
+      html += "<th class=\"reports-th reports-th--former\">Eski Personeller</th>";
+    }
+  }
+
+  html += "<th class=\"reports-th reports-th--total\">Toplam</th></tr></thead><tbody>";
 
   // Ay satırları
-  html += "<tbody>";
   for (var m = 0; m < 12; m++) {
     var rowTotal = monthTotals[m];
     html += "<tr class=\"reports-tr" + (rowTotal === 0 ? " reports-tr--empty" : "") + "\">";
     html += "<td class=\"reports-td reports-td--month\">" + monthNames[m] + " " + reportsYear + "</td>";
-    staffList.forEach(function (s) {
-      var sid = normId(s.id);
-      var val = (counts[m] && counts[m][sid]) || 0;
+
+    activeStaffList.forEach(function (s) {
+      var val = (counts[m] && counts[m][normId(s.id)]) || 0;
       html += "<td class=\"reports-td" + (val === 0 ? " reports-td--zero" : "") + "\">" + (val > 0 ? val : "–") + "</td>";
     });
+
+    if (formerList.length > 0) {
+      if (reportsShowFormer) {
+        formerList.forEach(function (f) {
+          var val = (counts[m] && counts[m][normId(f.id)]) || 0;
+          html += "<td class=\"reports-td reports-td--former" + (val === 0 ? " reports-td--zero" : "") + "\">" + (val > 0 ? val : "–") + "</td>";
+        });
+      } else {
+        var formerSum = formerList.reduce(function (acc, f) { return acc + ((counts[m] && counts[m][normId(f.id)]) || 0); }, 0);
+        html += "<td class=\"reports-td reports-td--former" + (formerSum === 0 ? " reports-td--zero" : "") + "\">" + (formerSum > 0 ? formerSum : "–") + "</td>";
+      }
+    }
+
     html += "<td class=\"reports-td reports-td--total\">" + (rowTotal > 0 ? "<strong>" + rowTotal + "</strong>" : "–") + "</td>";
     html += "</tr>";
   }
@@ -5905,13 +5958,25 @@ function renderReportsTable() {
   html += "<tr class=\"reports-tr reports-tr--grand\">";
   html += "<td class=\"reports-td reports-td--month\"><strong>Yıllık Toplam</strong></td>";
   var grandTotal = 0;
-  staffList.forEach(function (s) {
-    var sid = normId(s.id);
-    var val = staffTotals[sid] || 0;
+  activeStaffList.forEach(function (s) {
+    var val = staffTotals[normId(s.id)] || 0;
     grandTotal += val;
     var c = staffColor(s.id);
     html += "<td class=\"reports-td reports-td--grand\" style=\"color:" + c.border + "\"><strong>" + (val > 0 ? val : "–") + "</strong></td>";
   });
+  if (formerList.length > 0) {
+    if (reportsShowFormer) {
+      formerList.forEach(function (f) {
+        var val = staffTotals[normId(f.id)] || 0;
+        grandTotal += val;
+        html += "<td class=\"reports-td reports-td--grand reports-td--former\"><strong>" + (val > 0 ? val : "–") + "</strong></td>";
+      });
+    } else {
+      var formerGrand = formerList.reduce(function (acc, f) { return acc + (staffTotals[normId(f.id)] || 0); }, 0);
+      grandTotal += formerGrand;
+      html += "<td class=\"reports-td reports-td--grand reports-td--former\"><strong>" + (formerGrand > 0 ? formerGrand : "–") + "</strong></td>";
+    }
+  }
   html += "<td class=\"reports-td reports-td--total reports-td--grand\"><strong>" + grandTotal + "</strong></td>";
   html += "</tr></tbody></table></div>";
 
@@ -12631,6 +12696,7 @@ function bindEvents() {
   if (els.openReportsBtn) els.openReportsBtn.addEventListener("click", openReportsView);
   if (els.reportsPrevYearBtn) els.reportsPrevYearBtn.addEventListener("click", function () { reportsYear--; if (els.reportsYearLabel) els.reportsYearLabel.textContent = reportsYear; loadAndRenderReports(); });
   if (els.reportsNextYearBtn) els.reportsNextYearBtn.addEventListener("click", function () { reportsYear++; if (els.reportsYearLabel) els.reportsYearLabel.textContent = reportsYear; loadAndRenderReports(); });
+  if (els.reportsToggleFormerBtn) els.reportsToggleFormerBtn.addEventListener("click", function () { reportsShowFormer = !reportsShowFormer; updateReportsFormerToggleUI(); renderReportsTable(); });
   if (els.notificationsFilterAll) els.notificationsFilterAll.addEventListener("click", function () { setNotificationsTypeFilter("all"); });
   if (els.notificationsFilterCancel) els.notificationsFilterCancel.addEventListener("click", function () { setNotificationsTypeFilter("cancel"); });
   if (els.notificationsFilterCheckin) els.notificationsFilterCheckin.addEventListener("click", function () { setNotificationsTypeFilter("checkin"); });
