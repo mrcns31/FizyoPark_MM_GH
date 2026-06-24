@@ -20,6 +20,84 @@ import QRCode from 'qrcode';
 
 const router = express.Router();
 
+const METHOD_LABEL = { qr: 'QR', card: 'KART', phone: 'TELEFON' };
+
+async function expoPush(messages) {
+  if (!messages.length) return;
+  try {
+    await fetch('https://exp.host/--/api/v2/push/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify(messages),
+    });
+  } catch { /* sessizce geç */ }
+}
+
+async function sendEntryPush(memberName, method, startTs, sessionId, memberId) {
+  try {
+    const methodLabel = METHOD_LABEL[method] || method.toUpperCase();
+    const entryBody = startTs
+      ? `${memberName} - ${methodLabel} ile ${new Date(startTs).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' })}'deki randevusu için giriş yapmıştır.`
+      : `${memberName} - ${methodLabel} ile randevusuz giriş yapmıştır.`;
+
+    // Admin/Manager token'ları
+    const { rows: adminRows } = await db.query(
+      `SELECT pt.token FROM push_tokens pt
+       JOIN users u ON u.id = pt.user_id
+       WHERE u.role IN ('admin', 'manager')`
+    );
+
+    // O saatteki sorumlu personelin token'ı
+    let staffRows = [];
+    if (sessionId) {
+      const { rows } = await db.query(
+        `SELECT pt.token FROM push_tokens pt
+         JOIN staff s ON s.user_id = pt.user_id
+         JOIN sessions ses ON ses.staff_id = s.id
+         WHERE ses.id = $1`,
+        [sessionId]
+      );
+      staffRows = rows;
+    }
+
+    // Tekrar eden token'ları filtrele
+    const seen = new Set();
+    const entryMessages = [...adminRows, ...staffRows]
+      .filter((r) => { if (seen.has(r.token)) return false; seen.add(r.token); return true; })
+      .map((r) => ({ to: r.token, title: 'Kapı Girişi', body: entryBody, sound: 'default' }));
+
+    // Üyenin kendi bildirimi
+    let memberMessages = [];
+    if (memberId) {
+      const { rows: mRows } = await db.query(
+        `SELECT pt.token FROM push_tokens pt
+         JOIN members m ON m.user_id = pt.user_id
+         WHERE m.id = $1`,
+        [memberId]
+      );
+      if (mRows.length) {
+        const { rows: pkgRows } = await db.query(
+          `SELECT p.name, mp.id AS mp_id FROM member_packages mp
+           JOIN packages p ON p.id = mp.package_id
+           WHERE mp.member_id = $1 AND mp.status = 'active' AND mp.deleted_at IS NULL
+           ORDER BY mp.created_at DESC LIMIT 1`,
+          [memberId]
+        );
+        let memberBody = 'Giriş kaydedildi.';
+        if (pkgRows.length) {
+          const stats = await getActivePackageStats(db, memberId, sessionId);
+          if (stats) memberBody = `${pkgRows[0].name} paketinizden kalan seans: ${stats.remainingSessions}`;
+        }
+        memberMessages = mRows.map((r) => ({ to: r.token, title: `Merhaba ${memberName}`, body: memberBody, sound: 'default' }));
+      }
+    }
+
+    await Promise.all([expoPush(entryMessages), expoPush(memberMessages)]);
+  } catch {
+    // push hatası kapı girişini engellemesin
+  }
+}
+
 async function getActivePackageStats(db, memberId, sessionId) {
   try {
     // 1. member_package_id bul
@@ -125,6 +203,10 @@ router.post('/verify-access', async (req, res) => {
       await logWalkInQrAccess(db, result.memberId);
     }
 
+    if (memberName) {
+      sendEntryPush(memberName, 'qr', checkIn.checkedIn ? checkIn.startTs : null, checkIn.checkedIn ? checkIn.sessionId : null, result.memberId).catch(() => {});
+    }
+
     res.json({
       valid: true,
       memberId: result.memberId,
@@ -181,6 +263,8 @@ router.post('/verify-card-access', async (req, res) => {
       } else {
         await logWalkInQrAccess(db, memberId, 'card');
       }
+
+      sendEntryPush(memberName, 'card', checkIn.checkedIn ? checkIn.startTs : null, checkIn.checkedIn ? checkIn.sessionId : null, memberId).catch(() => {});
 
       const packageStats = await getActivePackageStats(db, memberId, checkIn.checkedIn ? checkIn.sessionId : null);
       return res.json({
@@ -267,6 +351,8 @@ router.post('/verify-phone-access', async (req, res) => {
       } else {
         await logWalkInQrAccess(db, memberId, 'phone');
       }
+
+      sendEntryPush(memberName, 'phone', checkIn.checkedIn ? checkIn.startTs : null, checkIn.checkedIn ? checkIn.sessionId : null, memberId).catch(() => {});
 
       const packageStats = await getActivePackageStats(db, memberId, checkIn.checkedIn ? checkIn.sessionId : null);
       return res.json({
