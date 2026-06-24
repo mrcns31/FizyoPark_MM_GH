@@ -16,21 +16,22 @@ const checkAdmin = (req, res, next) => {
   next();
 };
 
-// Personel listesi (soft-silinen personel gösterilmez)
+// Personel listesi — ?includeDeleted=true ile silinmiş personel de döner (sadece admin)
 router.get('/', async (req, res) => {
+  const includeDeleted = req.query.includeDeleted === 'true' && req.user.role === 'admin';
   try {
     let result;
     try {
+      const whereClause = includeDeleted ? '' : 'WHERE s.deleted_at IS NULL';
       result = await db.query(
         `SELECT s.*, u.username AS login_username, u.email AS user_email
          FROM staff s
          LEFT JOIN users u ON u.id = s.user_id
-         WHERE s.deleted_at IS NULL
+         ${whereClause}
          ORDER BY s.first_name, s.last_name`
       );
     } catch (colErr) {
       if (colErr.code === '42703') {
-        // deleted_at kolonu henüz yok — migration_staff_deleted_at.sql çalıştırın
         result = await db.query(
           `SELECT s.*, u.username AS login_username, u.email AS user_email
            FROM staff s

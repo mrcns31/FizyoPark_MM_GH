@@ -35,7 +35,7 @@ async function expoPush(messages) {
 
 async function sendCancellationPush(memberName, startTs, staffId) {
   try {
-    const date = new Date(startTs);
+    const date = new Date(Number(startTs));
     const dateStr = date.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Europe/Istanbul' });
     const timeStr = date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' });
     const body = `${memberName} - ${dateStr} ${timeStr} randevusunu iptal etmiştir.`;
@@ -54,7 +54,7 @@ async function sendCancellationPush(memberName, startTs, staffId) {
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date();
     endOfDay.setHours(23, 59, 59, 999);
-    const isToday = startTs >= startOfDay.getTime() && startTs <= endOfDay.getTime();
+    const isToday = Number(startTs) >= startOfDay.getTime() && Number(startTs) <= endOfDay.getTime();
 
     if (isToday && staffId) {
       const { rows } = await db.query(
@@ -81,7 +81,7 @@ async function sendEntryPush(memberName, method, startTs, sessionId, memberId) {
   try {
     const methodLabel = METHOD_LABEL[method] || method.toUpperCase();
     const entryBody = startTs
-      ? `${memberName} - ${methodLabel} ile ${new Date(startTs).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' })}'deki randevusu için giriş yapmıştır.`
+      ? `${memberName} - ${methodLabel} ile ${new Date(Number(startTs)).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' })}'deki randevusu için giriş yapmıştır.`
       : `${memberName} - ${methodLabel} ile randevusuz giriş yapmıştır.`;
 
     // Admin/Manager token'ları

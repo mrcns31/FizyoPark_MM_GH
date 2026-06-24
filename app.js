@@ -5829,6 +5829,7 @@ function openNotificationsView() {
 
 var reportsYear = new Date().getFullYear();
 var reportsShowFormer = false;
+var reportsAllStaffMap = new Map(); // normId → { id, name } — aktif + silinmiş tüm personel
 
 function openReportsView() {
   showAdminMainView("reports");
@@ -5848,8 +5849,18 @@ async function loadAndRenderReports() {
   var startDate = reportsYear + "-01-01";
   var endDate = reportsYear + "-12-31";
   try {
-    await fetchAndMergeSessions(startDate, endDate);
-  } catch (e) { /* state'teki mevcut veriyle devam et */ }
+    await Promise.all([
+      fetchAndMergeSessions(startDate, endDate),
+      (async function () {
+        if (!window.API || !window.API.getAllStaffIncludingDeleted) return;
+        var all = await window.API.getAllStaffIncludingDeleted();
+        reportsAllStaffMap = new Map();
+        (all || []).forEach(function (s) {
+          reportsAllStaffMap.set(normId(s.id), { id: s.id, name: getStaffFullName(s) });
+        });
+      })(),
+    ]);
+  } catch (e) { /* mevcut veriyle devam et */ }
   renderReportsTable();
 }
 
@@ -5874,15 +5885,16 @@ function renderReportsTable() {
     if (s.staffId == null) return;
     var sid = normId(s.staffId);
     if (activeIds.has(sid)) return;
-    var rawName = (s.staffName && s.staffName !== "–") ? s.staffName.trim() : null;
-    if (!formerMap.has(sid)) {
-      formerMap.set(sid, { id: s.staffId, name: rawName || "" });
-    } else if (rawName && !formerMap.get(sid).name) {
-      formerMap.get(sid).name = rawName;
-    }
+    if (!formerMap.has(sid)) formerMap.set(sid, { id: s.staffId, name: "" });
   });
-  // İsim bulunamayanlar için fallback
-  formerMap.forEach(function (f) { if (!f.name) f.name = "Eski Personel #" + normId(f.id); });
+  // İsim kaynağı önceliği: 1) tüm personel listesi (silinmişler dahil), 2) session verisi, 3) fallback
+  formerMap.forEach(function (f, sid) {
+    var fromAllStaff = reportsAllStaffMap.get(sid);
+    if (fromAllStaff && fromAllStaff.name) { f.name = fromAllStaff.name; return; }
+    var fromSession = yearSessions.find(function (s) { return normId(s.staffId) === sid && s.staffName && s.staffName !== "–"; });
+    if (fromSession) { f.name = fromSession.staffName.trim(); return; }
+    f.name = "Eski Personel #" + sid;
+  });
   var formerList = Array.from(formerMap.values()).sort(function (a, b) {
     return (a.name || "").localeCompare(b.name || "", "tr");
   });

@@ -645,6 +645,11 @@
     invalidateRareCache();
     return staffFromApi(row);
   }
+  async function getAllStaffIncludingDeleted() {
+    const rows = await apiFetch('/staff?includeDeleted=true');
+    return (rows || []).map(staffFromApi);
+  }
+
   async function deleteStaff(id, body) {
     await apiFetch('/staff/' + id, { method: 'DELETE', body: JSON.stringify(body || {}) });
     invalidateRareCache();
@@ -1034,6 +1039,7 @@
     createStaff,
     updateStaff,
     deleteStaff,
+    getAllStaffIncludingDeleted,
     resetStaffPassword,
     createRoom,
     updateRoom,
