@@ -1328,6 +1328,12 @@ function cacheEls() {
     "notificationsNavBadge",
     "adminNotificationsView",
     "notificationsContent",
+    "openReportsBtn",
+    "adminReportsView",
+    "reportsContent",
+    "reportsYearLabel",
+    "reportsPrevYearBtn",
+    "reportsNextYearBtn",
     "notificationsFilterAll",
     "notificationsFilterCancel",
     "notificationsFilterCheckin",
@@ -5820,6 +5826,98 @@ function openNotificationsView() {
   });
 }
 
+var reportsYear = new Date().getFullYear();
+
+function openReportsView() {
+  showAdminMainView("reports");
+  if (els.reportsYearLabel) els.reportsYearLabel.textContent = reportsYear;
+  loadAndRenderReports();
+}
+
+async function loadAndRenderReports() {
+  if (!els.reportsContent) return;
+  els.reportsContent.innerHTML = '<p class="hint">Yükleniyor…</p>';
+  var startDate = reportsYear + "-01-01";
+  var endDate = reportsYear + "-12-31";
+  try {
+    await fetchAndMergeSessions(startDate, endDate);
+  } catch (e) { /* state'teki mevcut veriyle devam et */ }
+  renderReportsTable();
+}
+
+function renderReportsTable() {
+  if (!els.reportsContent) return;
+  var yearStart = new Date(reportsYear, 0, 1).getTime();
+  var yearEnd = new Date(reportsYear + 1, 0, 1).getTime();
+
+  var yearSessions = state.sessions.filter(function (s) {
+    return s.startTs >= yearStart && s.startTs < yearEnd;
+  });
+
+  // Personel listesi: state.staff sırasına göre
+  var staffList = (state.staff || []).slice().sort(function (a, b) {
+    return getStaffFullName(a).localeCompare(getStaffFullName(b), "tr");
+  });
+
+  // [month 0-11][staffId] → count
+  var counts = {};
+  var monthTotals = new Array(12).fill(0);
+  var staffTotals = {};
+  staffList.forEach(function (s) { staffTotals[normId(s.id)] = 0; });
+
+  yearSessions.forEach(function (s) {
+    var month = new Date(s.startTs).getMonth();
+    var sid = normId(s.staffId);
+    if (!counts[month]) counts[month] = {};
+    counts[month][sid] = (counts[month][sid] || 0) + 1;
+    monthTotals[month]++;
+    if (sid in staffTotals) staffTotals[sid]++;
+    else staffTotals[sid] = (staffTotals[sid] || 0) + 1;
+  });
+
+  var monthNames = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
+
+  var html = '<div class="reports-table-wrap"><table class="reports-table">';
+  // Başlık satırı
+  html += "<thead><tr><th class=\"reports-th reports-th--month\">Ay</th>";
+  staffList.forEach(function (s) {
+    var c = staffColor(s.id);
+    html += "<th class=\"reports-th\" style=\"color:" + c.border + "\">" + escapeHtml(getStaffFullName(s)) + "</th>";
+  });
+  html += "<th class=\"reports-th reports-th--total\">Toplam</th></tr></thead>";
+
+  // Ay satırları
+  html += "<tbody>";
+  for (var m = 0; m < 12; m++) {
+    var rowTotal = monthTotals[m];
+    html += "<tr class=\"reports-tr" + (rowTotal === 0 ? " reports-tr--empty" : "") + "\">";
+    html += "<td class=\"reports-td reports-td--month\">" + monthNames[m] + " " + reportsYear + "</td>";
+    staffList.forEach(function (s) {
+      var sid = normId(s.id);
+      var val = (counts[m] && counts[m][sid]) || 0;
+      html += "<td class=\"reports-td" + (val === 0 ? " reports-td--zero" : "") + "\">" + (val > 0 ? val : "–") + "</td>";
+    });
+    html += "<td class=\"reports-td reports-td--total\">" + (rowTotal > 0 ? "<strong>" + rowTotal + "</strong>" : "–") + "</td>";
+    html += "</tr>";
+  }
+
+  // Yıllık toplam satırı
+  html += "<tr class=\"reports-tr reports-tr--grand\">";
+  html += "<td class=\"reports-td reports-td--month\"><strong>Yıllık Toplam</strong></td>";
+  var grandTotal = 0;
+  staffList.forEach(function (s) {
+    var sid = normId(s.id);
+    var val = staffTotals[sid] || 0;
+    grandTotal += val;
+    var c = staffColor(s.id);
+    html += "<td class=\"reports-td reports-td--grand\" style=\"color:" + c.border + "\"><strong>" + (val > 0 ? val : "–") + "</strong></td>";
+  });
+  html += "<td class=\"reports-td reports-td--total reports-td--grand\"><strong>" + grandTotal + "</strong></td>";
+  html += "</tr></tbody></table></div>";
+
+  els.reportsContent.innerHTML = html;
+}
+
 async function assignPackageFromRequest(requestId) {
   var req = (ui.packageRequests || []).find(function (r) { return Number(r.id) === Number(requestId); });
   if (!req) return;
@@ -6734,12 +6832,14 @@ function updateAdminMainViewUI() {
   if (els.adminFormerMembersView) els.adminFormerMembersView.classList.toggle("hidden", view !== "former-members");
   if (els.adminEntryListView) els.adminEntryListView.classList.toggle("hidden", view !== "entry-list");
   if (els.adminNotificationsView) els.adminNotificationsView.classList.toggle("hidden", view !== "notifications");
+  if (els.adminReportsView) els.adminReportsView.classList.toggle("hidden", view !== "reports");
   if (els.openCalendarBtn) els.openCalendarBtn.classList.toggle("sidebar-nav__btn--active", isCalendar);
   if (els.openListMembersBtn) els.openListMembersBtn.classList.toggle("sidebar-nav__btn--active", view === "members-list");
   if (els.openExpiredMembershipsBtn) els.openExpiredMembershipsBtn.classList.toggle("sidebar-nav__btn--active", view === "expired-memberships");
   if (els.openFormerMembersBtn) els.openFormerMembersBtn.classList.toggle("sidebar-nav__btn--active", view === "former-members");
   if (els.openEntryListBtn) els.openEntryListBtn.classList.toggle("sidebar-nav__btn--active", view === "entry-list");
   if (els.openNotificationsBtn) els.openNotificationsBtn.classList.toggle("sidebar-nav__btn--active", view === "notifications");
+  if (els.openReportsBtn) els.openReportsBtn.classList.toggle("sidebar-nav__btn--active", view === "reports");
   updateTopbarFilterPlaceholder();
   refreshAdminListPanels();
 }
@@ -12528,6 +12628,9 @@ function bindEvents() {
   if (els.openPackageRequestsBtn) els.openPackageRequestsBtn.addEventListener("click", showPackageRequestsPanel);
   if (els.openCancellationRequestsBtn) els.openCancellationRequestsBtn.addEventListener("click", showCancellationRequestsPanel);
   if (els.openNotificationsBtn) els.openNotificationsBtn.addEventListener("click", openNotificationsView);
+  if (els.openReportsBtn) els.openReportsBtn.addEventListener("click", openReportsView);
+  if (els.reportsPrevYearBtn) els.reportsPrevYearBtn.addEventListener("click", function () { reportsYear--; if (els.reportsYearLabel) els.reportsYearLabel.textContent = reportsYear; loadAndRenderReports(); });
+  if (els.reportsNextYearBtn) els.reportsNextYearBtn.addEventListener("click", function () { reportsYear++; if (els.reportsYearLabel) els.reportsYearLabel.textContent = reportsYear; loadAndRenderReports(); });
   if (els.notificationsFilterAll) els.notificationsFilterAll.addEventListener("click", function () { setNotificationsTypeFilter("all"); });
   if (els.notificationsFilterCancel) els.notificationsFilterCancel.addEventListener("click", function () { setNotificationsTypeFilter("cancel"); });
   if (els.notificationsFilterCheckin) els.notificationsFilterCheckin.addEventListener("click", function () { setNotificationsTypeFilter("checkin"); });
@@ -12589,7 +12692,7 @@ function bindEvents() {
       if (e.target.closest("#openPackageRequestsBtn, #openCancellationRequestsBtn, #closePackageRequestsBtn, #closeCancellationRequestsBtn")) {
         return;
       }
-      if (e.target.closest(".sidebar-nav__btn, #openAdminHubBtn, #addMemberBtn, #openCalendarBtn, #openListMembersBtn, #openExpiredMembershipsBtn, #openEntryListBtn, #openNotificationsBtn")) {
+      if (e.target.closest(".sidebar-nav__btn, #openAdminHubBtn, #addMemberBtn, #openCalendarBtn, #openListMembersBtn, #openExpiredMembershipsBtn, #openEntryListBtn, #openNotificationsBtn, #openReportsBtn")) {
         closeSidebar();
       }
     });

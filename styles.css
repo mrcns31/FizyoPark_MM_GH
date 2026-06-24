@@ -4497,6 +4497,87 @@ select option:checked{
 .admin-main-panel__content .list-members-cards{
   width:100%;
 }
+.reports-year-nav{
+  display:flex;
+  align-items:center;
+  gap:4px;
+  margin-left:auto;
+}
+.reports-year-label{
+  font-size:14px;
+  font-weight:700;
+  color:var(--text);
+  min-width:44px;
+  text-align:center;
+}
+.reports-table-wrap{
+  width:100%;
+  overflow-x:auto;
+}
+.reports-table{
+  width:100%;
+  border-collapse:collapse;
+  font-size:13px;
+}
+.reports-th{
+  padding:8px 14px;
+  text-align:center;
+  font-weight:700;
+  font-size:12px;
+  white-space:nowrap;
+  border-bottom:2px solid var(--border);
+  background:rgba(255,255,255,.03);
+  position:sticky;
+  top:0;
+  z-index:1;
+}
+.reports-th--month{
+  text-align:left;
+  color:var(--muted);
+  min-width:120px;
+}
+.reports-th--total{
+  color:var(--text);
+  border-left:1px solid var(--border);
+}
+.reports-td{
+  padding:7px 14px;
+  text-align:center;
+  border-bottom:1px solid rgba(255,255,255,.05);
+  font-variant-numeric:tabular-nums;
+  font-size:13px;
+  font-weight:600;
+  color:var(--text);
+}
+.reports-td--month{
+  text-align:left;
+  color:var(--muted);
+  font-weight:600;
+  white-space:nowrap;
+}
+.reports-td--zero{
+  color:rgba(255,255,255,.2);
+  font-weight:400;
+}
+.reports-td--total{
+  font-weight:700;
+  border-left:1px solid var(--border);
+}
+.reports-tr--empty .reports-td{
+  opacity:.45;
+}
+.reports-tr--grand .reports-td{
+  border-top:2px solid var(--border);
+  background:rgba(255,255,255,.04);
+  padding-top:10px;
+  padding-bottom:10px;
+}
+.reports-tr--grand .reports-td--month{
+  color:var(--text);
+}
+.reports-table tbody .reports-tr:hover .reports-td{
+  background:rgba(255,255,255,.03);
+}
 .admin-main-panel__head--tabs{
   padding:0;
   border-bottom:1px solid var(--border);
