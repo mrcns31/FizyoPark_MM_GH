@@ -1,11 +1,12 @@
 import { Alert, Platform } from 'react-native';
+import { adminPasswordEmitter } from './admin-password-emitter';
 
 /**
  * Admin şifresi sorar.
  * iOS  → Alert.prompt (native secure-text)
- * Android → desteklenmez; kullanıcı bilgilendirilir, null döner (işlem iptal)
+ * Android → custom modal (AdminPasswordModal root'ta tanımlı olmalı)
  *
- * Vazgeç / desteklenmiyor → null
+ * Vazgeç / iptal → null
  * Onayla → girilen şifre string'i
  */
 export function promptAdminPassword(
@@ -25,12 +26,7 @@ export function promptAdminPassword(
     });
   }
 
-  // Android'de Alert.prompt desteklenmez — işlem iptal edilir
   return new Promise((resolve) => {
-    Alert.alert(
-      'Desteklenmiyor',
-      'Admin şifre doğrulama bu platformda desteklenmemektedir. Lütfen iOS cihaz kullanın.',
-      [{ text: 'Tamam', onPress: () => resolve(null) }],
-    );
+    adminPasswordEmitter.request(message, resolve);
   });
 }

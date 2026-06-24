@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 
 import { useQuery } from '@tanstack/react-query';
 
@@ -16,6 +17,18 @@ function abbrStaffName(name: string): string {
   return `${parts[0]} ${parts[1].slice(0, 3)}.`;
 }
 
+/** Kalan/toplam oranına göre yeşil → turuncu → kırmızı renk döndürür. */
+function remainingColor(remaining: number | null, total: number): string {
+  if (remaining == null || total <= 0) return colors.muted;
+  const ratio = Math.max(0, Math.min(1, remaining / total));
+  if (ratio >= 1) return '#4cd473';
+  if (ratio >= 0.5) return `hsl(${Math.round(30 + ((ratio - 0.5) / 0.5) * 90)}, 75%, 60%)`;
+  if (ratio >= 0.2) return `hsl(${Math.round(((ratio - 0.2) / 0.3) * 30)}, 75%, 60%)`;
+  return '#f25c6e';
+}
+
+export type MemberPkgInfo = { remaining: number | null; total: number; packageName: string };
+
 /**
  * Zaman-ray takvim: sol kenarda dikey saat etiketi, sağında aynı anda
  * aktif personel sayısı kadar eşit genişlikte kolon (ekran görüntüsü paritesi).
@@ -25,13 +38,19 @@ export function AdminCalendarGrid({
   sessions,
   onPressGroup,
   onLongPressGroup,
+  onDeleteGroup,
   fullRail = true,
+  memberPackageMap,
+  showRemaining = false,
 }: {
   dayTs?: number;
   sessions: PlannerSession[];
   onPressGroup?: (group: PlannerSession[]) => void;
   onLongPressGroup?: (group: PlannerSession[]) => void;
+  onDeleteGroup?: (group: PlannerSession[]) => void;
   fullRail?: boolean;
+  memberPackageMap?: Map<number, MemberPkgInfo>;
+  showRemaining?: boolean;
 }) {
   const staffQ = useQuery({ queryKey: ['staff'], queryFn: getStaff });
   const { data: workingHours } = useWorkingHours();
@@ -82,15 +101,39 @@ export function AdminCalendarGrid({
                   onLongPress={() => onLongPressGroup?.(g.sessions)}
                   style={[styles.slotCard, { borderColor: c.border, backgroundColor: c.bg }]}
                 >
-                  <Text style={styles.slotStaff} numberOfLines={1}>
-                    {g.staffName ? abbrStaffName(g.staffName) : 'Atanmamış'}
-                  </Text>
-                  <View style={styles.slotDivider} />
-                  {g.sessions.map((s) => (
-                    <Text key={s.id} style={styles.memberName} numberOfLines={1}>
-                      {s.memberName || 'İsimsiz'}
+                  <View style={styles.slotHead}>
+                    <Text style={styles.slotStaff} numberOfLines={1}>
+                      {g.staffName ? abbrStaffName(g.staffName) : 'Atanmamış'}
                     </Text>
-                  ))}
+                    {onDeleteGroup ? (
+                      <TouchableOpacity
+                        onPress={() => onDeleteGroup(g.sessions)}
+                        hitSlop={8}
+                        style={styles.deleteBtn}
+                      >
+                        <Ionicons name="trash-outline" size={13} color="rgba(255,100,120,0.75)" />
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
+                  <View style={styles.slotDivider} />
+                  {g.sessions.map((s) => {
+                    const pkgInfo = s.memberId != null ? memberPackageMap?.get(s.memberId) : undefined;
+                    return (
+                      <View key={s.id} style={styles.memberRow}>
+                        <Text style={styles.memberName} numberOfLines={1}>
+                          {s.memberName || 'İsimsiz'}
+                        </Text>
+                        {showRemaining && pkgInfo != null ? (
+                          <Text
+                            style={[styles.remainingBadge, { color: remainingColor(pkgInfo.remaining, pkgInfo.total) }]}
+                            numberOfLines={1}
+                          >
+                            {' '}({pkgInfo.remaining ?? '?'}/{pkgInfo.total})
+                          </Text>
+                        ) : null}
+                      </View>
+                    );
+                  })}
                 </Pressable>
               );
             })}
@@ -173,20 +216,40 @@ const styles = StyleSheet.create({
     padding: 8,
     gap: 3,
   },
+  slotHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
   slotStaff: {
     color: colors.text,
     fontWeight: '700',
     fontSize: 12,
+    flex: 1,
+  },
+  deleteBtn: {
+    padding: 2,
+    marginLeft: 4,
   },
   slotDivider: {
     height: 1,
     backgroundColor: 'rgba(255,255,255,0.12)',
     marginVertical: 2,
   },
+  memberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'nowrap',
+  },
   memberName: {
     color: 'rgba(232,236,255,0.95)',
     fontSize: 13,
     fontWeight: '600',
+    flexShrink: 1,
   },
-
+  remainingBadge: {
+    fontSize: 12,
+    fontWeight: '700',
+    flexShrink: 0,
+  },
 });

@@ -7,6 +7,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 import { AuthProvider, useAuth } from '../src/features/auth';
+import { AdminPasswordModal } from '../src/components/admin-password-modal';
 import { queryClient } from '../src/lib/react-query';
 import { colors } from '../src/theme/colors';
 
@@ -22,6 +23,7 @@ export default function RootLayout() {
           <AuthProvider>
             <StatusBar style="light" />
             <RootNavigator />
+            <AdminPasswordModal />
           </AuthProvider>
         </QueryClientProvider>
       </SafeAreaProvider>

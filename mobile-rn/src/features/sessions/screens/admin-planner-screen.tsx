@@ -11,7 +11,7 @@ import {
   enumerateDays,
   formatDayLabel,
   formatDayShort,
-  formatSessionRange,
+  formatTime,
   monthLabel,
   startOfMonthTs,
   startOfWeekTs,
@@ -28,9 +28,10 @@ import { staffColor } from '../../../lib/staff-color';
 import { useConfirmAttendance, useDeleteSession, useSessions } from '../api/hooks';
 import { isAttendanceConfirmed, type PlannerSession } from '../api/sessions';
 import { promptAdminPassword } from '../../../lib/admin-password';
-import { AdminCalendarGrid } from './admin-calendar-grid';
+import { AdminCalendarGrid, type MemberPkgInfo } from './admin-calendar-grid';
 import { DateField } from '../../../components/date-field';
 import { SessionDetailSheet } from '../components/session-detail-sheet';
+import { useMemberPackages } from '../../member-packages/api/hooks';
 
 const DAY = 24 * 3600 * 1000;
 type ViewMode = 'day' | 'week' | 'month';
@@ -63,6 +64,24 @@ export function AdminPlannerScreen() {
   const confirm = useConfirmAttendance();
   const { data: staff } = useStaff();
   const { data: rooms } = useRooms();
+  const { data: allPackages } = useMemberPackages();
+  const [showRemaining, setShowRemaining] = useState(false);
+
+  // memberId → aktif paket bilgisi (kalan/toplam seans)
+  const activePkgByMember = useMemo<Map<number, MemberPkgInfo>>(() => {
+    const map = new Map<number, MemberPkgInfo>();
+    for (const mp of allPackages ?? []) {
+      if (mp.status === 'active') {
+        map.set(mp.memberId, {
+          remaining: mp.remainingSessions,
+          total: mp.lessonCount,
+          packageName: mp.packageName,
+        });
+      }
+    }
+    return map;
+  }, [allPackages]);
+
   // Seçili slot anahtarı (saat + personel) — grup canlı veriden türetilir ki
   // yoklama/silme sonrası sheet otomatik güncellensin.
   const [selectedKey, setSelectedKey] = useState<{ startTs: number; staffId: number | null } | null>(null);
@@ -112,8 +131,8 @@ export function AdminPlannerScreen() {
   async function onDeleteGroup(grp: PlannerSession[]) {
     const isGroup = grp.length > 1;
     const msg = isGroup
-      ? `${grp.length} seans (${formatSessionRange(grp[0].startTs, grp[0].endTs)}) silinsin mi?`
-      : `${grp[0].memberName || 'Seans'} (${formatSessionRange(grp[0].startTs, grp[0].endTs)}) silinsin mi?`;
+      ? `${grp.length} seans (${formatTime(grp[0].startTs)}) silinsin mi?`
+      : `${grp[0].memberName || 'Seans'} (${formatTime(grp[0].startTs)}) silinsin mi?`;
     Alert.alert(isGroup ? 'Grubu sil' : 'Seansı sil', msg, [
       { text: 'Vazgeç', style: 'cancel' },
       {
@@ -210,6 +229,18 @@ export function AdminPlannerScreen() {
               </Pressable>
             );
           })}
+          {/* Kalan seans toggle */}
+          <Pressable
+            onPress={() => setShowRemaining((v) => !v)}
+            style={[styles.remainingToggle, showRemaining && styles.remainingToggleOn]}
+            hitSlop={8}
+          >
+            <Ionicons
+              name={showRemaining ? 'eye' : 'eye-outline'}
+              size={16}
+              color={showRemaining ? colors.accent : colors.muted}
+            />
+          </Pressable>
         </View>
       ) : (
         <ScreenHeader
@@ -300,11 +331,14 @@ export function AdminPlannerScreen() {
                 dayTs={d.ts}
                 sessions={d.sessions}
                 fullRail={view === 'day'}
+                memberPackageMap={activePkgByMember}
+                showRemaining={showRemaining}
                 onPressGroup={(g) => router.push({
                   pathname: '/(admin)/planner/session-form',
                   params: { id: String(g[0].id), date: toDateStr(g[0].startTs) },
                 })}
                 onLongPressGroup={(g) => setSelectedKey({ startTs: g[0].startTs, staffId: g[0].staffId })}
+                onDeleteGroup={onDeleteGroup}
               />
             </View>
           ))}
@@ -312,21 +346,31 @@ export function AdminPlannerScreen() {
       )}
       {sessions.length > 0 ? (
         <View style={[styles.staffSummary, wide]}>
-          {Object.entries(
-            sessions.reduce<Record<string, number>>((acc, s) => {
-              const name = s.staffName || 'Atanmamış';
-              acc[name] = (acc[name] ?? 0) + 1;
-              return acc;
-            }, {})
+          {Array.from(
+            sessions.reduce<Map<number | null, { name: string; count: number; idx: number }>>(
+              (acc, s) => {
+                const key = s.staffId ?? -1;
+                if (!acc.has(key)) {
+                  const idx = (staff ?? []).findIndex((st) => st.id === s.staffId);
+                  acc.set(key, { name: s.staffName || 'Atanmamış', count: 0, idx });
+                }
+                acc.get(key)!.count++;
+                return acc;
+              },
+              new Map()
+            ).values()
           )
-            .sort(([a], [b]) => a.localeCompare(b, 'tr'))
-            .map(([name, count]) => (
-              <Text key={name} style={styles.staffSummaryText}>
-                {name}: {count}
-              </Text>
-            ))}
+            .sort((a, b) => a.name.localeCompare(b.name, 'tr'))
+            .map(({ name, count, idx }) => {
+              const c = staffColor(idx, null);
+              return (
+                <Text key={name} style={[styles.staffSummaryText, { color: c.border }]}>
+                  {name}: <Text style={styles.staffSummaryCount}>{count}</Text>
+                </Text>
+              );
+            })}
           <Text style={[styles.staffSummaryText, styles.staffSummaryTotal]}>
-            Toplam: {sessions.length}
+            Toplam: <Text style={styles.staffSummaryCount}>{sessions.length}</Text>
           </Text>
         </View>
       ) : null}
@@ -481,6 +525,21 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg,
   },
   staffSummaryText: { color: colors.muted, fontSize: 11, fontWeight: '600' },
+  staffSummaryCount: { fontWeight: '800' },
   staffSummaryTotal: { color: colors.text, fontWeight: '800', marginLeft: 4 },
   dayHeader: { color: colors.muted, fontSize: 13, fontWeight: '700', marginTop: 10, marginBottom: 2 },
+  remainingToggle: {
+    width: 28,
+    height: 28,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 2,
+  },
+  remainingToggleOn: {
+    borderColor: colors.accent,
+    backgroundColor: 'rgba(124,92,255,0.15)',
+  },
 });

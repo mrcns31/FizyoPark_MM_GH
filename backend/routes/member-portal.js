@@ -54,13 +54,19 @@ async function getActivePackageStats(db, memberId, sessionId) {
       return null;
     }
 
-    // 3. Kullanılan seans sayısını say (giriş yapılmış + gelmedi)
+    // 3. Kullanılan seans sayısını say — isSessionConsumed mantığıyla eşleşmeli:
+    //    - explicit giriş veya no_show, VEYA
+    //    - seans saati geçmiş (otomatik no-show), iptal edilmemiş
     const usedR = await db.query(
       `SELECT COUNT(*)::int AS used_count
        FROM sessions
        WHERE member_package_id = $1
          AND deleted_at IS NULL
-         AND (checked_in_at IS NOT NULL OR attendance_outcome = 'no_show')`,
+         AND (
+           checked_in_at IS NOT NULL
+           OR attendance_outcome = 'no_show'
+           OR end_ts < EXTRACT(EPOCH FROM NOW()) * 1000
+         )`,
       [mpId]
     );
     const used = Number(usedR.rows[0]?.used_count ?? 0);
