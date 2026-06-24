@@ -4973,6 +4973,69 @@ select option:checked{
   font-size:10px;
   color:var(--muted);
 }
+.planner-month__summary{
+  margin-top:20px;
+  padding:16px;
+  border-radius:var(--radius2);
+  border:1px solid var(--border);
+  background:rgba(255,255,255,.02);
+}
+.planner-month__summary-header{
+  font-size:11px;
+  font-weight:700;
+  color:var(--muted);
+  text-transform:uppercase;
+  letter-spacing:.07em;
+  margin-bottom:12px;
+}
+.planner-month__summary-cards{
+  display:grid;
+  grid-template-columns:repeat(auto-fill, minmax(160px,1fr));
+  gap:10px;
+}
+.planner-month__scard{
+  display:flex;
+  flex-direction:column;
+  gap:0;
+  padding:12px 14px 12px;
+  border-radius:12px;
+  border:1px solid var(--sc, var(--border));
+  background:var(--sb, rgba(255,255,255,.03));
+}
+.planner-month__scard--total{
+  --sc: rgba(255,255,255,.22);
+  --sb: rgba(255,255,255,.05);
+}
+.planner-month__scard-name{
+  font-size:13px;
+  font-weight:700;
+  color:var(--sc, var(--text));
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  padding-bottom:8px;
+  margin-bottom:10px;
+  border-bottom:2px solid var(--sc, var(--border));
+}
+.planner-month__scard--total .planner-month__scard-name{
+  color:var(--text);
+}
+.planner-month__scard-body{
+  display:flex;
+  align-items:baseline;
+  gap:5px;
+}
+.planner-month__scard-count{
+  font-size:24px;
+  font-weight:800;
+  color:var(--text);
+  line-height:1;
+}
+.planner-month__scard-label{
+  font-size:12px;
+  color:var(--muted);
+  font-weight:500;
+}
 .timeCell{
   padding:12px 10px;
   border-right:1px solid var(--border);

@@ -342,6 +342,41 @@ export function AdminPlannerScreen() {
               />
             </View>
           ))}
+          {view === 'month' && sessions.length > 0 ? (
+            <View style={[styles.monthSummaryCard, wide]}>
+              <Text style={styles.monthSummaryTitle}>{monthLabel(anchor)} — Personel Özeti</Text>
+              {Array.from(
+                sessions.reduce<Map<number | null, { name: string; count: number; idx: number; staffId: number | null }>>(
+                  (acc, s) => {
+                    const key = s.staffId ?? -1;
+                    if (!acc.has(key)) {
+                      const idx = (staff ?? []).findIndex((st) => st.id === s.staffId);
+                      acc.set(key, { name: s.staffName || 'Atanmamış', count: 0, idx, staffId: s.staffId ?? null });
+                    }
+                    acc.get(key)!.count++;
+                    return acc;
+                  },
+                  new Map()
+                ).values()
+              )
+                .sort((a, b) => a.name.localeCompare(b.name, 'tr'))
+                .map(({ name, count, idx, staffId }) => {
+                  const c = staffColor(idx, staffId);
+                  return (
+                    <View key={name} style={styles.monthSummaryRow}>
+                      <View style={[styles.monthSummaryDot, { backgroundColor: c.bg, borderColor: c.border }]} />
+                      <Text style={[styles.monthSummaryName, { color: c.border }]} numberOfLines={1}>{name}</Text>
+                      <Text style={styles.monthSummaryCount}>{count} randevu</Text>
+                    </View>
+                  );
+                })}
+              <View style={styles.monthSummaryDivider} />
+              <View style={styles.monthSummaryRow}>
+                <Text style={[styles.monthSummaryName, styles.monthSummaryTotalLabel]}>Toplam</Text>
+                <Text style={[styles.monthSummaryCount, styles.monthSummaryTotalCount]}>{sessions.length} randevu</Text>
+              </View>
+            </View>
+          ) : null}
         </ScrollView>
       )}
       {sessions.length > 0 ? (
@@ -528,6 +563,24 @@ const styles = StyleSheet.create({
   staffSummaryCount: { fontWeight: '800' },
   staffSummaryTotal: { color: colors.text, fontWeight: '800', marginLeft: 4 },
   dayHeader: { color: colors.muted, fontSize: 13, fontWeight: '700', marginTop: 10, marginBottom: 2 },
+  monthSummaryCard: {
+    marginTop: 16,
+    marginBottom: 8,
+    padding: 16,
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(255,255,255,0.1)',
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    gap: 10,
+  },
+  monthSummaryTitle: { color: colors.text, fontWeight: '800', fontSize: 14, marginBottom: 2 },
+  monthSummaryRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  monthSummaryDot: { width: 10, height: 10, borderRadius: 5, borderWidth: 1.5 },
+  monthSummaryName: { flex: 1, color: colors.muted, fontSize: 13, fontWeight: '600' },
+  monthSummaryCount: { color: colors.text, fontSize: 13, fontWeight: '800' },
+  monthSummaryDivider: { height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(255,255,255,0.12)' },
+  monthSummaryTotalLabel: { color: colors.text, fontWeight: '800' },
+  monthSummaryTotalCount: { fontSize: 15 },
   remainingToggle: {
     width: 28,
     height: 28,

@@ -3460,6 +3460,38 @@ function renderMonthView() {
     html += `<div class="${classes.join(" ")}" data-date="${key}" role="button" tabindex="0">${body}</div>`;
   }
   html += "</div>";
+
+  if (monthSessions.length > 0) {
+    const staffCounts = new Map();
+    monthSessions.forEach(function (s) {
+      const key = s.staffId != null ? s.staffId : "__unassigned__";
+      if (!staffCounts.has(key)) {
+        const staffObj = s.staffId != null ? getStaffById(s.staffId) : null;
+        const name = staffObj ? getStaffFullName(staffObj) : "Atanmamış";
+        staffCounts.set(key, { name: name, count: 0, staffId: s.staffId });
+      }
+      staffCounts.get(key).count++;
+    });
+    const sortedStaff = Array.from(staffCounts.values()).sort(function (a, b) {
+      return (a.name || "").localeCompare(b.name || "", "tr");
+    });
+    html += '<div class="planner-month__summary">';
+    html += '<div class="planner-month__summary-header">Personel Özeti</div>';
+    html += '<div class="planner-month__summary-cards">';
+    sortedStaff.forEach(function (item) {
+      const c = staffColor(item.staffId);
+      html += '<div class="planner-month__scard" style="--sc:' + c.border + ';--sb:' + c.bg + '">';
+      html += '<div class="planner-month__scard-name">' + escapeHtml(item.name) + "</div>";
+      html += '<div class="planner-month__scard-body"><span class="planner-month__scard-count">' + item.count + '</span><span class="planner-month__scard-label">randevu</span></div>';
+      html += "</div>";
+    });
+    html += '<div class="planner-month__scard planner-month__scard--total">';
+    html += '<div class="planner-month__scard-name">Toplam</div>';
+    html += '<div class="planner-month__scard-body"><span class="planner-month__scard-count">' + monthSessions.length + '</span><span class="planner-month__scard-label">randevu</span></div>';
+    html += "</div>";
+    html += "</div></div>";
+  }
+
   els.plannerMonth.innerHTML = html;
 
   function drillDownToDay(dateStr) {

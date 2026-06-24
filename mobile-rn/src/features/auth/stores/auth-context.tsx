@@ -53,6 +53,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => setUnauthorizedHandler(null);
   }, [queryClient]);
 
+  // Uygulama açılışında kullanıcı zaten giriş yapmışsa push token kaydet
+  const userId = userQuery.data?.id ?? null;
+  useEffect(() => {
+    if (!userId) return;
+    getExpoPushToken().then((token) => {
+      if (token) registerPushToken(token).catch(() => {});
+    });
+  }, [userId]);
+
   const signIn = useCallback(
     async (email: string, password: string, rememberMe?: boolean) => {
       await loginMutation.mutateAsync({ email, password, rememberMe });
