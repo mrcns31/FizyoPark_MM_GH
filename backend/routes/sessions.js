@@ -197,87 +197,102 @@ router.get('/', [
 // Üye iptalleri ve QR ile giriş yapılan bildirimler (personel/admin paneli polling ve bildirim listesi için)
 router.get('/notifications', [
   query('since').optional().isInt(),
+  query('until').optional().isInt(),
   query('limit').optional().isInt({ min: 1, max: 100 }),
+  query('page').optional().isInt({ min: 1 }),
+  query('per_page').optional().isInt({ min: 1, max: 100 }),
 ], async (req, res) => {
   try {
     if (req.user.role === 'member') {
-      return res.json([]);
+      return res.json({ items: [], total: 0, page: 1, perPage: 20, totalPages: 0 });
     }
 
     const hasSince = req.query.since !== undefined;
     const since = hasSince ? Number(req.query.since) : Date.now() - 30 * 24 * 60 * 60 * 1000;
-    const limit = req.query.limit ? Number(req.query.limit) : 50;
-    const order = hasSince ? 'ASC' : 'DESC';
+    const until = req.query.until ? Number(req.query.until) : Date.now();
+    const perPage = req.query.per_page ? Math.min(100, Number(req.query.per_page)) : 20;
+    const page = req.query.page ? Math.max(1, Number(req.query.page)) : 1;
+    const offset = (page - 1) * perPage;
 
-    const params = [since];
+    const params = [since, until];
     let cancelFilter = '';
     let checkinFilter = '';
     let walkinFilter = '';
 
     if (req.user.role === 'staff') {
       const staffResult = await db.query('SELECT id FROM staff WHERE user_id = $1', [req.user.userId]);
-      if (staffResult.rows.length === 0) return res.json([]);
-      // Personel: yalnızca kendi seanslarına ait giriş/iptal bildirimleri gelir.
-      // Randevusuz (walk-in) girişler sadece admin'e gider; personele gitmez.
-      const { start, end } = resolveLocalDateRangeMs({ dateStr: localTodayDateStr() });
-      params.push(staffResult.rows[0].id, start, end);
-      cancelFilter  = ' AND s.staff_id = $2 AND s.start_ts >= $3 AND s.start_ts <= $4';
-      checkinFilter = ' AND s.staff_id = $2 AND al.created_at >= to_timestamp($3 / 1000.0) AND al.created_at <= to_timestamp($4 / 1000.0)';
-      walkinFilter  = ' AND 1=0'; // walk-in (randevusuz giriş) personele bildirim gitmez
+      if (staffResult.rows.length === 0) {
+        return res.json({ items: [], total: 0, page, perPage, totalPages: 0 });
+      }
+      const staffId = staffResult.rows[0].id;
+      params.push(staffId);
+      cancelFilter  = ` AND s.staff_id = $${params.length}`;
+      checkinFilter = ` AND s.staff_id = $${params.length}`;
+      walkinFilter  = ' AND 1=0';
     }
 
-    params.push(limit);
-    const limitParam = `$${params.length}`;
+    const baseSql = `
+      SELECT al.id, 'cancel' AS type,
+             EXTRACT(EPOCH FROM al.created_at) * 1000 AS at_ts,
+             s.staff_id, s.start_ts,
+             COALESCE(NULLIF(TRIM(m.first_name || ' ' || m.last_name), ''), NULLIF(TRIM(m.name), '')) AS member_name,
+             TRIM(st.first_name || ' ' || st.last_name) AS staff_name,
+             NULL AS source
+      FROM activity_logs al
+      JOIN sessions s ON s.id::text = al.entity_id
+      LEFT JOIN members m ON m.id = s.member_id
+      LEFT JOIN staff st ON st.id = s.staff_id
+      WHERE al.action = 'session.cancel_by_member'
+        AND al.created_at > to_timestamp($1 / 1000.0)
+        AND al.created_at <= to_timestamp($2 / 1000.0)${cancelFilter}
 
+      UNION ALL
+
+      SELECT al.id, 'checkin' AS type,
+             EXTRACT(EPOCH FROM al.created_at) * 1000 AS at_ts,
+             s.staff_id, s.start_ts,
+             COALESCE(NULLIF(TRIM(m.first_name || ' ' || m.last_name), ''), NULLIF(TRIM(m.name), '')) AS member_name,
+             TRIM(st.first_name || ' ' || st.last_name) AS staff_name,
+             al.details->>'checkInMethod' AS source
+      FROM activity_logs al
+      JOIN sessions s ON s.id::text = al.entity_id
+      LEFT JOIN members m ON m.id = s.member_id
+      LEFT JOIN staff st ON st.id = s.staff_id
+      WHERE al.action = 'session.check_in_qr'
+        AND al.created_at > to_timestamp($1 / 1000.0)
+        AND al.created_at <= to_timestamp($2 / 1000.0)${checkinFilter}
+
+      UNION ALL
+
+      SELECT fal.id, 'checkin' AS type,
+             EXTRACT(EPOCH FROM fal.accessed_at) * 1000 AS at_ts,
+             NULL::int AS staff_id, NULL::bigint AS start_ts,
+             COALESCE(NULLIF(TRIM(m.first_name || ' ' || m.last_name), ''), NULLIF(TRIM(m.name), '')) AS member_name,
+             NULL AS staff_name,
+             fal.source
+      FROM facility_access_logs fal
+      LEFT JOIN members m ON m.id = fal.member_id
+      WHERE fal.accessed_at > to_timestamp($1 / 1000.0)
+        AND fal.accessed_at <= to_timestamp($2 / 1000.0)
+        AND fal.member_id IS NOT NULL${walkinFilter}
+    `;
+
+    // Toplam sayı
+    let total = 0;
+    try {
+      const countResult = await db.query(`SELECT COUNT(*) AS cnt FROM (${baseSql}) combined`, params);
+      total = parseInt(countResult.rows[0]?.cnt ?? 0, 10);
+    } catch { total = 0; }
+
+    // Sayfalı veri
+    const offsetIdx = params.length + 1;
+    const limitIdx = params.length + 2;
     const result = await db.query(
-      `SELECT * FROM (
-         SELECT al.id, 'cancel' AS type,
-                EXTRACT(EPOCH FROM al.created_at) * 1000 AS at_ts,
-                s.staff_id, s.start_ts,
-                COALESCE(NULLIF(TRIM(m.first_name || ' ' || m.last_name), ''), NULLIF(TRIM(m.name), '')) AS member_name,
-                TRIM(st.first_name || ' ' || st.last_name) AS staff_name,
-                NULL AS source
-         FROM activity_logs al
-         JOIN sessions s ON s.id::text = al.entity_id
-         LEFT JOIN members m ON m.id = s.member_id
-         LEFT JOIN staff st ON st.id = s.staff_id
-         WHERE al.action = 'session.cancel_by_member'
-           AND al.created_at > to_timestamp($1 / 1000.0)${cancelFilter}
-
-         UNION ALL
-
-         SELECT al.id, 'checkin' AS type,
-                EXTRACT(EPOCH FROM al.created_at) * 1000 AS at_ts,
-                s.staff_id, s.start_ts,
-                COALESCE(NULLIF(TRIM(m.first_name || ' ' || m.last_name), ''), NULLIF(TRIM(m.name), '')) AS member_name,
-                TRIM(st.first_name || ' ' || st.last_name) AS staff_name,
-                al.details->>'checkInMethod' AS source
-         FROM activity_logs al
-         JOIN sessions s ON s.id::text = al.entity_id
-         LEFT JOIN members m ON m.id = s.member_id
-         LEFT JOIN staff st ON st.id = s.staff_id
-         WHERE al.action = 'session.check_in_qr'
-           AND al.created_at > to_timestamp($1 / 1000.0)${checkinFilter}
-
-         UNION ALL
-
-         SELECT fal.id, 'checkin' AS type,
-                EXTRACT(EPOCH FROM fal.accessed_at) * 1000 AS at_ts,
-                NULL::int AS staff_id, NULL::bigint AS start_ts,
-                COALESCE(NULLIF(TRIM(m.first_name || ' ' || m.last_name), ''), NULLIF(TRIM(m.name), '')) AS member_name,
-                NULL AS staff_name,
-                fal.source
-         FROM facility_access_logs fal
-         LEFT JOIN members m ON m.id = fal.member_id
-         WHERE fal.accessed_at > to_timestamp($1 / 1000.0)
-           AND fal.member_id IS NOT NULL${walkinFilter}
-       ) combined
-       ORDER BY at_ts ${order}
-       LIMIT ${limitParam}`,
-      params
+      `SELECT * FROM (${baseSql}) combined ORDER BY at_ts DESC LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+      [...params, offset, perPage]
     );
 
-    res.json(result.rows.map((r) => ({
+    const items = result.rows.map((r) => ({
       id: r.id,
       type: r.type,
       at: Number(r.at_ts),
@@ -286,9 +301,11 @@ router.get('/notifications', [
       memberName: r.member_name,
       startTs: r.start_ts ? Number(r.start_ts) : null,
       source: r.source || null,
-    })));
+    }));
+
+    res.json({ items, total, page, perPage, totalPages: Math.ceil(total / perPage) });
   } catch (error) {
-    if (error.code === '42P01') return res.json([]);
+    if (error.code === '42P01') return res.json({ items: [], total: 0, page: 1, perPage: 20, totalPages: 0 });
     console.error('Bildirimler alınırken hata oluştu:', error);
     res.status(500).json({ error: 'Bildirimler alınırken hata oluştu' });
   }

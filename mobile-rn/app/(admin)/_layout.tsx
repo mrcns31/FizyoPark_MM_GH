@@ -59,6 +59,7 @@ export default function AdminLayout() {
         { key: 'expired', label: 'Paketi Bitmiş Üyeler', icon: 'time-outline', active: active('/members/expired'), onPress: () => router.push('/(admin)/members/expired') },
         { key: 'former', label: 'Eski Üyeler', icon: 'person-remove', active: active('/members/former'), onPress: () => router.push('/(admin)/members/former') },
         { key: 'entry', label: 'Giriş Listesi', icon: 'enter-outline', active: active('/more/entry-list'), onPress: () => router.push('/(admin)/more/entry-list') },
+        { key: 'reports', label: 'Raporlar', icon: 'bar-chart-outline', active: active('/more/reports'), onPress: () => router.push('/(admin)/more/reports') },
         { key: 'notif', label: 'Bildirimler', icon: 'notifications', active: active('/notifications'), badge: unread > 0, onPress: () => go('/(admin)/notifications') },
         { key: 'req', label: 'Talepler', icon: 'file-tray-full', active: active('/more/requests'), badge: reqCount > 0, onPress: () => go('/(admin)/more/requests') },
       ],

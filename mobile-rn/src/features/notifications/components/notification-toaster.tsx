@@ -17,23 +17,24 @@ interface Toast {
  * useNotifications zaten 20 sn'de bir polluyor; ilk yüklemedeki mevcutlar toast'lanmaz.
  */
 export function NotificationToaster() {
-  const { data } = useNotifications();
+  const todayStart = Math.floor((Date.now() + 3 * 3600 * 1000) / 86400000) * 86400000 - 3 * 3600 * 1000;
+  const { data } = useNotifications(todayStart, Date.now(), 1, 30);
   const seen = useRef<Set<number> | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   const anim = useRef(new Animated.Value(0)).current;
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    if (!data) return;
-    // İlk yükleme: mevcut tüm id'leri "görüldü" say, toast gösterme.
+    const items = data?.items;
+    if (!items) return;
     if (seen.current === null) {
-      seen.current = new Set(data.map((n) => n.id));
+      seen.current = new Set(items.map((n) => n.id));
       return;
     }
-    const fresh = data.filter((n) => !seen.current!.has(n.id));
+    const fresh = items.filter((n) => !seen.current!.has(n.id));
     if (fresh.length) {
       fresh.forEach((n) => seen.current!.add(n.id));
-      const n = fresh[0]; // en yeni (liste zaten yeni→eski sıralı)
+      const n = fresh[0];
       setToast({ id: n.id, title: n.title, body: n.body });
     }
   }, [data]);

@@ -1,22 +1,31 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 
 import { listNotifications, markNotificationRead } from './notifications';
 
 export const notificationKeys = {
-  list: ['notifications', 'list'] as const,
+  list: (since: number, until: number, page: number) => ['notifications', since, until, page] as const,
+  recent: ['notifications', 'recent'] as const,
 };
 
-export function useNotifications(unreadOnly = false) {
+export function useNotifications(since: number, until: number, page: number, perPage = 20) {
   return useQuery({
-    queryKey: [...notificationKeys.list, unreadOnly],
-    queryFn: () => listNotifications(unreadOnly),
-    refetchInterval: 20_000, // web NOTIFICATION_INTERVAL_MS paritesi
+    queryKey: notificationKeys.list(since, until, page),
+    queryFn: () => listNotifications({ since, until, page, perPage }),
+    staleTime: 15_000,
   });
 }
 
+/** Sidebar badge: bugünkü bildirim sayısı. */
 export function useUnreadCount() {
-  const q = useNotifications(false);
-  const count = (q.data ?? []).filter((n) => !n.readAt).length;
+  const now = Date.now();
+  const TZ = 3 * 3600 * 1000;
+  const todayStart = Math.floor((now + TZ) / 86400000) * 86400000 - TZ;
+  const q = useQuery({
+    queryKey: notificationKeys.recent,
+    queryFn: () => listNotifications({ since: todayStart, until: now, page: 1, perPage: 50 }),
+    refetchInterval: 20_000,
+  });
+  const count = q.data?.total ?? 0;
   return { ...q, count };
 }
 
@@ -24,6 +33,6 @@ export function useMarkNotificationRead() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => markNotificationRead(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: notificationKeys.list }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
   });
 }
