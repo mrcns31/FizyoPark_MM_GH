@@ -194,10 +194,28 @@ export function MemberPackageScreen() {
           excludeMemberPackageId: editingId ?? undefined,
         });
         if (!res.ok && res.conflicts.length) {
-          const lines = res.conflicts
-            .slice(0, 6)
-            .map((c) => c.message || [c.date, c.time, c.staffName, c.reason].filter(Boolean).join(' · '))
-            .filter(Boolean);
+          // Aynı personel + aynı sebep grubunu tek satırda göster
+          const groups = new Map<string, { staffName: string; reasonLabel: string; dates: string[] }>();
+          for (const c of res.conflicts) {
+            const key = `${c.staff_id ?? c.staff_name ?? 'x'}_${c.reason ?? 'conflict'}`;
+            if (!groups.has(key)) {
+              groups.set(key, {
+                staffName: c.staff_name || 'Personel',
+                reasonLabel: c.reason_label || c.reason || 'müsait değil',
+                dates: [],
+              });
+            }
+            if (c.date && c.day_name) {
+              const [y, m, d] = c.date.split('-');
+              groups.get(key)!.dates.push(`${d}.${m}.${y} ${c.day_name}`);
+            }
+          }
+          const lines = Array.from(groups.values()).map(({ staffName, reasonLabel, dates }) => {
+            if (dates.length === 0) return `${staffName}: ${reasonLabel}`;
+            const shown = dates.slice(0, 5).join(', ');
+            const extra = dates.length > 5 ? ` ...+${dates.length - 5} gün` : '';
+            return `${staffName} — ${reasonLabel}:\n  ${shown}${extra}`;
+          });
           return setError(`Çakışma var:\n${lines.join('\n')}`);
         }
       } catch {

@@ -491,9 +491,34 @@ router.post('/check-availability', [
     const conflicts = [];
     const dayNames = ['Pazar', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
 
-    const hasRoomAvailable = async (startTs, endTs, staffId) => {
-      const validation = await validateAndPickRoom(db, { staffId, startTs, endTs });
-      return validation.ok;
+    // Sebep kodunu Türkçe açıklamaya çevirir
+    const reasonLabel = (reason) => {
+      switch (reason) {
+        case 'kapalı_gün': return 'tesis kapalı';
+        case 'çalışma_saati_dışı': return 'tesisin çalışma saati dışı';
+        case 'personel_kapalı_gün': return 'personelin çalışmadığı gün';
+        case 'personel_çalışma_saati_dışı': return 'personelin çalışma saati dışı';
+        case 'oda_kapasitesi_dolu': return 'oda kapasitesi dolu';
+        case 'oda_yok': return 'tanımlı oda yok';
+        default: return 'müsait değil';
+      }
+    };
+
+    // Tarih formatlama (DD.MM.YYYY)
+    const fmtDate = (dateObj) => {
+      const dd = String(dateObj.getDate()).padStart(2, '0');
+      const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+      const yyyy = dateObj.getFullYear();
+      return `${dd}.${mm}.${yyyy}`;
+    };
+
+    // Personel adını cache'le (staff_id → name)
+    const staffNameCache = {};
+    const getStaffName = async (staffId) => {
+      if (staffNameCache[staffId]) return staffNameCache[staffId];
+      const r = await db.query('SELECT first_name || \' \' || last_name AS name FROM staff WHERE id = $1', [staffId]);
+      staffNameCache[staffId] = r.rows[0]?.name || `Personel #${staffId}`;
+      return staffNameCache[staffId];
     };
 
     for (const slot of slots) {
@@ -508,17 +533,21 @@ router.post('/check-availability', [
           const startTs = slotStart.getTime();
           const endTs = slotEnd.getTime();
 
-          // validateAndPickRoom: çalışma saati + oda kapasitesi + tek personel/oda kuralı
-          // Grup seans destekleniyor: aynı personel aynı saatte birden fazla üye alabilir.
-          // Bu yüzden personelin başka seansı olması çakışma DEĞİL; sadece oda doluluğuna bakılır.
-          const roomOk = await hasRoomAvailable(startTs, endTs, staff_id);
-          if (!roomOk) {
+          // Grup seans destekleniyor: personelin başka seansı olması çakışma değil.
+          // Sadece oda kapasitesi ve çalışma saati kısıtı kontrol edilir.
+          const validation = await validateAndPickRoom(db, { staffId: staff_id, startTs, endTs });
+          if (!validation.ok) {
+            const staffName = await getStaffName(staff_id);
+            const neden = reasonLabel(validation.reason);
             conflicts.push({
               date: d.toISOString().slice(0, 10),
               day_name: dayNames[day_of_week],
               start_time,
               staff_id,
-              message: 'Bu saatte oda müsait değil (kapasite dolu veya çalışma saati dışı)',
+              staff_name: staffName,
+              reason: validation.reason || 'müsait_değil',
+              reason_label: neden,
+              message: `${fmtDate(d)} ${dayNames[day_of_week]} ${start_time} — ${staffName}: ${neden}`,
             });
           }
         }

@@ -113,9 +113,12 @@ export async function getMemberPackageSessions(id: number): Promise<MemberPackag
 /** Paket atama öncesi uygunluk/çakışma kontrolü (web checkMemberPackageAvailability). */
 export interface AvailabilityConflict {
   date?: string;
-  time?: string;
-  staffName?: string;
+  day_name?: string;
+  start_time?: string;
+  staff_id?: number;
+  staff_name?: string;
   reason?: string;
+  reason_label?: string;
   message?: string;
 }
 export async function checkMemberPackageAvailability(body: {
