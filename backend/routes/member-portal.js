@@ -25,12 +25,22 @@ const METHOD_LABEL = { qr: 'QR', card: 'KART', phone: 'TELEFON' };
 async function expoPush(messages) {
   if (!messages.length) return;
   try {
-    await fetch('https://exp.host/--/api/v2/push/send', {
+    const res = await fetch('https://exp.host/--/api/v2/push/send', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(messages),
     });
-  } catch { /* sessizce geç */ }
+    const data = await res.json().catch(() => null);
+    if (data?.data) {
+      data.data.forEach((ticket, i) => {
+        if (ticket.status === 'error') {
+          console.error(`[expoPush] hata ticket[${i}]: ${ticket.message}`, ticket.details ?? '');
+        }
+      });
+    }
+  } catch (err) {
+    console.error('[expoPush] fetch hatası:', err.message);
+  }
 }
 
 async function sendCancellationPush(memberName, startTs, staffId) {
@@ -109,6 +119,10 @@ async function sendEntryPush(memberName, method, startTs, sessionId, memberId) {
     const entryMessages = [...adminRows, ...staffRows]
       .filter((r) => { if (seen.has(r.token)) return false; seen.add(r.token); return true; })
       .map((r) => ({ to: r.token, title: 'Kapı Girişi', body: entryBody, sound: 'default' }));
+
+    if (!entryMessages.length) {
+      console.warn(`[sendEntryPush] token bulunamadı — üye: ${memberName}, method: ${method}`);
+    }
 
     // Üyenin kendi bildirimi
     let memberMessages = [];

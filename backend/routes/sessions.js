@@ -535,7 +535,10 @@ router.put('/:id', [
 
           if (finalMpId && !skipTrim) await trimPackageSessionsIfOver(db, finalMpId);
           const updated = result.rows[0];
-          if (updated) await activityLog(req, { action: 'session.update', entityType: 'session', entityId: id, details: { staffId: updated.staff_id, memberId: updated.member_id } }).catch(() => {});
+          if (updated) {
+            await activityLog(req, { action: 'session.update', entityType: 'session', entityId: id, details: { staffId: updated.staff_id, memberId: updated.member_id } }).catch(() => {});
+            matchWalkInToSession(db, id).catch(() => {});
+          }
           return res.json({ message: 'Seans güncellendi', session: updated });
         } catch (err) {
           await client.query('ROLLBACK').catch(() => {});
@@ -552,7 +555,10 @@ router.put('/:id', [
     const result = await db.query(query, values);
     if (finalMpId && !skipTrim) await trimPackageSessionsIfOver(db, finalMpId);
     const updated = result.rows[0];
-    if (updated) await activityLog(req, { action: 'session.update', entityType: 'session', entityId: id, details: { staffId: updated.staff_id, memberId: updated.member_id } }).catch(() => {});
+    if (updated) {
+      await activityLog(req, { action: 'session.update', entityType: 'session', entityId: id, details: { staffId: updated.staff_id, memberId: updated.member_id } }).catch(() => {});
+      matchWalkInToSession(db, id).catch(() => {});
+    }
     res.json({ message: 'Seans güncellendi', session: updated });
   } catch (error) {
     console.error('Session update error:', error);
