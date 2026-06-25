@@ -1,9 +1,10 @@
-import { useRef, useMemo } from 'react';
+import { useCallback, useRef, useMemo } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { Badge, Card, Muted } from '../../../components/ui';
 import { formatTime } from '../../../lib/datetime';
@@ -158,6 +159,16 @@ export function PackageSessionsScreen() {
   const { data, isLoading } = useMemberPackageSessions(id);
   const router = useRouter();
   const del = useDeleteSession();
+  const qc = useQueryClient();
+
+  // Form'dan geri dönüşte seansları yenile
+  useFocusEffect(
+    useCallback(() => {
+      if (id != null) {
+        qc.invalidateQueries({ queryKey: ['member-package-sessions', id] });
+      }
+    }, [qc, id]),
+  );
 
   const sessions = useMemo(() => (data ?? []).slice().sort((a, b) => a.startTs - b.startTs), [data]);
   const active = sessions.filter((s) => !s.isCancelled);

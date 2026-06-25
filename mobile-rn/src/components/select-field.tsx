@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Dimensions, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { Dimensions, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { SheetModal } from './sheet-modal';
@@ -20,6 +20,7 @@ export function SelectField<T extends number | string = number>({
   onChange,
   placeholder = 'Seçiniz',
   required,
+  searchable = false,
 }: {
   label: string;
   options: SelectOption<T>[];
@@ -27,9 +28,28 @@ export function SelectField<T extends number | string = number>({
   onChange: (v: T) => void;
   placeholder?: string;
   required?: boolean;
+  /** Açılan listede arama kutusu göster */
+  searchable?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const selected = options.find((o) => o.value === value);
+
+  function openSheet() {
+    setQuery('');
+    setOpen(true);
+  }
+
+  function closeSheet() {
+    setQuery('');
+    setOpen(false);
+  }
+
+  const filtered = useMemo(() => {
+    if (!searchable || !query.trim()) return options;
+    const q = query.trim().toLocaleLowerCase('tr-TR');
+    return options.filter((o) => o.label.toLocaleLowerCase('tr-TR').includes(q));
+  }, [options, query, searchable]);
 
   return (
     <View style={styles.wrap}>
@@ -39,19 +59,41 @@ export function SelectField<T extends number | string = number>({
           {required ? <Text style={styles.req}> *</Text> : null}
         </Text>
       ) : null}
-      <Pressable style={styles.input} onPress={() => setOpen(true)}>
+      <Pressable style={styles.input} onPress={openSheet}>
         <Text style={[styles.value, !selected && styles.placeholder]}>
           {selected ? selected.label : placeholder}
         </Text>
         <Ionicons name="chevron-down" size={18} color={colors.textMuted} />
       </Pressable>
 
-      <SheetModal visible={open} onClose={() => setOpen(false)}>
+      <SheetModal visible={open} onClose={closeSheet}>
         <View style={styles.sheet}>
           <View style={styles.handle} />
           <Text style={styles.sheetTitle}>{label || 'Seçiniz'}</Text>
+
+          {searchable ? (
+            <View style={styles.searchWrap}>
+              <Ionicons name="search-outline" size={16} color={colors.muted} style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Ara..."
+                placeholderTextColor={colors.textMuted}
+                value={query}
+                onChangeText={setQuery}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="search"
+              />
+              {query.length > 0 ? (
+                <Pressable onPress={() => setQuery('')} hitSlop={8}>
+                  <Ionicons name="close-circle" size={16} color={colors.muted} />
+                </Pressable>
+              ) : null}
+            </View>
+          ) : null}
+
           <FlatList
-            data={options}
+            data={filtered}
             style={styles.flat}
             keyExtractor={(o) => String(o.value)}
             keyboardShouldPersistTaps="handled"
@@ -61,7 +103,7 @@ export function SelectField<T extends number | string = number>({
                 style={styles.option}
                 onPress={() => {
                   onChange(item.value);
-                  setOpen(false);
+                  closeSheet();
                 }}
               >
                 <Text style={[styles.optionText, item.value === value && styles.optionActive]}>
@@ -70,7 +112,7 @@ export function SelectField<T extends number | string = number>({
                 {item.value === value ? <Ionicons name="checkmark" size={18} color={colors.green} /> : null}
               </Pressable>
             )}
-            ListEmptyComponent={<Text style={styles.empty}>Seçenek yok</Text>}
+            ListEmptyComponent={<Text style={styles.empty}>Sonuç bulunamadı</Text>}
           />
         </View>
       </SheetModal>
@@ -103,7 +145,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 8,
     paddingBottom: 24,
-    // küçük açılmasın: en az ekranın %36'sı, veri artarsa %80'e kadar; içi scroll.
     minHeight: Math.round(WIN_H * 0.36),
     maxHeight: Math.round(WIN_H * 0.8),
     borderWidth: 1,
@@ -117,8 +158,28 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.2)',
     marginBottom: 10,
   },
+  sheetTitle: { color: colors.white, fontSize: 17, fontWeight: '700', marginBottom: 10 },
+
+  searchWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 10,
+    marginBottom: 10,
+  },
+  searchIcon: {},
+  searchInput: {
+    flex: 1,
+    color: colors.text,
+    fontSize: 15,
+    paddingVertical: 10,
+  },
+
   flat: { flexGrow: 0, flexShrink: 1 },
-  sheetTitle: { color: colors.white, fontSize: 17, fontWeight: '700', marginBottom: 12 },
   option: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' },
   optionText: { color: colors.textSecondary, fontSize: 16 },
   optionActive: { color: colors.white, fontWeight: '700' },

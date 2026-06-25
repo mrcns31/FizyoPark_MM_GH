@@ -20,6 +20,8 @@ async function sendExpoPush(db, userId, title, body) {
       title,
       body,
       sound: 'default',
+      priority: 'high',
+      channelId: 'fizyopark',
     }));
     await fetch('https://exp.host/--/api/v2/push/send', {
       method: 'POST',

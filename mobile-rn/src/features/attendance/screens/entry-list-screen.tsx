@@ -163,6 +163,11 @@ export function EntryListScreen() {
                     <Text style={styles.staff} numberOfLines={1}>
                       {s.staffName}
                     </Text>
+                    {PHYSICAL_ENTRY_KINDS.includes(s.statusKind) && s.checkedInAt ? (
+                      <Text style={styles.checkInTime} numberOfLines={1}>
+                        {s.statusKind === 'qr' ? 'QR' : s.statusKind === 'card' ? 'Kart' : 'Telefon'} girişi: {formatTime(new Date(s.checkedInAt as unknown as string).getTime())}
+                      </Text>
+                    ) : null}
                   </View>
                 </View>
                 <View style={styles.rowRight}>
@@ -281,6 +286,7 @@ const styles = StyleSheet.create({
   rowInfo: { flex: 1, gap: 2 },
   member: { color: colors.text, fontSize: 14, fontWeight: '600' },
   staff: { color: colors.muted, fontSize: 12 },
+  checkInTime: { color: colors.ok, fontSize: 11, fontWeight: '700' },
   rowRight: { alignItems: 'flex-end', gap: 6 },
   actions: { flexDirection: 'row', gap: 6 },
   actBtn: {

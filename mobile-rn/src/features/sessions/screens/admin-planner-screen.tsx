@@ -1,8 +1,9 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useQueryClient } from '@tanstack/react-query';
 
 import { Card, Muted } from '../../../components/ui';
 import {
@@ -25,10 +26,12 @@ import { HamburgerButton } from '../../../components/hamburger-button';
 import { useStaff } from '../../staff/api/hooks';
 import { useRooms } from '../../rooms/api/hooks';
 import { staffColor } from '../../../lib/staff-color';
-import { useConfirmAttendance, useDeleteSession, useSessions } from '../api/hooks';
+import { sessionKeys, useConfirmAttendance, useDeleteSession, useSessions } from '../api/hooks';
 import { isAttendanceConfirmed, type PlannerSession } from '../api/sessions';
 import { promptAdminPassword } from '../../../lib/admin-password';
 import { AdminCalendarGrid, type MemberPkgInfo } from './admin-calendar-grid';
+import { WeeklyTabletGrid } from './weekly-tablet-grid';
+import { MonthlyCalendarGrid } from './monthly-calendar-grid';
 import { DateField } from '../../../components/date-field';
 import { SessionDetailSheet } from '../components/session-detail-sheet';
 import { useMemberPackages } from '../../member-packages/api/hooks';
@@ -174,23 +177,78 @@ export function AdminPlannerScreen() {
     setView('day');
   }
 
-  const { isTablet } = useResponsive();
-  const VIEWS = isTablet ? TABLET_VIEWS : PHONE_VIEWS;
+  const { isTablet, isLandscape } = useResponsive();
+
+  // Dikey tablet: "Bugün" (her basışta bugüne gider) + Aylık
+  // Yatay tablet: Günlük (uzun bas=bugün) + Haftalık + Aylık
+  const VIEWS = !isTablet
+    ? PHONE_VIEWS
+    : isLandscape
+    ? [
+        { key: 'day' as ViewMode, label: 'Günlük' },
+        { key: 'week' as ViewMode, label: 'Haftalık' },
+        { key: 'month' as ViewMode, label: 'Aylık' },
+      ]
+    : [
+        { key: 'day' as ViewMode, label: 'Bugün' },
+        { key: 'month' as ViewMode, label: 'Aylık' },
+      ];
+
   const wide = { maxWidth: contentMaxWidth, alignSelf: 'center' as const, width: '100%' as const, paddingHorizontal: gutter };
+
+  // Dikey tablette haftalık view'a geçilmişse günlüğe dön
+  const effectiveView: ViewMode = (isTablet && !isLandscape && view === 'week') ? 'day' : view;
+
+  // Tablet haftalık grid için hafta günleri (7 gün, seanssız günler dahil)
+  const weekDays = useMemo(() => {
+    if (!isTablet || !isLandscape || effectiveView !== 'week') return [];
+    const byDate = new Map<string, PlannerSession[]>();
+    for (const s of sessions) {
+      const d = toDateStr(s.startTs);
+      if (!byDate.has(d)) byDate.set(d, []);
+      byDate.get(d)!.push(s);
+    }
+    return enumerateDays(range.start, range.end).map((ts) => ({
+      ts,
+      dateStr: toDateStr(ts),
+      sessions: byDate.get(toDateStr(ts)) ?? [],
+    }));
+  }, [sessions, range, isTablet, isLandscape, effectiveView]);
+
+  // Ekran odaklandığında (form'dan geri dönüş dahil) seansları yenile
+  const qc = useQueryClient();
+  useFocusEffect(
+    useCallback(() => {
+      qc.invalidateQueries({ queryKey: sessionKeys.all });
+    }, [qc]),
+  );
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       {isTablet ? (
-        /* Tablet: tek satır, tam genişlik, ortalanmış */
+        /* Tablet: tek satır — Günlük uzun bas=bugün, Bugün butonu yok */
         <View style={[styles.tabletBar, wide]}>
           <HamburgerButton />
-          {/* Görünüm butonları */}
+          {/* Görünüm butonları:
+              - Dikey tablet "Bugün": her basışta goToday()
+              - Yatay tablet "Günlük": basınca view=day, uzun basınca goToday()
+              - Diğerleri: sadece setView */}
           <View style={styles.viewGroupInline}>
-            {VIEWS.map((v) => (
-              <Pressable key={v.key} onPress={() => setView(v.key)} style={[styles.viewBtnInline, view === v.key && styles.viewBtnActive]}>
-                <Text style={[styles.viewText, view === v.key && styles.viewTextActive]}>{v.label}</Text>
-              </Pressable>
-            ))}
+            {VIEWS.map((v) => {
+              const isPortraitDay = isTablet && !isLandscape && v.key === 'day';
+              const isLandscapeDay = isTablet && isLandscape && v.key === 'day';
+              return (
+                <Pressable
+                  key={v.key}
+                  onPress={isPortraitDay ? goToday : () => setView(v.key)}
+                  onLongPress={isLandscapeDay ? goToday : undefined}
+                  delayLongPress={400}
+                  style={[styles.viewBtnInline, effectiveView === v.key && styles.viewBtnActive]}
+                >
+                  <Text style={[styles.viewText, effectiveView === v.key && styles.viewTextActive]}>{v.label}</Text>
+                </Pressable>
+              );
+            })}
           </View>
           {/* Tarih nav */}
           <Pressable onPress={() => setAnchor((t) => t - step)} hitSlop={10} style={styles.navBtn}>
@@ -204,11 +262,6 @@ export function AdminPlannerScreen() {
           <Pressable onPress={() => setAnchor((t) => t + step)} hitSlop={10} style={styles.navBtn}>
             <Ionicons name="chevron-forward" size={20} color={colors.text} />
           </Pressable>
-          {!isToday ? (
-            <Pressable onPress={goToday} style={styles.todayBtn}>
-              <Text style={styles.todayText}>Bugün</Text>
-            </Pressable>
-          ) : null}
           {/* Arama */}
           <TextInput
             style={styles.searchInline}
@@ -217,7 +270,7 @@ export function AdminPlannerScreen() {
             value={search}
             onChangeText={setSearch}
           />
-          {/* Personel dot'ları */}
+          {/* Personel dot'ları — topbarda her zaman görünür */}
           {(staff ?? []).map((s, idx) => {
             const c = staffColor(idx, s.id);
             const sel = filterStaffId === s.id;
@@ -316,6 +369,29 @@ export function AdminPlannerScreen() {
 
       {isLoading ? (
         <ActivityIndicator color={colors.accent} style={{ marginTop: 40 }} />
+      ) : isTablet && isLandscape && effectiveView === 'week' ? (
+        /* Tablet yatay + Haftalık → hafta grid */
+        <WeeklyTabletGrid
+          weekDays={weekDays}
+          allWeekSessions={data ?? []}
+          staff={staff ?? []}
+          rooms={rooms ?? []}
+          onPressGroup={(g) => router.push({
+            pathname: '/(admin)/planner/session-form',
+            params: { id: String(g[0].id), date: toDateStr(g[0].startTs) },
+          })}
+          onDeleteGroup={onDeleteGroup}
+          memberPackageMap={activePkgByMember}
+          showRemaining={showRemaining}
+        />
+      ) : isTablet && effectiveView === 'month' ? (
+        /* Tablet Aylık → takvim grid */
+        <MonthlyCalendarGrid
+          anchor={anchor}
+          sessions={sessions}
+          staff={staff ?? []}
+          onPressDay={(ts) => { setAnchor(ts); setView('day'); }}
+        />
       ) : days.length === 0 ? (
         <View style={[styles.empty, wide]}>
           <Card><Muted>Bu aralıkta seans yok.</Muted></Card>
@@ -324,13 +400,13 @@ export function AdminPlannerScreen() {
         <ScrollView contentContainerStyle={styles.scroll}>
           {days.map((d) => (
             <View key={d.dateStr} style={styles.dayBlock}>
-              {view !== 'day' ? (
+              {effectiveView !== 'day' ? (
                 <Text style={[styles.dayHeader, { paddingHorizontal: gutter }]}>{dayHeaderLabel(d.ts)}</Text>
               ) : null}
               <AdminCalendarGrid
                 dayTs={d.ts}
                 sessions={d.sessions}
-                fullRail={view === 'day'}
+                fullRail={effectiveView === 'day'}
                 memberPackageMap={activePkgByMember}
                 showRemaining={showRemaining}
                 onPressGroup={(g) => router.push({
@@ -342,7 +418,7 @@ export function AdminPlannerScreen() {
               />
             </View>
           ))}
-          {view === 'month' && sessions.length > 0 ? (
+          {effectiveView === 'month' && sessions.length > 0 ? (
             <View style={[styles.monthSummaryCard, wide]}>
               <Text style={styles.monthSummaryTitle}>{monthLabel(anchor)} — Personel Özeti</Text>
               {Array.from(

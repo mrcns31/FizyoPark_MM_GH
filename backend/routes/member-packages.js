@@ -508,6 +508,9 @@ router.post('/check-availability', [
           const startTs = slotStart.getTime();
           const endTs = slotEnd.getTime();
 
+          // validateAndPickRoom: çalışma saati + oda kapasitesi + tek personel/oda kuralı
+          // Grup seans destekleniyor: aynı personel aynı saatte birden fazla üye alabilir.
+          // Bu yüzden personelin başka seansı olması çakışma DEĞİL; sadece oda doluluğuna bakılır.
           const roomOk = await hasRoomAvailable(startTs, endTs, staff_id);
           if (!roomOk) {
             conflicts.push({
@@ -515,30 +518,8 @@ router.post('/check-availability', [
               day_name: dayNames[day_of_week],
               start_time,
               staff_id,
-              message: 'Bu saatte oda müsait değil (tüm odalar dolu)',
+              message: 'Bu saatte oda müsait değil (kapasite dolu veya çalışma saati dışı)',
             });
-          } else {
-            let sql = `
-              SELECT s.id, st.first_name || ' ' || st.last_name as staff_name
-              FROM sessions s
-              LEFT JOIN staff st ON st.id = s.staff_id
-              WHERE s.staff_id = $1 AND s.start_ts < $3 AND s.end_ts > $2
-            `;
-            const params = [staff_id, startTs, endTs];
-            if (exclude_member_package_id) {
-              params.push(exclude_member_package_id);
-              sql += ` AND (s.member_package_id IS NULL OR s.member_package_id != $${params.length})`;
-            }
-            const existing = await db.query(sql, params);
-            if (existing.rows.length > 0) {
-              conflicts.push({
-                date: d.toISOString().slice(0, 10),
-                day_name: dayNames[day_of_week],
-                start_time,
-                staff_id,
-                message: `${existing.rows[0].staff_name} bu saatte başka seansı var ve bu saatte oda müsait değil`,
-              });
-            }
           }
         }
         d.setDate(d.getDate() + 1);
@@ -572,6 +553,10 @@ router.post('/', [
 
     const { member_id, package_id, start_date, end_date, skip_day_distribution = false, slots = [] } = req.body;
 
+    // Seans dağılımı her zaman bugünden (Türkiye saati) ileriye yapılır; geçmiş start_date olsa bile geçmişe seans oluşturulmaz
+    const todayTurkeyPost = new Date(Date.now() + 3 * 3600 * 1000).toISOString().slice(0, 10);
+    const effectiveStart = start_date >= todayTurkeyPost ? start_date : todayTurkeyPost;
+
     // Her üye aynı anda yalnızca 1 aktif paket alabilir
     const existingActive = await db.query(
       'SELECT id, package_id FROM member_packages WHERE member_id = $1 AND status = $2 LIMIT 1',
@@ -595,13 +580,13 @@ router.post('/', [
       const pkgRow = await db.query('SELECT lesson_count FROM packages WHERE id = $1', [package_id]);
       const lessonCount = pkgRow.rows[0]?.lesson_count ?? 0;
       if (lessonCount > 0) {
-        const maxPossible = countPossibleSessionsInRange(start_date, end_date, validSlots);
+        const maxPossible = countPossibleSessionsInRange(effectiveStart, end_date, validSlots);
         if (maxPossible < lessonCount) {
           return res.status(400).json({
             error: `Seçilen tarih aralığı ve haftalık günlere göre en fazla ${maxPossible} randevu oluşturulabilir. Bu paket ${lessonCount} ders içeriyor. Lütfen bitiş tarihini uzatın veya haftalık gün sayısını artırın.`,
           });
         }
-        const plan = buildPackageSessionInsertPlan(start_date, end_date, validSlots, lessonCount, {
+        const plan = buildPackageSessionInsertPlan(effectiveStart, end_date, validSlots, lessonCount, {
           memberId: member_id,
         });
         const preConflicts = await validatePackageSessionInserts(db, plan);
@@ -630,7 +615,7 @@ router.post('/', [
     let sessionConflicts = [];
     let sessionsCreated = 0;
     if (!skip_day_distribution && validSlots.length > 0) {
-      const gen = await generateSessionsForMemberPackage(db, mp.id, member_id, start_date, end_date, validSlots);
+      const gen = await generateSessionsForMemberPackage(db, mp.id, member_id, effectiveStart, end_date, validSlots);
       sessionConflicts = gen.conflicts || [];
       sessionsCreated = gen.sessionsCreated || 0;
       if (sessionConflicts.length > 0) {
@@ -961,10 +946,11 @@ router.put('/:id', [
           }
         } else {
           // Gün/saat/personel değişti: geçmişe dokunma, gelecek seansları yeni dağılıma göre düzenle
+          const todayTurkey = new Date(Date.now() + 3 * 3600 * 1000).toISOString().slice(0, 10);
           const effectiveDateStr = effective_date && /^\d{4}-\d{2}-\d{2}$/.test(String(effective_date).trim())
             ? String(effective_date).trim()
-            : new Date().toISOString().slice(0, 10);
-          const effectiveDateStart = new Date(effectiveDateStr + 'T00:00:00').getTime();
+            : todayTurkey;
+          const effectiveDateStart = new Date(effectiveDateStr + 'T00:00:00+03:00').getTime();
 
           const keptRes = await db.query(
             'SELECT COUNT(*)::int AS cnt FROM sessions WHERE member_package_id = $1 AND start_ts < $2 AND (deleted_at IS NULL)',
@@ -973,17 +959,19 @@ router.put('/:id', [
           const keptCount = keptRes.rows[0]?.cnt ?? 0;
           const maxToCreate = Math.max(0, lessonCount - keptCount);
 
-          const generationStartStr = keptCount > 0 ? effectiveDateStr : String(finalStartDate).slice(0, 10);
+          // keptCount=0 ise geçmiş tarihleri atla: max(effectiveDateStr, paket başlangıcı) — ön-doğrulama bloğuyla tutarlı
+          const pkgStartStrGen = String(finalStartDate).slice(0, 10);
+          const generationStartStr = keptCount > 0
+            ? effectiveDateStr
+            : (effectiveDateStr >= pkgStartStrGen ? effectiveDateStr : pkgStartStrGen);
           const maxPossibleFromStart = countPossibleSessionsInRange(generationStartStr, finalEndDate, validSlotsAfter);
 
           if (maxToCreate > 0 && maxPossibleFromStart < maxToCreate) {
             return res.status(400).json({
-              error: keptCount > 0
-                ? `Değişiklik tarihinden (${effectiveDateStr}) sonra seçilen günlere göre en fazla ${maxPossibleFromStart} randevu oluşturulabilir. Kalan hak: ${maxToCreate}. Bitiş tarihini uzatın veya haftalık gün sayısını artırın.`
-                : `Paket başlangıcından (${generationStartStr}) itibaren seçilen günlere göre en fazla ${maxPossibleFromStart} randevu oluşturulabilir. Bu paket ${lessonCount} ders içeriyor. Bitiş tarihini uzatın veya haftalık gün sayısını artırın.`,
+              error: `Değişiklik tarihinden (${effectiveDateStr}) sonra seçilen günlere göre en fazla ${maxPossibleFromStart} randevu oluşturulabilir. Kalan hak: ${maxToCreate}. Bitiş tarihini uzatın veya haftalık gün sayısını artırın.`,
             });
           }
-          const deleteFromTs = keptCount > 0 ? effectiveDateStart : new Date(generationStartStr + 'T00:00:00').getTime();
+          const deleteFromTs = keptCount > 0 ? effectiveDateStart : new Date(generationStartStr + 'T00:00:00+03:00').getTime();
           const futureRes = await db.query(
             'SELECT id FROM sessions WHERE member_package_id = $1 AND start_ts >= $2 AND (deleted_at IS NULL)',
             [id, deleteFromTs]

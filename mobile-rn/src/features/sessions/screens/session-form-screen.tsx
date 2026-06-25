@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 
 import { ScreenContainer } from '../../../components/screen-container';
@@ -15,7 +15,7 @@ import { getMembers } from '../../members/api/members';
 import { getRooms } from '../../rooms/api/rooms';
 import { getStaff } from '../../staff/api/staff';
 import { colors } from '../../../theme/colors';
-import { useCreateSession, useDeleteSession, useSessions, useUpdateSession } from '../api/hooks';
+import { sessionKeys, useCreateSession, useDeleteSession, useSessions, useUpdateSession } from '../api/hooks';
 import { useWorkingHours } from '../../settings/api/hooks';
 import { useMemberPackages } from '../../member-packages/api/hooks';
 import { isAttendanceConfirmed, type PlannerSession } from '../api/sessions';
@@ -46,6 +46,7 @@ function mergeTime(base: Date, timeStr: string): Date {
  */
 export function SessionFormScreen() {
   const router = useRouter();
+  const qc = useQueryClient();
   const params = useLocalSearchParams<{ id?: string; date?: string; defaultTs?: string; singleEdit?: string }>();
   const create = useCreateSession();
   const update = useUpdateSession();
@@ -203,6 +204,11 @@ export function SessionFormScreen() {
           await create.mutateAsync({ memberId: mid, staffId, roomId: roomId ?? null, startTs, endTs, note: '' });
         }
       }
+      // Her iki cache'i bekle, sonra geri dön
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: sessionKeys.all }),
+        qc.invalidateQueries({ queryKey: ['member-package-sessions'] }),
+      ]);
       router.back();
     } catch (e) {
       Alert.alert('Hata', e instanceof ApiError ? e.message : 'Kayıt başarısız');
@@ -221,17 +227,60 @@ export function SessionFormScreen() {
         <View style={styles.dtRow}>
           <View style={styles.dtDate}>
             <Text style={styles.label}>Tarih</Text>
-            <DateField value={dateToStr(start)} onChange={(v) => setStart(mergeDate(start, v))} />
+            <View style={styles.arrowRow}>
+              <Pressable
+                hitSlop={8}
+                style={styles.arrowBtn}
+                onPress={() => setStart((d) => { const n = new Date(d); n.setDate(n.getDate() - 1); return n; })}
+              >
+                <Ionicons name="chevron-back" size={22} color={colors.text} />
+              </Pressable>
+              <View style={styles.arrowField}>
+                <DateField value={dateToStr(start)} onChange={(v) => setStart(mergeDate(start, v))} />
+              </View>
+              <Pressable
+                hitSlop={8}
+                style={styles.arrowBtn}
+                onPress={() => setStart((d) => { const n = new Date(d); n.setDate(n.getDate() + 1); return n; })}
+              >
+                <Ionicons name="chevron-forward" size={22} color={colors.text} />
+              </Pressable>
+            </View>
           </View>
+          <View style={styles.dtMiddle} />
           <View>
             <Text style={styles.label}>Saat</Text>
-            <TimeField
-              value={`${String(start.getHours()).padStart(2, '0')}:00`}
-              hourOnly
-              minHour={minHour}
-              maxHour={maxHour}
-              onChange={(v) => setStart(mergeTime(start, v))}
-            />
+            <View style={styles.arrowRow}>
+              <Pressable
+                hitSlop={8}
+                style={styles.arrowBtn}
+                onPress={() => setStart((d) => {
+                  const h = d.getHours();
+                  if (h <= minHour) return d;
+                  const n = new Date(d); n.setHours(h - 1, 0, 0, 0); return n;
+                })}
+              >
+                <Ionicons name="chevron-back" size={22} color={colors.text} />
+              </Pressable>
+              <TimeField
+                value={`${String(start.getHours()).padStart(2, '0')}:00`}
+                hourOnly
+                minHour={minHour}
+                maxHour={maxHour}
+                onChange={(v) => setStart(mergeTime(start, v))}
+              />
+              <Pressable
+                hitSlop={8}
+                style={styles.arrowBtn}
+                onPress={() => setStart((d) => {
+                  const h = d.getHours();
+                  if (h >= maxHour) return d;
+                  const n = new Date(d); n.setHours(h + 1, 0, 0, 0); return n;
+                })}
+              >
+                <Ionicons name="chevron-forward" size={22} color={colors.text} />
+              </Pressable>
+            </View>
           </View>
         </View>
 
@@ -255,6 +304,7 @@ export function SessionFormScreen() {
             onChange={(v) => setMemberIds((ids) => (ids.includes(v) ? ids : [...ids, v]))}
             options={addableOptions}
             placeholder={addableOptions.length ? '+ Üye ekle' : 'Eklenecek aktif paketli üye yok'}
+            searchable
           />
         </View>
 
@@ -269,8 +319,18 @@ export function SessionFormScreen() {
 const styles = StyleSheet.create({
   card: { gap: 14, marginTop: 8 },
   label: { color: colors.muted, fontSize: 12, marginBottom: 6 },
-  dtRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
+  dtRow: { flexDirection: 'row', gap: 0, alignItems: 'flex-start' },
   dtDate: { flex: 1 },
+  arrowRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  arrowBtn: {
+    width: 34, height: 34,
+    borderRadius: 8, borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  arrowField: { flex: 1 },
+  dtMiddle: { flex: 1 },
   memberRow: {
     flexDirection: 'row',
     alignItems: 'center',

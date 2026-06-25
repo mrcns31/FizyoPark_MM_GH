@@ -19,11 +19,13 @@ function dateToStr(d: Date): string {
     d.getDate(),
   ).padStart(2, '0')}`;
 }
-/** DD-MM-YYYY (web formatDateTR ile birebir). */
+/** DD.MM.YYYY Çarşamba */
 function labelTR(v: string): string {
   if (!v) return '';
   const [y, m, d] = v.split('-');
-  return `${d}-${m}-${y}`;
+  const date = new Date(Number(y), Number(m) - 1, Number(d));
+  const dayName = new Intl.DateTimeFormat('tr-TR', { weekday: 'short' }).format(date);
+  return `${d}.${m}.${y} ${dayName}`;
 }
 
 /**
@@ -59,7 +61,7 @@ export function DateField({
       ) : (
       <Pressable style={styles.btn} onPress={openPicker}>
         <Ionicons name="calendar-outline" size={18} color={colors.muted} />
-        <Text style={[styles.btnText, !value && styles.placeholder]}>
+        <Text style={[styles.btnText, !value && styles.placeholder]} numberOfLines={1} adjustsFontSizeToFit>
           {value ? labelTR(value) : placeholder}
         </Text>
       </Pressable>

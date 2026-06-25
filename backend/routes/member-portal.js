@@ -48,38 +48,56 @@ async function sendCancellationPush(memberName, startTs, staffId) {
     const date = new Date(Number(startTs));
     const dateStr = date.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Europe/Istanbul' });
     const timeStr = date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' });
-    const body = `${memberName} - ${dateStr} ${timeStr} randevusunu iptal etmiştir.`;
+    const title = 'Randevu İptali';
+    const bodyText = `${memberName} - ${dateStr} ${timeStr} randevusunu iptal etmiştir.`;
 
-    // Admin/Manager her zaman alır
+    // Admin/Manager: push token olmayan kullanıcılar da bildirim listesinde görsün (LEFT JOIN)
     const { rows: adminRows } = await db.query(
-      `SELECT pt.token FROM push_tokens pt
-       JOIN users u ON u.id = pt.user_id
+      `SELECT u.id AS user_id, pt.token
+       FROM users u
+       LEFT JOIN push_tokens pt ON pt.user_id = u.id
        WHERE u.role IN ('admin', 'manager')`
     );
 
     // Personel sadece BUGÜNKÜ iptal ise alır
-    let staffRows = [];
-    const nowTs = Date.now();
-    const startOfDay = new Date();
-    startOfDay.setHours(0, 0, 0, 0);
-    const endOfDay = new Date();
-    endOfDay.setHours(23, 59, 59, 999);
+    const startOfDay = new Date(); startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date();   endOfDay.setHours(23, 59, 59, 999);
     const isToday = Number(startTs) >= startOfDay.getTime() && Number(startTs) <= endOfDay.getTime();
 
+    let staffRows = [];
     if (isToday && staffId) {
       const { rows } = await db.query(
-        `SELECT pt.token FROM push_tokens pt
-         JOIN staff s ON s.user_id = pt.user_id
-         WHERE s.id = $1`,
+        `SELECT s.user_id, pt.token
+         FROM staff s
+         LEFT JOIN push_tokens pt ON pt.user_id = s.user_id
+         WHERE s.id = $1 AND s.user_id IS NOT NULL`,
         [staffId]
       );
       staffRows = rows;
     }
 
-    const seen = new Set();
+    // staff_notifications tablosuna kaydet → tablet sidebar'ında "İptaller" filtresinde görünür
+    const payload = JSON.stringify({ startTs: Number(startTs), memberName });
+    const seenUsers = new Set();
+    for (const r of [...adminRows, ...staffRows]) {
+      if (!r.user_id || seenUsers.has(r.user_id)) continue;
+      seenUsers.add(r.user_id);
+      db.query(
+        `INSERT INTO staff_notifications (user_id, type, title, body, payload) VALUES ($1, $2, $3, $4, $5)`,
+        [r.user_id, 'cancel', title, bodyText, payload]
+      ).catch(() => {});
+    }
+
+    // Push bildirimleri (token olanlar)
+    const seenTokens = new Set();
     const messages = [...adminRows, ...staffRows]
-      .filter((r) => { if (seen.has(r.token)) return false; seen.add(r.token); return true; })
-      .map((r) => ({ to: r.token, title: 'Randevu İptali', body, sound: 'default' }));
+      .filter((r) => {
+        if (!r.token) return false;
+        if (seenTokens.has(r.token)) return false;
+        seenTokens.add(r.token);
+        return true;
+      })
+      .map((r) => ({ to: r.token, title, body: bodyText, sound: 'default', priority: 'high', channelId: 'fizyopark' }));
 
     await expoPush(messages);
   } catch {
@@ -118,7 +136,7 @@ async function sendEntryPush(memberName, method, startTs, sessionId, memberId) {
     const seen = new Set();
     const entryMessages = [...adminRows, ...staffRows]
       .filter((r) => { if (seen.has(r.token)) return false; seen.add(r.token); return true; })
-      .map((r) => ({ to: r.token, title: 'Kapı Girişi', body: entryBody, sound: 'default' }));
+      .map((r) => ({ to: r.token, title: 'Kapı Girişi', body: entryBody, sound: 'default', priority: 'high', channelId: 'fizyopark' }));
 
     if (!entryMessages.length) {
       console.warn(`[sendEntryPush] token bulunamadı — üye: ${memberName}, method: ${method}`);
