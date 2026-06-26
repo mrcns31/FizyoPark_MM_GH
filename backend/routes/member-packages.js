@@ -364,7 +364,12 @@ router.get('/', [
                    OR (s.end_ts < EXTRACT(EPOCH FROM NOW()) * 1000
                        AND EXTRACT(EPOCH FROM NOW()) * 1000 >= s.start_ts - 7200000)
                  )
-             )) AS remaining_sessions
+             )) AS remaining_sessions,
+             COALESCE((
+               SELECT JSON_AGG(sl ORDER BY sl.day_of_week)
+               FROM member_package_slots sl
+               WHERE sl.member_package_id = mp.id
+             ), '[]'::json) AS slots
       FROM member_packages mp
       JOIN packages p ON p.id = mp.package_id
       JOIN members m ON m.id = mp.member_id AND (m.deleted_at IS NULL)
@@ -760,20 +765,23 @@ router.put('/:id', [
       }
     }
 
-    // İlk seans katılındıysa başlangıç tarihi o tarihten sonra olamaz
+    // İlk seans katılındıysa başlangıç tarihi değiştirilemez — sadece gerçekten değişiyorsa kontrol et
     if (start_date !== undefined && firstAttendedTs != null) {
-      const firstDate = new Date(firstAttendedTs);
-      const firstAttendedDateStr =
-        firstDate.getFullYear() +
-        '-' +
-        String(firstDate.getMonth() + 1).padStart(2, '0') +
-        '-' +
-        String(firstDate.getDate()).padStart(2, '0');
-      const startDateStr = String(start_date).slice(0, 10);
-      if (startDateStr !== firstAttendedDateStr) {
-        return res.status(400).json({
-          error: 'İlk randevuya katılım gerçekleştiği için başlangıç tarihi ' + firstAttendedDateStr + ' olarak sabitlenmiştir.',
-        });
+      const currentStartStr = String(mp.start_date).slice(0, 10);
+      const newStartStr = String(start_date).slice(0, 10);
+      if (newStartStr !== currentStartStr) {
+        // Değiştirilmeye çalışılıyor — ilk katılım tarihiyle eşleşmeli
+        const firstDate = new Date(Number(firstAttendedTs) + 3 * 60 * 60 * 1000); // UTC+3
+        const yyyy = firstDate.getUTCFullYear();
+        const mm = String(firstDate.getUTCMonth() + 1).padStart(2, '0');
+        const dd = String(firstDate.getUTCDate()).padStart(2, '0');
+        const firstAttendedDateStr = `${yyyy}-${mm}-${dd}`;
+        const firstAttendedFmt = `${dd}.${mm}.${yyyy}`;
+        if (newStartStr !== firstAttendedDateStr) {
+          return res.status(400).json({
+            error: `İlk randevuya katılım gerçekleştiği için başlangıç tarihi ${firstAttendedFmt} olarak sabitlenmiştir.`,
+          });
+        }
       }
     }
 
