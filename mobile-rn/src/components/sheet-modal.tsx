@@ -1,13 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Dimensions, Modal, Pressable, StyleSheet, View } from 'react-native';
+import { Animated, Dimensions, KeyboardAvoidingView, Modal, Platform, Pressable, StyleSheet, View } from 'react-native';
 
 const WIN_H = Dimensions.get('window').height;
 
 /**
  * Alttan kayan sheet kabı. Backdrop YERİNDE fade olur (kaymaz), yalnızca içerik
- * aşağıdan yukarı slide eder — RN `animationType="slide"` tüm modali (backdrop dahil)
- * kaydırdığı için backdrop'un da süzülmesini engeller. Çıkışta da animasyonlu kapanır.
- * `children` doğrudan sheet gövdesidir (kendi arka plan/radius/padding'ini taşır).
+ * aşağıdan yukarı slide eder. Klavye açılınca sheet klavyenin üstüne çıkar.
  */
 export function SheetModal({
   visible,
@@ -38,10 +36,17 @@ export function SheetModal({
   return (
     <Modal visible transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
       <View style={styles.root}>
+        {/* Backdrop — her zaman tam ekran, dokunulunca kapatır */}
         <Animated.View style={[styles.backdrop, { opacity: anim }]}>
           <Pressable style={styles.fill} onPress={onClose} />
         </Animated.View>
-        <Animated.View style={{ transform: [{ translateY }] }}>{children}</Animated.View>
+        {/* KAV: klavye açılınca sheet'i yukarı iter */}
+        <KeyboardAvoidingView
+          style={styles.kav}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <Animated.View style={{ transform: [{ translateY }] }}>{children}</Animated.View>
+        </KeyboardAvoidingView>
       </View>
     </Modal>
   );
@@ -51,4 +56,5 @@ const styles = StyleSheet.create({
   root: { flex: 1, justifyContent: 'flex-end' },
   backdrop: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)' },
   fill: { flex: 1 },
+  kav: { width: '100%' },
 });

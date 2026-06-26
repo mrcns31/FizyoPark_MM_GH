@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import {
-  ActivityIndicator, Alert, FlatList, Modal, Pressable,
+  ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable,
   ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -57,44 +57,51 @@ function BroadcastModal({
   }
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={handleClose}>
-      <Pressable style={modal.overlay} onPress={handleClose} />
-      <View style={modal.sheet}>
-        <View style={modal.handle} />
-        <Text style={modal.heading}>Toplu Bildirim</Text>
-        <Text style={modal.sub}>{selectedCount} üye seçili</Text>
+    <Modal visible={visible} transparent animationType="none" onRequestClose={handleClose}>
+      <View style={modal.root}>
+        <Pressable style={modal.overlay} onPress={handleClose} />
+        <KeyboardAvoidingView
+          style={modal.kav}
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <View style={modal.sheet}>
+            <View style={modal.handle} />
+            <Text style={modal.heading}>Toplu Bildirim</Text>
+            <Text style={modal.sub}>{selectedCount} üye seçili</Text>
 
-        <Text style={modal.label}>Başlık</Text>
-        <TextInput
-          style={modal.input}
-          placeholder="Örn: Merkez Kapalı"
-          placeholderTextColor={colors.muted}
-          value={title}
-          onChangeText={setTitle}
-          maxLength={255}
-        />
+            <Text style={modal.label}>Başlık</Text>
+            <TextInput
+              style={modal.input}
+              placeholder="Örn: Merkez Kapalı"
+              placeholderTextColor={colors.muted}
+              value={title}
+              onChangeText={setTitle}
+              maxLength={255}
+            />
 
-        <Text style={modal.label}>Mesaj</Text>
-        <TextInput
-          style={[modal.input, modal.inputMulti]}
-          placeholder="Örn: 6–12 Haziran tarihleri arasında merkezimiz kapalıdır."
-          placeholderTextColor={colors.muted}
-          value={msgBody}
-          onChangeText={setMsgBody}
-          multiline
-          maxLength={1000}
-        />
+            <Text style={modal.label}>Mesaj</Text>
+            <TextInput
+              style={[modal.input, modal.inputMulti]}
+              placeholder="Örn: 6–12 Haziran tarihleri arasında merkezimiz kapalıdır."
+              placeholderTextColor={colors.muted}
+              value={msgBody}
+              onChangeText={setMsgBody}
+              multiline
+              maxLength={1000}
+            />
 
-        <View style={modal.actions}>
-          <Pressable style={modal.btnCancel} onPress={handleClose} disabled={sending}>
-            <Text style={modal.btnCancelText}>Vazgeç</Text>
-          </Pressable>
-          <Pressable style={[modal.btnSend, sending && { opacity: 0.6 }]} onPress={handleSend} disabled={sending}>
-            {sending
-              ? <ActivityIndicator color="#fff" size="small" />
-              : <><Ionicons name="send" size={16} color="#fff" /><Text style={modal.btnSendText}>Gönder</Text></>}
-          </Pressable>
-        </View>
+            <View style={modal.actions}>
+              <Pressable style={modal.btnCancel} onPress={handleClose} disabled={sending}>
+                <Text style={modal.btnCancelText}>Vazgeç</Text>
+              </Pressable>
+              <Pressable style={[modal.btnSend, sending && { opacity: 0.6 }]} onPress={handleSend} disabled={sending}>
+                {sending
+                  ? <ActivityIndicator color="#fff" size="small" />
+                  : <><Ionicons name="send" size={16} color="#fff" /><Text style={modal.btnSendText}>Gönder</Text></>}
+              </Pressable>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
       </View>
     </Modal>
   );
@@ -371,9 +378,10 @@ const styles = StyleSheet.create({
 });
 
 const modal = StyleSheet.create({
+  root: { flex: 1, justifyContent: 'flex-end' },
   overlay: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.55)' },
+  kav: { width: '100%' },
   sheet: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
     backgroundColor: '#1a1a2e', borderTopLeftRadius: 20, borderTopRightRadius: 20,
     padding: 20, paddingBottom: 36, gap: 10,
   },
