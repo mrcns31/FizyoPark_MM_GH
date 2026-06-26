@@ -533,6 +533,11 @@ router.post('/push-token', verifyToken, async (req, res) => {
     return res.status(400).json({ error: 'Token gerekli' });
   }
   try {
+    // Aynı fiziksel token başka kullanıcılarda kayıtlıysa sil (cihaz el değiştirince karışmasın)
+    await db.query(
+      'DELETE FROM push_tokens WHERE token = $1 AND user_id != $2',
+      [token, req.user.userId]
+    );
     await db.query(
       `INSERT INTO push_tokens (user_id, token)
        VALUES ($1, $2)
