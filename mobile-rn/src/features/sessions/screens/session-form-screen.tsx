@@ -65,7 +65,6 @@ export function SessionFormScreen() {
       (s) =>
         s.staffId === editing.staffId &&
         s.startTs === editing.startTs &&
-        s.endTs === editing.endTs &&
         (s.roomId ?? null) === (editing.roomId ?? null),
     );
   }, [editing, daySessions, params.singleEdit]);
