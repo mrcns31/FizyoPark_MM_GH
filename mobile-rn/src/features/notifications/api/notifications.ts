@@ -35,18 +35,6 @@ export function periodToRange(period: PeriodFilter): { since: number; until: num
   }
 }
 
-const DAYS_TR = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
-
-function fmtSessionDateTime(ts: number): string {
-  const d = new Date(ts + 3 * 3600 * 1000);
-  const dd = String(d.getUTCDate()).padStart(2, '0');
-  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-  const yyyy = d.getUTCFullYear();
-  const hh = String(d.getUTCHours()).padStart(2, '0');
-  const min = String(d.getUTCMinutes()).padStart(2, '0');
-  return `${dd}.${mm}.${yyyy} ${DAYS_TR[d.getUTCDay()]} ${hh}:${min}`;
-}
-
 function fromApi(row: any): StaffNotification {
   const at = Number(row.at ?? 0);
   const memberName: string = row.memberName || row.member_name || 'Üye';
@@ -58,16 +46,23 @@ function fromApi(row: any): StaffNotification {
   let body = '';
 
   if (type === 'shift_reminder') {
+    // Backend'den direkt title/body gelir
     title = row.title || 'Onay bekleyen seanslar';
     body  = row.body  || 'Bu gün için onaylanmamış seans var.';
-  } else if (type === 'member_cancel') {
-    // Üye kendi iptali — title/body backend'den hazır gelir
-    title = row.title || 'Üye Randevu İptali';
-    body  = row.body  || (memberName ? `${memberName} randevusunu iptal etmiştir.` : '');
   } else if (type === 'cancel') {
-    // Admin / personel iptali
     const startTs = row.startTs ?? row.start_ts;
-    const datePart = startTs ? fmtSessionDateTime(Number(startTs)) : '';
+    let datePart = '';
+    if (startTs) {
+      const TZ = 3 * 3600 * 1000;
+      const sd = new Date(Number(startTs) + TZ);
+      const DAYS = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
+      const dd = String(sd.getUTCDate()).padStart(2, '0');
+      const mm = String(sd.getUTCMonth() + 1).padStart(2, '0');
+      const yyyy = sd.getUTCFullYear();
+      const hh = String(sd.getUTCHours()).padStart(2, '0');
+      const min = String(sd.getUTCMinutes()).padStart(2, '0');
+      datePart = `${dd}.${mm}.${yyyy} ${DAYS[sd.getUTCDay()]} ${hh}:${min}`;
+    }
     title = 'Admin İptali';
     const parts = [memberName, datePart, staffName, 'Seans İptali'].filter(Boolean);
     body = parts.join(' / ');

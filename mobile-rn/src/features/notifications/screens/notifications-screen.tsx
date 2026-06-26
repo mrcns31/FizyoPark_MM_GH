@@ -130,11 +130,7 @@ function AdminNotifications({ wide }: { wide: object }) {
   const { data, isLoading, isFetching } = useNotifications(since, until, page, PER_PAGE);
 
   const items = useMemo(
-    () => (data?.items ?? []).filter((n) => {
-      if (typeFilter === 'all') return true;
-      if (typeFilter === 'cancel') return n.type === 'cancel' || n.type === 'member_cancel';
-      return n.type === typeFilter;
-    }),
+    () => (data?.items ?? []).filter((n) => typeFilter === 'all' || n.type === typeFilter),
     [data, typeFilter],
   );
 
@@ -228,13 +224,12 @@ function NotificationList({ items, isLoading, totalPages, page, setPage, wide }:
         ) : null
       }
       renderItem={({ item }: { item: StaffNotification }) => {
-        const isCancel       = item.type === 'cancel';
-        const isMemberCancel = item.type === 'member_cancel';
-        const isReminder     = item.type === 'shift_reminder';
-        const iconName   = isCancel ? 'close-circle-outline' : (isMemberCancel || isReminder) ? 'alert-circle-outline' : 'checkmark-circle-outline';
-        const iconColor  = isCancel ? colors.danger : (isMemberCancel || isReminder) ? colors.fpOrange : colors.ok;
+        const isCancel   = item.type === 'cancel';
+        const isReminder = item.type === 'shift_reminder';
+        const iconName   = isCancel ? 'close-circle-outline' : isReminder ? 'alert-circle-outline' : 'checkmark-circle-outline';
+        const iconColor  = isCancel ? colors.danger : isReminder ? colors.fpOrange : colors.ok;
         return (
-          <View style={[styles.item, (isMemberCancel || isReminder) && styles.itemReminder]}>
+          <View style={[styles.item, isReminder && styles.itemReminder]}>
             <View style={styles.itemHead}>
               <Ionicons name={iconName} size={18} color={iconColor} />
               <Text style={styles.title} numberOfLines={1}>{item.title}</Text>

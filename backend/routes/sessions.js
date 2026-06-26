@@ -241,7 +241,7 @@ router.get('/notifications', [
       shiftReminderSql = `
       UNION ALL
 
-      SELECT sn.id, CASE WHEN sn.type = 'cancel' THEN 'member_cancel' ELSE sn.type END AS type,
+      SELECT sn.id, 'shift_reminder' AS type,
              EXTRACT(EPOCH FROM sn.created_at AT TIME ZONE 'Europe/Istanbul') * 1000 AS at_ts,
              NULL::int AS staff_id, NULL::bigint AS start_ts,
              NULL AS member_name,
@@ -269,7 +269,7 @@ router.get('/notifications', [
       JOIN sessions s ON s.id::text = al.entity_id
       LEFT JOIN members m ON m.id = s.member_id
       LEFT JOIN staff st ON st.id = s.staff_id
-      WHERE al.action = 'session.delete'
+      WHERE al.action = 'session.cancel_by_member'
         AND al.created_at AT TIME ZONE 'Europe/Istanbul' > to_timestamp($1 / 1000.0)
         AND al.created_at AT TIME ZONE 'Europe/Istanbul' <= to_timestamp($2 / 1000.0)${cancelFilter}
 

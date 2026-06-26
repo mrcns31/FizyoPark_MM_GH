@@ -45,24 +45,23 @@ async function expoPush(messages) {
 
 async function sendCancellationPush(memberName, startTs, staffId) {
   try {
-    const TZ_OFFSET = 3 * 60 * 60 * 1000;
-    const dateIst = new Date(Number(startTs) + TZ_OFFSET);
-    const dd = String(dateIst.getUTCDate()).padStart(2, '0');
-    const mm = String(dateIst.getUTCMonth() + 1).padStart(2, '0');
-    const yyyy = dateIst.getUTCFullYear();
-    const hh = String(dateIst.getUTCHours()).padStart(2, '0');
-    const min = String(dateIst.getUTCMinutes()).padStart(2, '0');
-    const DAYS_TR = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
-    const dayName = DAYS_TR[dateIst.getUTCDay()];
+    const TZ = 3 * 60 * 60 * 1000;
+    const d = new Date(Number(startTs) + TZ);
+    const dd = String(d.getUTCDate()).padStart(2, '0');
+    const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const yyyy = d.getUTCFullYear();
+    const hh = String(d.getUTCHours()).padStart(2, '0');
+    const min = String(d.getUTCMinutes()).padStart(2, '0');
+    const DAYS = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
     const dateStr = `${dd}.${mm}.${yyyy}`;
+    const dayName = DAYS[d.getUTCDay()];
     const timeStr = `${hh}:${min}`;
 
-    let staffName = '';
+    let staffPart = '';
     if (staffId) {
       const { rows } = await db.query('SELECT first_name, last_name FROM staff WHERE id = $1', [staffId]);
-      if (rows[0]) staffName = `${rows[0].first_name} ${rows[0].last_name}`.trim();
+      if (rows[0]) staffPart = ` ${rows[0].first_name} ${rows[0].last_name}`.trimEnd() + ' ile olan';
     }
-    const staffPart = staffName ? ` ${staffName} ile olan` : '';
 
     const title = 'Üye Randevu İptali';
     const bodyText = `${memberName} - ${dateStr} ${dayName} ${timeStr}${staffPart} randevusunu iptal etmiştir.`;
@@ -100,7 +99,7 @@ async function sendCancellationPush(memberName, startTs, staffId) {
       seenUsers.add(r.user_id);
       db.query(
         `INSERT INTO staff_notifications (user_id, type, title, body, payload) VALUES ($1, $2, $3, $4, $5)`,
-        [r.user_id, 'member_cancel', title, bodyText, payload]
+        [r.user_id, 'cancel', title, bodyText, payload]
       ).catch(() => {});
     }
 
