@@ -59,8 +59,10 @@ async function sendCancellationPush(memberName, startTs, staffId) {
 
     let staffPart = '';
     if (staffId) {
-      const { rows } = await db.query('SELECT first_name, last_name FROM staff WHERE id = $1', [staffId]);
-      if (rows[0]) staffPart = ` ${rows[0].first_name} ${rows[0].last_name}`.trimEnd() + ' ile olan';
+      try {
+        const { rows } = await db.query('SELECT first_name, last_name FROM staff WHERE id = $1', [staffId]);
+        if (rows[0]) staffPart = ` ${rows[0].first_name} ${rows[0].last_name}`.trimEnd() + ' ile olan';
+      } catch { /* isim alınamazsa boş bırak, push yine de gönderilsin */ }
     }
 
     const title = 'Üye Randevu İptali';
