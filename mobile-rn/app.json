@@ -12,6 +12,11 @@
     },
     "scheme": "fizyoparkrn",
     "orientation": "default",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#E6F4FE"
+    },
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "ios": {
