@@ -43,7 +43,7 @@ async function expoPush(messages) {
   }
 }
 
-async function sendCancellationPush(memberName, startTs, staffId) {
+async function sendCancellationPush(memberName, startTs, staffName) {
   try {
     const TZ = 3 * 60 * 60 * 1000;
     const d = new Date(Number(startTs) + TZ);
@@ -56,14 +56,7 @@ async function sendCancellationPush(memberName, startTs, staffId) {
     const dateStr = `${dd}.${mm}.${yyyy}`;
     const dayName = DAYS[d.getUTCDay()];
     const timeStr = `${hh}:${min}`;
-
-    let staffPart = '';
-    if (staffId) {
-      try {
-        const { rows } = await db.query('SELECT first_name, last_name FROM staff WHERE id = $1', [staffId]);
-        if (rows[0]) staffPart = ` ${rows[0].first_name} ${rows[0].last_name}`.trimEnd() + ' ile olan';
-      } catch { /* isim alınamazsa boş bırak, push yine de gönderilsin */ }
-    }
+    const staffPart = staffName ? ` ${staffName} ile olan` : '';
 
     const title = 'Üye Randevu İptali';
     const bodyText = `${memberName} - ${dateStr} ${dayName} ${timeStr}${staffPart} randevusunu iptal etmiştir.`;
@@ -758,11 +751,14 @@ router.post('/sessions/:id/cancel', requireMember, async (req, res) => {
       actorType: 'member',
     }).catch(() => {});
 
-    // Üyenin adını al ve iptal push'u gönder
+    // Üyenin adını al ve iptal push'u gönder (staffMap zaten bellekte — ekstra sorgu yok)
+    const staffName = session.staff_id && staffMap[session.staff_id]
+      ? `${staffMap[session.staff_id].first_name} ${staffMap[session.staff_id].last_name}`.trim()
+      : '';
     db.query('SELECT name FROM members WHERE id = $1', [memberId])
       .then(({ rows }) => {
         const memberName = rows[0]?.name || 'Üye';
-        sendCancellationPush(memberName, session.start_ts, session.staff_id).catch(() => {});
+        sendCancellationPush(memberName, session.start_ts, staffName).catch(() => {});
       })
       .catch(() => {});
 
