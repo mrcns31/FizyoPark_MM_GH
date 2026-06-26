@@ -5260,6 +5260,10 @@ function updateSidebarForRole() {
   if (els.sidebarAdminFooter) {
     els.sidebarAdminFooter.classList.toggle("hidden", !isAdmin && !isStaff);
   }
+  // Sadece admin görebilir
+  if (els.openBroadcastMembersBtn) els.openBroadcastMembersBtn.classList.toggle("hidden", !isAdmin);
+  if (els.openBroadcastsBtn) els.openBroadcastsBtn.classList.toggle("hidden", !isAdmin);
+
   if (els.openAdminHubBtn) {
     els.openAdminHubBtn.classList.toggle("hidden", !isAdmin && !isStaff);
   }
@@ -8229,6 +8233,21 @@ function bindAdminHubNav() {
   document.querySelectorAll("[data-admin-hub-open-logs]").forEach(function (btn) {
     btn.addEventListener("click", function () {
       openActivityLogsPage();
+    });
+  });
+  document.querySelectorAll("[data-admin-hub-open-broadcast]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      closeAdminHubModal();
+      _broadcastSelected.clear();
+      _broadcastTab = 'active';
+      _broadcastQ = '';
+      initBroadcastTabListeners();
+      showAdminBroadcastView();
+    });
+  });
+  document.querySelectorAll("[data-admin-hub-open-broadcast-history]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      openBroadcastsPage();
     });
   });
   document.querySelectorAll("[data-admin-hub-section]").forEach(function (btn) {
