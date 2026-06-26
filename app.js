@@ -1240,6 +1240,7 @@ function cacheEls() {
     "broadcastTabPassive",
     "broadcastTabAll",
     "notificationsFilterBroadcast",
+    "openBroadcastsBtn",
     "packagesList",
     "packagesTable",
     "packagesRefreshBtn",

@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Alert, FlatList, KeyboardAvoidingView, Modal, Platform, Pressable,
+  ActivityIndicator, Alert, Animated, Dimensions, FlatList, Keyboard, Modal, Platform, Pressable,
   ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
@@ -26,6 +26,8 @@ const TABS: { key: Tab; label: string }[] = [
 
 // ── Bildirim Yazma Modal ──────────────────────────────────────────────────
 
+const WIN_H = Dimensions.get('window').height;
+
 function BroadcastModal({
   visible,
   selectedCount,
@@ -41,6 +43,35 @@ function BroadcastModal({
 }) {
   const [title, setTitle] = useState('');
   const [msgBody, setMsgBody] = useState('');
+  const [kbHeight, setKbHeight] = useState(0);
+  const [mounted, setMounted] = useState(visible);
+  const anim = useRef(new Animated.Value(0)).current;
+
+  // Slide animasyonu — BottomSheet ile aynı pattern
+  useEffect(() => {
+    if (visible) {
+      setMounted(true);
+      Animated.timing(anim, { toValue: 1, duration: 240, useNativeDriver: true }).start();
+    } else if (mounted) {
+      Animated.timing(anim, { toValue: 0, duration: 180, useNativeDriver: true }).start(({ finished }) => {
+        if (finished) { setMounted(false); setTitle(''); setMsgBody(''); }
+      });
+    }
+  }, [visible, mounted, anim]);
+
+  // Klavye yüksekliğini izle
+  useEffect(() => {
+    const show = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hide = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const s = Keyboard.addListener(show, (e) => setKbHeight(e.endCoordinates?.height ?? 0));
+    const h = Keyboard.addListener(hide, () => setKbHeight(0));
+    return () => { s.remove(); h.remove(); };
+  }, []);
+
+  if (!mounted) return null;
+
+  const translateY = anim.interpolate({ inputRange: [0, 1], outputRange: [WIN_H, 0] });
+  const backdropOpacity = anim.interpolate({ inputRange: [0, 1], outputRange: [0, 1] });
 
   function handleSend() {
     const t = title.trim();
@@ -50,58 +81,51 @@ function BroadcastModal({
     onSend(t, b);
   }
 
-  function handleClose() {
-    setTitle('');
-    setMsgBody('');
-    onClose();
-  }
-
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={handleClose}>
+    <Modal visible={mounted} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
       <View style={modal.root}>
-        <Pressable style={modal.overlay} onPress={handleClose} />
-        <KeyboardAvoidingView
-          style={modal.kav}
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        >
-          <View style={modal.sheet}>
-            <View style={modal.handle} />
-            <Text style={modal.heading}>Toplu Bildirim</Text>
-            <Text style={modal.sub}>{selectedCount} üye seçili</Text>
+        {/* Backdrop */}
+        <Animated.View style={[modal.backdrop, { opacity: backdropOpacity }]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        </Animated.View>
+        {/* Sheet — klavye yüksekliği kadar yukarı kayar */}
+        <Animated.View style={[modal.sheet, { transform: [{ translateY }], marginBottom: kbHeight }]}>
+          <View style={modal.handle} />
+          <Text style={modal.heading}>Toplu Bildirim</Text>
+          <Text style={modal.sub}>{selectedCount} üye seçili</Text>
 
-            <Text style={modal.label}>Başlık</Text>
-            <TextInput
-              style={modal.input}
-              placeholder="Örn: Merkez Kapalı"
-              placeholderTextColor={colors.muted}
-              value={title}
-              onChangeText={setTitle}
-              maxLength={255}
-            />
+          <Text style={modal.label}>Başlık</Text>
+          <TextInput
+            style={modal.input}
+            placeholder="Örn: Merkez Kapalı"
+            placeholderTextColor={colors.muted}
+            value={title}
+            onChangeText={setTitle}
+            maxLength={255}
+          />
 
-            <Text style={modal.label}>Mesaj</Text>
-            <TextInput
-              style={[modal.input, modal.inputMulti]}
-              placeholder="Örn: 6–12 Haziran tarihleri arasında merkezimiz kapalıdır."
-              placeholderTextColor={colors.muted}
-              value={msgBody}
-              onChangeText={setMsgBody}
-              multiline
-              maxLength={1000}
-            />
+          <Text style={modal.label}>Mesaj</Text>
+          <TextInput
+            style={[modal.input, modal.inputMulti]}
+            placeholder="Örn: 6–12 Haziran tarihleri arasında merkezimiz kapalıdır."
+            placeholderTextColor={colors.muted}
+            value={msgBody}
+            onChangeText={setMsgBody}
+            multiline
+            maxLength={1000}
+          />
 
-            <View style={modal.actions}>
-              <Pressable style={modal.btnCancel} onPress={handleClose} disabled={sending}>
-                <Text style={modal.btnCancelText}>Vazgeç</Text>
-              </Pressable>
-              <Pressable style={[modal.btnSend, sending && { opacity: 0.6 }]} onPress={handleSend} disabled={sending}>
-                {sending
-                  ? <ActivityIndicator color="#fff" size="small" />
-                  : <><Ionicons name="send" size={16} color="#fff" /><Text style={modal.btnSendText}>Gönder</Text></>}
-              </Pressable>
-            </View>
+          <View style={modal.actions}>
+            <Pressable style={modal.btnCancel} onPress={onClose} disabled={sending}>
+              <Text style={modal.btnCancelText}>Vazgeç</Text>
+            </Pressable>
+            <Pressable style={[modal.btnSend, sending && { opacity: 0.6 }]} onPress={handleSend} disabled={sending}>
+              {sending
+                ? <ActivityIndicator color="#fff" size="small" />
+                : <><Ionicons name="send" size={16} color="#fff" /><Text style={modal.btnSendText}>Gönder</Text></>}
+            </Pressable>
           </View>
-        </KeyboardAvoidingView>
+        </Animated.View>
       </View>
     </Modal>
   );
@@ -379,8 +403,7 @@ const styles = StyleSheet.create({
 
 const modal = StyleSheet.create({
   root: { flex: 1, justifyContent: 'flex-end' },
-  overlay: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.55)' },
-  kav: { width: '100%' },
+  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.55)' },
   sheet: {
     backgroundColor: '#1a1a2e', borderTopLeftRadius: 20, borderTopRightRadius: 20,
     padding: 20, paddingBottom: 36, gap: 10,
