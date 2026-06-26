@@ -1232,6 +1232,7 @@ function cacheEls() {
     "openPackagesBtn",
     "packagesSummary",
     "openActivityLogsBtn",
+    "openBroadcastsBtn",
     "packagesList",
     "packagesTable",
     "packagesRefreshBtn",
@@ -4618,6 +4619,10 @@ function openPackagesModal() {
 
 function openActivityLogsPage() {
   window.open("./activity-logs.html", "_blank", "noopener,noreferrer");
+}
+
+function openBroadcastsPage() {
+  window.open("./broadcasts.html", "_blank", "noopener,noreferrer");
 }
 
 function openActivityLogsModal() {
@@ -12089,6 +12094,89 @@ async function openListMembersModal({ resetFilters = true } = {}) {
   let pageSize = DEFAULT_LIST_PAGE_SIZE;
   let lastFilterText = getAdminListFilterText();
   if (resetFilters) listMembersActiveLetter = null;
+
+  // ── Broadcast seçim durumu ────────────────────────────────────────────
+  const selectedMemberIds = new Set();
+  const broadcastToolbar = document.createElement("div");
+  broadcastToolbar.className = "broadcast-toolbar";
+  broadcastToolbar.style.cssText = "display:none;align-items:center;gap:10px;padding:8px 0 4px;flex-wrap:wrap;";
+
+  const selectAllChk = document.createElement("input");
+  selectAllChk.type = "checkbox";
+  selectAllChk.id = "broadcastSelectAll";
+  selectAllChk.title = "Tümünü seç";
+
+  const selectAllLabel = document.createElement("label");
+  selectAllLabel.htmlFor = "broadcastSelectAll";
+  selectAllLabel.textContent = "Tümü";
+  selectAllLabel.style.cssText = "cursor:pointer;font-size:13px;color:var(--color-muted,#8890a0);";
+
+  const selCountSpan = document.createElement("span");
+  selCountSpan.style.cssText = "font-size:13px;color:var(--color-muted,#8890a0);min-width:80px;";
+
+  const sendBtn = document.createElement("button");
+  sendBtn.type = "button";
+  sendBtn.className = "btn btn--sm btn--primary";
+  sendBtn.innerHTML = "📢 Bildirim Gönder";
+  sendBtn.disabled = true;
+
+  const cancelSelBtn = document.createElement("button");
+  cancelSelBtn.type = "button";
+  cancelSelBtn.className = "btn btn--sm btn--ghost";
+  cancelSelBtn.textContent = "İptal";
+
+  broadcastToolbar.append(selectAllChk, selectAllLabel, selCountSpan, sendBtn, cancelSelBtn);
+  content.appendChild(broadcastToolbar);
+
+  // Seçili üye sayısı + buton durumu güncelle
+  function updateBroadcastUI() {
+    const n = selectedMemberIds.size;
+    selCountSpan.textContent = n > 0 ? n + " üye seçili" : "";
+    sendBtn.disabled = n === 0;
+    // Tümü checkbox'ı
+    const currentPageIds = Array.from(tbody.querySelectorAll("tr[data-member-id]")).map((r) => Number(r.dataset.memberId));
+    const cardIds = Array.from(cardsEl.querySelectorAll("[data-member-id]")).map((c) => Number(c.dataset.memberId));
+    const allIds = currentPageIds.length ? currentPageIds : cardIds;
+    selectAllChk.indeterminate = allIds.length > 0 && n > 0 && n < allIds.length;
+    selectAllChk.checked = allIds.length > 0 && allIds.every((id) => selectedMemberIds.has(id));
+  }
+
+  function showBroadcastToolbar() {
+    broadcastToolbar.style.display = "flex";
+    updateBroadcastUI();
+  }
+
+  function hideBroadcastToolbar() {
+    broadcastToolbar.style.display = "none";
+    selectedMemberIds.clear();
+    updateBroadcastUI();
+  }
+
+  function toggleMemberSelection(memberId, chk) {
+    if (chk) selectedMemberIds.add(memberId);
+    else selectedMemberIds.delete(memberId);
+    showBroadcastToolbar();
+    updateBroadcastUI();
+  }
+
+  selectAllChk.addEventListener("change", function () {
+    const rowIds = Array.from(tbody.querySelectorAll("tr[data-member-id]")).map((r) => Number(r.dataset.memberId));
+    const cardIds = Array.from(cardsEl.querySelectorAll("[data-member-id]")).map((c) => Number(c.dataset.memberId));
+    const ids = rowIds.length ? rowIds : cardIds;
+    ids.forEach((id) => selectAllChk.checked ? selectedMemberIds.add(id) : selectedMemberIds.delete(id));
+    // Tüm checkboxları güncelle
+    content.querySelectorAll(".member-select-chk").forEach(function (c) { c.checked = selectAllChk.checked; });
+    updateBroadcastUI();
+  });
+
+  cancelSelBtn.addEventListener("click", function () {
+    hideBroadcastToolbar();
+    content.querySelectorAll(".member-select-chk").forEach(function (c) { c.checked = false; });
+  });
+
+  sendBtn.addEventListener("click", function () {
+    openBroadcastModal([...selectedMemberIds]);
+  });
   initAlphaFilterBar(
     document.getElementById('listMembersAlphaFilter'),
     () => listMembersActiveLetter,
@@ -12178,6 +12266,7 @@ async function openListMembersModal({ resetFilters = true } = {}) {
   }
 
   headerRow.innerHTML = `
+    <th style="width:32px;text-align:center;"></th>
     <th>Üye No</th>
     <th></th>
     <th>Telefon</th>
@@ -12191,10 +12280,10 @@ async function openListMembersModal({ resetFilters = true } = {}) {
   const thStart = makeSortableTh("start", "Başlangıç");
   const thEnd = makeSortableTh("end", "Bitiş");
   const thRemaining = makeSortableTh("remaining", "Kalan Seans");
-  headerRow.replaceChild(thName, headerRow.children[1]);
-  headerRow.replaceChild(thStart, headerRow.children[4]);
-  headerRow.replaceChild(thEnd, headerRow.children[5]);
-  headerRow.replaceChild(thRemaining, headerRow.children[6]);
+  headerRow.replaceChild(thName, headerRow.children[2]);
+  headerRow.replaceChild(thStart, headerRow.children[5]);
+  headerRow.replaceChild(thEnd, headerRow.children[6]);
+  headerRow.replaceChild(thRemaining, headerRow.children[7]);
   thead.appendChild(headerRow);
   table.appendChild(thead);
   const tbody = document.createElement("tbody");
@@ -12256,8 +12345,11 @@ async function openListMembersModal({ resetFilters = true } = {}) {
       const total = getTotal(m);
       const row = document.createElement("tr");
       row.className = "list-members-table__row";
+      row.dataset.memberId = String(m.id);
       row.title = "Aktif paket seanslarını görmek için tıklayın";
+      const chkId = "mchk-" + m.id;
       row.innerHTML = `
+        <td style="text-align:center;"><input type="checkbox" class="member-select-chk" id="${chkId}" data-member-id="${m.id}" ${selectedMemberIds.has(m.id) ? 'checked' : ''}></td>
         <td>${escapeHtml(m.memberNo || "–")}</td>
         <td>${escapeHtml(getMemberDisplayName(m))}${memberDeletionBadgeHtml(m)}</td>
         <td>${escapeHtml(displayPhone(m.phone) || "–")}</td>
@@ -12267,9 +12359,14 @@ async function openListMembersModal({ resetFilters = true } = {}) {
         <td>${remainingSessionsHtml(remaining, total)}</td>
         <td><span class="list-members-table__actions">${memberListActionButtonsHtml()}</span></td>
       `;
+      row.querySelector(".member-select-chk").addEventListener("change", function (e) {
+        e.stopPropagation();
+        toggleMemberSelection(m.id, this.checked);
+      });
       bindListMemberActions(row, m, mp);
       tbody.appendChild(row);
     }
+    updateBroadcastUI();
   }
 
   function renderListMembersCards(members) {
@@ -12283,10 +12380,22 @@ async function openListMembersModal({ resetFilters = true } = {}) {
       const total = getTotal(m);
       const card = document.createElement("article");
       card.className = "list-members-card";
+      card.dataset.memberId = String(m.id);
+      if (selectedMemberIds.has(m.id)) card.style.outline = "2px solid var(--color-accent,#7c5cff)";
       card.title = "Aktif paket seanslarını görmek için tıklayın";
+      const chk = document.createElement("input");
+      chk.type = "checkbox";
+      chk.className = "member-select-chk";
+      chk.checked = selectedMemberIds.has(m.id);
+      chk.style.cssText = "margin-right:8px;cursor:pointer;flex-shrink:0;";
+      chk.addEventListener("change", function (e) {
+        e.stopPropagation();
+        toggleMemberSelection(m.id, chk.checked);
+        card.style.outline = chk.checked ? "2px solid var(--color-accent,#7c5cff)" : "";
+      });
       card.innerHTML =
         '<div class="list-members-card__head">' +
-        '<div class="list-members-card__name">' + escapeHtml(getMemberDisplayName(m)) + memberDeletionBadgeHtml(m) + "</div>" +
+        '<div class="list-members-card__name" style="display:flex;align-items:center;gap:4px;"></div>' +
         '<div class="list-members-card__head-actions">' + memberListActionButtonsHtml() + "</div>" +
         "</div>" +
         '<div class="list-members-card__meta">' +
@@ -12297,9 +12406,13 @@ async function openListMembersModal({ resetFilters = true } = {}) {
         '<span>' + escapeHtml(startStr) + " – " + escapeHtml(endStr) + "</span>" +
         '<span class="list-members-card__remaining">Kalan: ' + remainingSessionsHtml(remaining, total) + "</span>" +
         "</div>";
+      const nameDiv = card.querySelector(".list-members-card__name");
+      nameDiv.prepend(chk);
+      nameDiv.insertAdjacentHTML("beforeend", escapeHtml(getMemberDisplayName(m)) + memberDeletionBadgeHtml(m));
       bindListMemberActions(card, m, mp);
       cardsEl.appendChild(card);
     }
+    updateBroadcastUI();
   }
 
   function updateListMembersLayout() {
@@ -12351,6 +12464,92 @@ async function openListMembersModal({ resetFilters = true } = {}) {
 
 function closeListMembersModal() {
   showAdminCalendarView();
+}
+
+// ── Toplu Bildirim Modal ──────────────────────────────────────────────────
+
+function openBroadcastModal(memberIds) {
+  if (!memberIds || !memberIds.length) return;
+
+  var overlay = document.createElement("div");
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:9000;display:flex;align-items:flex-end;justify-content:center;";
+
+  var sheet = document.createElement("div");
+  sheet.style.cssText = "background:#1a1a2e;border-radius:16px 16px 0 0;padding:24px;width:100%;max-width:560px;display:flex;flex-direction:column;gap:12px;";
+
+  var heading = document.createElement("h3");
+  heading.textContent = "Toplu Bildirim";
+  heading.style.cssText = "margin:0;font-size:1.1rem;color:#e8ecff;";
+
+  var sub = document.createElement("p");
+  sub.textContent = memberIds.length + " üye seçili";
+  sub.style.cssText = "margin:0;font-size:.85rem;color:#8890a0;";
+
+  function makeInput(labelText, tag, extra) {
+    var wrap = document.createElement("div");
+    wrap.style.cssText = "display:flex;flex-direction:column;gap:4px;";
+    var lbl = document.createElement("label");
+    lbl.textContent = labelText;
+    lbl.style.cssText = "font-size:.8rem;font-weight:600;color:#8890a0;";
+    var inp = document.createElement(tag || "input");
+    if (extra) Object.assign(inp, extra);
+    inp.style.cssText = "background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:8px;padding:10px 12px;color:#e8ecff;font-size:.95rem;outline:none;";
+    wrap.appendChild(lbl);
+    wrap.appendChild(inp);
+    return { wrap, inp };
+  }
+
+  var { wrap: titleWrap, inp: titleInp } = makeInput("Başlık", "input", { type: "text", maxLength: 255, placeholder: "Örn: Merkez Kapalı" });
+  var { wrap: bodyWrap, inp: bodyInp } = makeInput("Mesaj", "textarea");
+  bodyInp.rows = 4;
+  bodyInp.maxLength = 1000;
+  bodyInp.placeholder = "Örn: 6-12 Haziran tarihleri arasında merkezimiz kapalıdır.";
+  bodyInp.style.resize = "vertical";
+
+  var actions = document.createElement("div");
+  actions.style.cssText = "display:flex;gap:10px;margin-top:4px;";
+
+  var cancelBtn = document.createElement("button");
+  cancelBtn.type = "button";
+  cancelBtn.className = "btn btn--ghost";
+  cancelBtn.textContent = "Vazgeç";
+  cancelBtn.style.flex = "1";
+
+  var sendBtn = document.createElement("button");
+  sendBtn.type = "button";
+  sendBtn.className = "btn btn--primary";
+  sendBtn.textContent = "📢 Gönder";
+  sendBtn.style.flex = "2";
+
+  actions.append(cancelBtn, sendBtn);
+  sheet.append(heading, sub, titleWrap, bodyWrap, actions);
+  overlay.appendChild(sheet);
+  document.body.appendChild(overlay);
+
+  function close() { document.body.removeChild(overlay); }
+
+  cancelBtn.addEventListener("click", close);
+  overlay.addEventListener("click", function (e) { if (e.target === overlay) close(); });
+
+  sendBtn.addEventListener("click", async function () {
+    var t = titleInp.value.trim();
+    var b = bodyInp.value.trim();
+    if (!t) { alert("Başlık gerekli"); titleInp.focus(); return; }
+    if (!b) { alert("Mesaj gerekli"); bodyInp.focus(); return; }
+    sendBtn.disabled = true;
+    sendBtn.textContent = "Gönderiliyor…";
+    try {
+      var result = await window.API.sendBroadcast(memberIds, t, b);
+      close();
+      alert(result.message || (result.sent + " üyeye bildirim gönderildi."));
+    } catch (err) {
+      alert("Hata: " + (err.message || "Bildirim gönderilemedi"));
+      sendBtn.disabled = false;
+      sendBtn.textContent = "📢 Gönder";
+    }
+  });
+
+  setTimeout(function () { titleInp.focus(); }, 100);
 }
 
 function printWeeklySchedule() {
@@ -12740,6 +12939,7 @@ function bindEvents() {
   if (els.openPackagesBtn) els.openPackagesBtn.addEventListener("click", openPackagesModal);
   if (els.openStaffBtn) els.openStaffBtn.addEventListener("click", openStaffModal);
   if (els.openActivityLogsBtn) els.openActivityLogsBtn.addEventListener("click", openActivityLogsPage);
+  if (els.openBroadcastsBtn) els.openBroadcastsBtn.addEventListener("click", openBroadcastsPage);
 
   // Sidebar: mobil drawer + geniş ekranda < / > rail
   if (els.sidebarMenuBtn) {

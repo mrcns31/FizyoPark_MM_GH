@@ -54,6 +54,8 @@ jobs:
               - 'kiosk.js'
               - 'activity-logs.html'
               - 'activity-logs.js'
+              - 'broadcasts.html'
+              - 'broadcasts.js'
               - 'icons/**'
               - 'fonts/**'
               - 'deploy/nginx.conf'

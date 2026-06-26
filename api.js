@@ -991,6 +991,22 @@
     return apiFetch('/sessions/attendance/shift-reminder', { method: 'POST' });
   }
 
+  async function sendBroadcast(memberIds, title, body) {
+    return apiFetch('/admin/broadcast', {
+      method: 'POST',
+      body: JSON.stringify({ memberIds, title, body }),
+    });
+  }
+
+  async function getBroadcasts(page, limit) {
+    var qs = '?page=' + (page || 1) + '&limit=' + (limit || 20);
+    return apiFetch('/admin/broadcast' + qs);
+  }
+
+  async function getBroadcastRecipients(broadcastId) {
+    return apiFetch('/admin/broadcast/' + broadcastId + '/recipients');
+  }
+
   async function openDoor() {
     return apiFetch('/door/open', { method: 'POST' });
   }
@@ -1084,6 +1100,9 @@
     markStaffNotificationRead,
     checkStaffShiftReminder,
     openDoor,
+    sendBroadcast,
+    getBroadcasts,
+    getBroadcastRecipients,
   };
   window.__API_BASE__ = API_BASE;
 })();

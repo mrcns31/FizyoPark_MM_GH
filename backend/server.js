@@ -25,6 +25,7 @@ import bootstrapRoutes from './routes/bootstrap.js';
 import packageRequestsRoutes from './routes/package-requests.js';
 import closurePeriodsRoutes from './routes/closure-periods.js';
 import doorRoutes from './routes/door.js';
+import adminBroadcastRoutes from './routes/admin-broadcast.js';
 
 dotenv.config();
 
@@ -93,6 +94,7 @@ app.use('/api/bootstrap', bootstrapRoutes);
 app.use('/api/package-requests', packageRequestsRoutes);
 app.use('/api/closure-periods', closurePeriodsRoutes);
 app.use('/api/door', doorRoutes);
+app.use('/api/admin/broadcast', adminBroadcastRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

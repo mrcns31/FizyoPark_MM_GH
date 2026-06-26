@@ -8,30 +8,9 @@ import {
   resolveLocalDateRangeMs,
 } from './staffWorkingHours.js';
 import { autoCompletePackageIfExhausted, isSessionCancelled } from './packageSessionCounts.js';
+import { sendExpoPush } from './pushNotifications.js';
 
 const ATTENDANCE_TYPE_SHIFT_REMINDER = 'attendance_pending_shift_end';
-
-async function sendExpoPush(db, userId, title, body) {
-  try {
-    const { rows } = await db.query('SELECT token FROM push_tokens WHERE user_id = $1', [userId]);
-    if (!rows.length) return;
-    const messages = rows.map((r) => ({
-      to: r.token,
-      title,
-      body,
-      sound: 'default',
-      priority: 'high',
-      channelId: 'fizyopark',
-    }));
-    await fetch('https://exp.host/--/api/v2/push/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify(messages),
-    });
-  } catch {
-    // push hatası bildirimi engellemesin
-  }
-}
 
 /** Yönetici manuel girişi (VARCHAR(10) uyumlu; eski manual_admin de okunur) */
 export function isAdminCheckInMethod(method) {

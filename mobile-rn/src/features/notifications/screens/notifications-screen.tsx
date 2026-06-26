@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,7 +7,7 @@ import { Card, Muted } from '../../../components/ui';
 import { ScreenHeader } from '../../../components/screen-header';
 import { useResponsive } from '../../../lib/responsive';
 import { colors } from '../../../theme/colors';
-import { useNotifications } from '../api/hooks';
+import { useLatestNotification, useNotifications } from '../api/hooks';
 import { useAuth } from '../../auth';
 import { StaffDateBar, useStaffDate } from '../../staff/context/staff-date-context';
 import type { StaffNotification } from '../api/notifications';
@@ -111,10 +111,20 @@ function periodLabel(period: PeriodKey, anchor: number): string {
 }
 
 function AdminNotifications({ wide }: { wide: object }) {
-  const [period, setPeriod] = useState<PeriodKey>('week');
+  const [period, setPeriod] = useState<PeriodKey>('day');
   const [anchor, setAnchor] = useState(() => Date.now());
+  const [anchorReady, setAnchorReady] = useState(false);
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const [page, setPage] = useState(1);
+
+  const { data: latestData } = useLatestNotification();
+  useEffect(() => {
+    if (anchorReady) return;
+    if (!latestData) return;
+    const latest = latestData.items[0];
+    if (latest?.at) setAnchor(latest.at);
+    setAnchorReady(true);
+  }, [latestData, anchorReady]);
 
   const { since, until } = useMemo(() => anchorRange(period, anchor), [period, anchor]);
   const { data, isLoading, isFetching } = useNotifications(since, until, page, PER_PAGE);
