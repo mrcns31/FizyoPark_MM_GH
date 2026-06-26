@@ -5,12 +5,15 @@ import {
   createMemberPackageRequest,
   getMemberAccessQr,
   getMemberDashboard,
+  getMyBroadcasts,
+  markBroadcastSeen,
   requestMemberAccountDeletion,
 } from './member-portal';
 
 export const memberPortalKeys = {
   dashboard: ['member-portal', 'dashboard'] as const,
   accessQr: ['member-portal', 'access-qr'] as const,
+  myBroadcasts: ['member-portal', 'my-broadcasts'] as const,
 };
 
 export function useMemberDashboard() {
@@ -57,5 +60,21 @@ export function useRequestAccountDeletion() {
 export function useCreatePackageRequest() {
   return useMutation({
     mutationFn: (packageId: number) => createMemberPackageRequest(packageId),
+  });
+}
+
+export function useMyBroadcasts() {
+  return useQuery({
+    queryKey: memberPortalKeys.myBroadcasts,
+    queryFn: getMyBroadcasts,
+    staleTime: 30_000,
+  });
+}
+
+export function useMarkBroadcastSeen() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => markBroadcastSeen(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: memberPortalKeys.myBroadcasts }),
   });
 }

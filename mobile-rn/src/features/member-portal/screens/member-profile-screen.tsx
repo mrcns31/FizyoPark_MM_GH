@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -9,8 +9,19 @@ import { ChangePasswordForm } from '../../auth/components/change-password-form';
 import { useResponsive } from '../../../lib/responsive';
 import { colors } from '../../../theme/colors';
 import { useAuth } from '../../auth';
-import { useCreatePackageRequest, useMemberDashboard, useRequestAccountDeletion } from '../api/hooks';
-import type { CatalogPackage } from '../api/member-portal';
+import { useCreatePackageRequest, useMarkBroadcastSeen, useMemberDashboard, useMyBroadcasts, useRequestAccountDeletion } from '../api/hooks';
+import type { CatalogPackage, MemberBroadcast } from '../api/member-portal';
+
+const notifDateFmt = new Intl.DateTimeFormat('tr-TR', {
+  timeZone: 'Europe/Istanbul',
+  day: '2-digit', month: '2-digit', year: 'numeric',
+  hour: '2-digit', minute: '2-digit', hour12: false,
+});
+function fmtDate(v: string): string {
+  if (!v) return '';
+  const d = new Date(v);
+  return isNaN(d.getTime()) ? v : notifDateFmt.format(d);
+}
 
 /** Üye profili — bilgiler + Paketler/Şifre Değiştir (bottom sheet) + çıkış. */
 export function MemberProfileScreen() {
@@ -21,8 +32,13 @@ export function MemberProfileScreen() {
   const { contentMaxWidth, gutter } = useResponsive();
   const p = data?.profile;
 
+  const { data: broadcasts } = useMyBroadcasts();
+  const markSeen = useMarkBroadcastSeen();
+
   const [pkgOpen, setPkgOpen] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
+  const [notifListOpen, setNotifListOpen] = useState(false);
+  const [notifDetail, setNotifDetail] = useState<MemberBroadcast | null>(null);
 
   const hasActive = !!data?.activePackage;
   const pending = data?.pendingPackageRequest;
@@ -89,6 +105,12 @@ export function MemberProfileScreen() {
         ) : null}
 
         <NavRow icon="cube-outline" label="Paketlerim" onPress={() => setPkgOpen(true)} />
+        <NavRow
+          icon="notifications-outline"
+          label="Bildirimlerim"
+          badge={(broadcasts ?? []).filter((b) => !b.seenAt).length}
+          onPress={() => setNotifListOpen(true)}
+        />
         <NavRow icon="lock-closed-outline" label="Şifre Değiştir" onPress={() => setPwOpen(true)} />
 
         <Button title="Çıkış Yap" variant="ghost" onPress={signOut} style={{ marginTop: 6 }} />
@@ -152,6 +174,52 @@ export function MemberProfileScreen() {
       <BottomSheet visible={pwOpen} onClose={() => setPwOpen(false)} title="Şifre Değiştir">
         <ChangePasswordForm bare />
       </BottomSheet>
+
+      {/* Bildirimler listesi bottom sheet */}
+      <BottomSheet visible={notifListOpen} onClose={() => setNotifListOpen(false)} title="Bildirimlerim">
+        {(broadcasts ?? []).length === 0 ? (
+          <Card><Muted>Henüz bildirim yok.</Muted></Card>
+        ) : (
+          <ScrollView showsVerticalScrollIndicator={false} style={{ maxHeight: 420 }}>
+            <View style={styles.notifList}>
+              {(broadcasts ?? []).map((b) => (
+                <Pressable
+                  key={b.id}
+                  style={[styles.notifItem, !b.seenAt && styles.notifItemUnread]}
+                  onPress={() => {
+                    setNotifListOpen(false);
+                    setNotifDetail(b);
+                    if (!b.seenAt) markSeen.mutate(b.id);
+                  }}
+                >
+                  <View style={styles.notifItemHead}>
+                    <Text style={styles.notifItemTitle} numberOfLines={1}>{b.title}</Text>
+                    {!b.seenAt ? <View style={styles.unreadDot} /> : null}
+                  </View>
+                  <Text style={styles.notifItemBody} numberOfLines={2}>{b.body}</Text>
+                  <Text style={styles.notifItemDate}>{fmtDate(b.createdAt)}</Text>
+                </Pressable>
+              ))}
+            </View>
+          </ScrollView>
+        )}
+      </BottomSheet>
+
+      {/* Bildirim detay modal */}
+      <Modal visible={!!notifDetail} transparent animationType="fade" onRequestClose={() => setNotifDetail(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>{notifDetail?.title}</Text>
+            <ScrollView style={{ maxHeight: 260 }} showsVerticalScrollIndicator={false}>
+              <Text style={styles.modalBody}>{notifDetail?.body}</Text>
+            </ScrollView>
+            <Text style={styles.modalDate}>{notifDetail ? fmtDate(notifDetail.createdAt) : ''}</Text>
+            <Pressable style={styles.modalCloseBtn} onPress={() => setNotifDetail(null)}>
+              <Text style={styles.modalCloseBtnText}>Kapat</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -166,11 +234,16 @@ function Row({ label, value }: { label: string; value?: string | null }) {
   );
 }
 
-function NavRow({ icon, label, onPress }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void }) {
+function NavRow({ icon, label, onPress, badge }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void; badge?: number }) {
   return (
     <Pressable style={styles.navRow} onPress={onPress}>
       <Ionicons name={icon} size={20} color={colors.muted} />
       <Text style={styles.navLabel}>{label}</Text>
+      {badge && badge > 0 ? (
+        <View style={styles.navBadge}>
+          <Text style={styles.navBadgeText}>{badge}</Text>
+        </View>
+      ) : null}
       <Ionicons name="chevron-forward" size={18} color={colors.muted} />
     </Pressable>
   );
@@ -200,4 +273,43 @@ const styles = StyleSheet.create({
   rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   pending: { backgroundColor: 'rgba(255,149,0,0.1)', borderColor: 'rgba(255,149,0,0.3)' },
   pkgName: { fontSize: 16, fontWeight: '700', color: colors.text },
+  navBadge: {
+    minWidth: 20, height: 20, borderRadius: 10,
+    backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center',
+    paddingHorizontal: 5, marginRight: 4,
+  },
+  navBadgeText: { color: '#fff', fontSize: 11, fontWeight: '800' },
+  // Bildirim listesi
+  notifList: { gap: 8 },
+  notifItem: {
+    padding: 12, borderRadius: 12, borderWidth: 1,
+    borderColor: colors.border, backgroundColor: 'rgba(255,255,255,0.02)', gap: 4,
+  },
+  notifItemUnread: {
+    borderColor: 'rgba(124,92,255,0.4)',
+    backgroundColor: 'rgba(124,92,255,0.06)',
+  },
+  notifItemHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  notifItemTitle: { flex: 1, fontSize: 14, fontWeight: '700', color: colors.text },
+  unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.accent },
+  notifItemBody: { fontSize: 13, color: 'rgba(232,236,255,0.7)', lineHeight: 18 },
+  notifItemDate: { fontSize: 11, color: colors.muted },
+  // Detay modal
+  modalOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center', justifyContent: 'center', padding: 24,
+  },
+  modalCard: {
+    backgroundColor: '#1a1a2e', borderRadius: 18, padding: 24,
+    width: '100%', maxWidth: 420, gap: 14,
+    borderWidth: 1, borderColor: 'rgba(124,92,255,0.3)',
+  },
+  modalTitle: { fontSize: 18, fontWeight: '800', color: colors.text },
+  modalBody: { fontSize: 15, color: 'rgba(232,236,255,0.85)', lineHeight: 22 },
+  modalDate: { fontSize: 12, color: colors.muted },
+  modalCloseBtn: {
+    marginTop: 4, paddingVertical: 13, borderRadius: 12,
+    backgroundColor: colors.accent, alignItems: 'center',
+  },
+  modalCloseBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
 });

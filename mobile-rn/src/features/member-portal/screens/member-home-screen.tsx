@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from 'expo-router';
@@ -10,8 +10,8 @@ import { formatDayLabel, formatSessionRange, formatTime, weekdayLong, dayOfWeekO
 import { useResponsive } from '../../../lib/responsive';
 import { colors } from '../../../theme/colors';
 import { useAuth } from '../../auth';
-import { useCancelMemberSession, useMemberDashboard } from '../api/hooks';
-import type { MemberNotification, MemberSession } from '../api/member-portal';
+import { useCancelMemberSession, useMarkBroadcastSeen, useMemberDashboard, useMyBroadcasts } from '../api/hooks';
+import type { MemberBroadcast, MemberNotification, MemberSession } from '../api/member-portal';
 
 const TZ = 3 * 3600 * 1000;
 function nowIst() { return Date.now(); }
@@ -48,6 +48,21 @@ export function MemberHomeScreen() {
   const [cancelReason, setCancelReason] = useState('');
   const [wantReschedule, setWantReschedule] = useState(false);
   const allSessions = data?.activePackage?.sessions ?? [];
+
+  // Okunmamış broadcast bildirimi modal
+  const { data: broadcasts } = useMyBroadcasts();
+  const markSeen = useMarkBroadcastSeen();
+  const [notifModal, setNotifModal] = useState<MemberBroadcast | null>(null);
+  const shownRef = useRef<Set<number>>(new Set());
+
+  useEffect(() => {
+    if (!broadcasts?.length) return;
+    const unseen = broadcasts.find((b) => !b.seenAt && !shownRef.current.has(b.id));
+    if (unseen) {
+      shownRef.current.add(unseen.id);
+      setNotifModal(unseen);
+    }
+  }, [broadcasts]);
 
   const sessions = useMemo(
     () => allSessions.filter((s) => !s.isCancelled).sort((a, b) => a.startTs - b.startTs),
@@ -188,6 +203,27 @@ export function MemberHomeScreen() {
         />
       ) : null}
 
+      {/* BROADCAST BİLDİRİM MODAL */}
+      <Modal visible={!!notifModal} transparent animationType="fade" onRequestClose={() => setNotifModal(null)}>
+        <View style={styles.notifOverlay}>
+          <View style={styles.notifModal}>
+            <Text style={styles.notifModalTitle}>{notifModal?.title}</Text>
+            <ScrollView style={{ maxHeight: 260 }} showsVerticalScrollIndicator={false}>
+              <Text style={styles.notifModalBody}>{notifModal?.body}</Text>
+            </ScrollView>
+            <Pressable
+              style={styles.notifCloseBtn}
+              onPress={() => {
+                if (notifModal) markSeen.mutate(notifModal.id);
+                setNotifModal(null);
+              }}
+            >
+              <Text style={styles.notifCloseBtnText}>Kapat</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
+
       {/* İPTAL SHEET */}
       <BottomSheet
         visible={!!cancelTarget}
@@ -308,6 +344,22 @@ const styles = StyleSheet.create({
   badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
   cancelReasonText: { color: colors.muted, fontSize: 12, flex: 1 },
 
+  notifOverlay: {
+    flex: 1, backgroundColor: 'rgba(0,0,0,0.6)',
+    alignItems: 'center', justifyContent: 'center', padding: 24,
+  },
+  notifModal: {
+    backgroundColor: '#1a1a2e', borderRadius: 18,
+    padding: 24, width: '100%', maxWidth: 420, gap: 14,
+    borderWidth: 1, borderColor: 'rgba(124,92,255,0.3)',
+  },
+  notifModalTitle: { fontSize: 18, fontWeight: '800', color: colors.text },
+  notifModalBody: { fontSize: 15, color: 'rgba(232,236,255,0.85)', lineHeight: 22 },
+  notifCloseBtn: {
+    marginTop: 4, paddingVertical: 13, borderRadius: 12,
+    backgroundColor: colors.accent, alignItems: 'center',
+  },
+  notifCloseBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
   cancelSheet: { gap: 12 },
   cancelSheetDate: { color: colors.text, fontWeight: '700', fontSize: 15 },
   cancelLabel: { color: colors.muted, fontSize: 12 },

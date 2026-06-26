@@ -935,4 +935,48 @@ router.post('/package-request', requireMember, [
   }
 });
 
+// ── Üyeye gelen broadcast bildirimleri ───────────────────────────────────
+
+// GET /member-portal/my-broadcasts — bu üyeye gönderilmiş tüm bildirimler
+router.get('/my-broadcasts', requireMember, async (req, res) => {
+  try {
+    const memberId = await getMemberIdForUser(req.user.userId);
+    if (!memberId) return res.status(404).json({ error: 'Üye kaydı bulunamadı' });
+
+    const { rows } = await db.query(
+      `SELECT br.id, b.title, b.body, b.created_at, br.seen_at
+       FROM broadcast_recipients br
+       JOIN broadcasts b ON b.id = br.broadcast_id
+       WHERE br.member_id = $1
+       ORDER BY b.created_at DESC`,
+      [memberId]
+    );
+    res.json({ items: rows });
+  } catch (err) {
+    if (err.code === '42P01') return res.json({ items: [] });
+    console.error('My broadcasts error:', err);
+    res.status(500).json({ error: 'Bildirimler alınamadı' });
+  }
+});
+
+// POST /member-portal/my-broadcasts/:id/seen — okundu olarak işaretle
+router.post('/my-broadcasts/:id/seen', requireMember, async (req, res) => {
+  try {
+    const memberId = await getMemberIdForUser(req.user.userId);
+    if (!memberId) return res.status(404).json({ error: 'Üye kaydı bulunamadı' });
+
+    await db.query(
+      `UPDATE broadcast_recipients
+       SET seen_at = CURRENT_TIMESTAMP
+       WHERE id = $1 AND member_id = $2 AND seen_at IS NULL`,
+      [req.params.id, memberId]
+    );
+    res.json({ ok: true });
+  } catch (err) {
+    if (err.code === '42P01') return res.json({ ok: true });
+    console.error('Mark broadcast seen error:', err);
+    res.status(500).json({ error: 'Güncellenemedi' });
+  }
+});
+
 export default router;

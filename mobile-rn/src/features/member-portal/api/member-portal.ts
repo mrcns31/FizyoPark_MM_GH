@@ -89,6 +89,14 @@ export interface MemberDashboard {
   catalogPackages: CatalogPackage[];
 }
 
+export interface MemberBroadcast {
+  id: number;
+  title: string;
+  body: string;
+  createdAt: string;
+  seenAt: string | null;
+}
+
 export async function getMemberDashboard(): Promise<MemberDashboard> {
   const { data } = await apiClient.get<MemberDashboard>('/member-portal/dashboard');
   return data;
@@ -122,4 +130,19 @@ export interface MemberAccessQr {
 export async function getMemberAccessQr(): Promise<MemberAccessQr> {
   const { data } = await apiClient.get<MemberAccessQr>('/member-portal/access-qr');
   return data;
+}
+
+export async function getMyBroadcasts(): Promise<MemberBroadcast[]> {
+  const { data } = await apiClient.get('/member-portal/my-broadcasts');
+  return (data.items ?? []).map((r: any) => ({
+    id: r.id,
+    title: r.title,
+    body: r.body,
+    createdAt: r.created_at,
+    seenAt: r.seen_at ?? null,
+  }));
+}
+
+export async function markBroadcastSeen(id: number): Promise<void> {
+  await apiClient.post(`/member-portal/my-broadcasts/${id}/seen`);
 }
