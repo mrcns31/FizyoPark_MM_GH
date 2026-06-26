@@ -197,12 +197,13 @@ async function getActivePackageStats(db, memberId, sessionId) {
       return null;
     }
 
-    // 2. Toplam seans sayısını packages tablosundan al
+    // 2. Toplam seans sayısını ve paket adını packages tablosundan al
     const pkgR = await db.query(
-      'SELECT p.lesson_count FROM member_packages mp JOIN packages p ON p.id = mp.package_id WHERE mp.id = $1 LIMIT 1',
+      'SELECT p.lesson_count, p.name AS package_name FROM member_packages mp JOIN packages p ON p.id = mp.package_id WHERE mp.id = $1 LIMIT 1',
       [mpId]
     );
     const total = pkgR.rows[0]?.lesson_count ? Number(pkgR.rows[0].lesson_count) : null;
+    const packageName = pkgR.rows[0]?.package_name || null;
     if (!total) {
       console.warn('[getActivePackageStats] lesson_count alınamadı, mpId:', mpId);
       return null;
@@ -225,7 +226,7 @@ async function getActivePackageStats(db, memberId, sessionId) {
     );
     const used = Number(usedR.rows[0]?.used_count ?? 0);
 
-    return { totalSessions: total, remainingSessions: Math.max(0, total - used) };
+    return { packageName, totalSessions: total, remainingSessions: Math.max(0, total - used) };
   } catch (err) {
     console.error('[getActivePackageStats] hata:', err.message, '| memberId:', memberId, '| sessionId:', sessionId);
     return null;

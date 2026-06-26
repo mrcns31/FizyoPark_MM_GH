@@ -8,7 +8,10 @@
   var titleEl = document.getElementById('kioskTitle');
   var nameEl = document.getElementById('kioskName');
   var subtitleEl = document.getElementById('kioskSubtitle');
-  var packageStatsEl = document.getElementById('kioskPackageStats');
+  var headerRowEl = document.getElementById('kioskHeaderRow');
+  var kioskBottomEl = document.getElementById('kioskBottom');
+  var pkgNameEl = document.getElementById('kioskPkgName');
+  var pkgRemainingEl = document.getElementById('kioskPkgRemaining');
   var clockEl = document.getElementById('kioskClock');
   var inputEl = document.getElementById('kioskInput');
   var phoneOverlay = document.getElementById('phoneOverlay');
@@ -109,6 +112,31 @@
 
   /* ─── Ekran durumları ───────────────────────────────────────────────────── */
 
+  function hideBottom() {
+    if (kioskBottomEl) kioskBottomEl.setAttribute('hidden', '');
+    if (pkgNameEl) pkgNameEl.textContent = '';
+    if (pkgRemainingEl) pkgRemainingEl.textContent = '';
+  }
+
+  function showBottom(pkgName, remaining) {
+    if (!kioskBottomEl) return;
+    if (pkgNameEl) pkgNameEl.textContent = pkgName;
+    if (pkgRemainingEl) pkgRemainingEl.textContent = 'Kalan Seans : ' + remaining;
+    kioskBottomEl.removeAttribute('hidden');
+  }
+
+  function setHeaderInline() {
+    if (headerRowEl) {
+      headerRowEl.classList.remove('kiosk__header-row--stacked');
+    }
+  }
+
+  function setHeaderStacked() {
+    if (headerRowEl) {
+      headerRowEl.classList.add('kiosk__header-row--stacked');
+    }
+  }
+
   function setIdle() {
     busy = false;
     iconEl.setAttribute('hidden', '');
@@ -119,7 +147,8 @@
     nameEl.textContent = '';
     subtitleEl.setAttribute('hidden', '');
     subtitleEl.textContent = '';
-    if (packageStatsEl) { packageStatsEl.setAttribute('hidden', ''); packageStatsEl.textContent = ''; }
+    setHeaderStacked();
+    hideBottom();
     kioskPhoneBtn.style.display = '';
     focusInput();
   }
@@ -132,7 +161,8 @@
     titleEl.textContent = 'Kontrol ediliyor…';
     nameEl.setAttribute('hidden', '');
     subtitleEl.setAttribute('hidden', '');
-    if (packageStatsEl) packageStatsEl.setAttribute('hidden', '');
+    setHeaderInline();
+    hideBottom();
     kioskPhoneBtn.style.display = 'none';
   }
 
@@ -143,6 +173,8 @@
   }
 
   function setSuccess(memberName, checkIn, source, packageStats) {
+    // İkon + HOŞGELDİNİZ yan yana
+    setHeaderInline();
     iconEl.removeAttribute('hidden');
     iconEl.className = 'kiosk__icon is-ok';
     iconEl.textContent = '✓';
@@ -155,27 +187,22 @@
       nameEl.setAttribute('hidden', '');
     }
 
-    var lines = [];
     if (checkIn && checkIn.isStaff) {
-      // personel/admin girişi — ek mesaj yok
+      subtitleEl.setAttribute('hidden', '');
     } else if (checkIn && checkIn.ok) {
-      lines.push('Seansınıza giriş kaydedildi');
-    } else {
-      lines.push('Bugün için planlı bir seansınız yok');
-    }
-    if (lines.length > 0) {
-      subtitleEl.textContent = lines.join('\n');
+      subtitleEl.textContent = 'Seansınıza Giriş Kaydedildi';
       subtitleEl.removeAttribute('hidden');
     } else {
-      subtitleEl.setAttribute('hidden', '');
+      subtitleEl.textContent = 'Bugün için planlı bir seansınız yok';
+      subtitleEl.removeAttribute('hidden');
     }
-    if (packageStatsEl) {
-      if ((source === 'phone' || source === 'card') && packageStats && packageStats.totalSessions) {
-        packageStatsEl.textContent = packageStats.totalSessions + ' Seans Paketinizden Kalan : ' + packageStats.remainingSessions;
-        packageStatsEl.removeAttribute('hidden');
-      } else {
-        packageStatsEl.setAttribute('hidden', '');
-      }
+
+    // Alt panel: paket adı + kalan seans
+    if ((source === 'phone' || source === 'card') && packageStats && packageStats.totalSessions) {
+      var pkgName = packageStats.packageName || (packageStats.totalSessions + ' Seans Paketi');
+      showBottom(pkgName, packageStats.remainingSessions);
+    } else {
+      hideBottom();
     }
 
     kioskPhoneBtn.style.display = 'none';
@@ -183,6 +210,7 @@
   }
 
   function setFailure(message) {
+    setHeaderInline();
     iconEl.removeAttribute('hidden');
     iconEl.className = 'kiosk__icon is-fail';
     iconEl.textContent = '✕';
@@ -190,7 +218,7 @@
     nameEl.setAttribute('hidden', '');
     subtitleEl.textContent = message || 'Lütfen tekrar deneyin';
     subtitleEl.removeAttribute('hidden');
-    if (packageStatsEl) packageStatsEl.setAttribute('hidden', '');
+    hideBottom();
     kioskPhoneBtn.style.display = 'none';
     scheduleReset();
   }

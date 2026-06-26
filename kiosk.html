@@ -46,28 +46,20 @@
         border-right:1px solid var(--border);
       }
       .kiosk__logo{
-        width:min(90%, 110%);
-        height:min(90%, 110%);
+        width:min(90%,110%);
+        height:min(90%,110%);
         background:url("./icons/fizyopark-logo-web.png") center / contain no-repeat;
         opacity:.9;
         animation: breathe 4.5s ease-in-out infinite;
-        transform-origin: center center;
-        will-change: transform, opacity, filter;
+        transform-origin:center;
+        will-change:transform,opacity,filter;
       }
       @keyframes breathe{
-        0%, 100% {
-          transform: scale(1);
-          opacity:.88;
-          filter: drop-shadow(0 0 0px rgba(124,92,255,0));
-        }
-        50% {
-          transform: scale(1.035);
-          opacity:1;
-          filter: drop-shadow(0 0 28px rgba(124,92,255,.45));
-        }
+        0%,100%{ transform:scale(1); opacity:.88; filter:drop-shadow(0 0 0px rgba(124,92,255,0)); }
+        50%    { transform:scale(1.035); opacity:1; filter:drop-shadow(0 0 28px rgba(124,92,255,.45)); }
       }
 
-      /* ── Sağ panel: 2 satır ── */
+      /* ── Sağ panel ── */
       .kiosk-right{
         flex:0 0 50%;
         width:50%;
@@ -77,99 +69,114 @@
         position:relative;
       }
 
-      /* Satır 2 — ikon + isim + mesaj + telefon butonu */
+      /* Ana içerik: bekleme + başarı/hata durumunda kiosk-top */
       .kiosk-top{
         flex:1 1 0;
         display:flex;
         flex-direction:column;
         align-items:center;
         justify-content:center;
-        gap:16px;
-        padding:24px 16px;
-        border-bottom:1px solid var(--border);
+        gap:12px;
+        padding:20px 16px;
+        text-align:center;
       }
 
-      /* Satır 3 — kalan seans bilgisi */
+      /* Başarı sonrası alt panel: paket bilgisi */
       .kiosk-bottom{
-        flex:0 0 36%;
+        flex:0 0 38%;
         display:flex;
+        flex-direction:column;
         align-items:center;
         justify-content:center;
-        padding:16px;
+        padding:12px 20px;
+        border-top:1px solid var(--border);
+        gap:6px;
+      }
+      .kiosk-bottom[hidden]{ display:none; }
+
+      /* ── İkon + başlık: yan yana (başarı/hata) veya sadece başlık (bekleme) ── */
+      .kiosk__header-row{
+        display:flex;
+        flex-direction:row;
+        align-items:center;
+        justify-content:center;
+        gap:14px;
+      }
+      /* Bekleme: icon gizli → sadece başlık, düz */
+      .kiosk__header-row--stacked{
+        flex-direction:column;
+        gap:8px;
       }
 
-      /* ── Durum ikonu ── */
       .kiosk__icon{
-        width:100px;
-        height:100px;
+        width:68px;
+        height:68px;
         border-radius:50%;
+        flex-shrink:0;
         display:flex;
         align-items:center;
         justify-content:center;
-        font-size:52px;
+        font-size:36px;
         line-height:1;
         background:var(--panel);
         border:2px solid var(--border);
-        transition: background .25s, border-color .25s;
+        transition:background .25s,border-color .25s;
       }
       .kiosk__icon[hidden]{ display:none; }
-      .kiosk__icon.is-ok{
-        background: rgba(43,213,118,.16);
-        border-color: var(--ok);
-        color: var(--ok);
-      }
-      .kiosk__icon.is-fail{
-        background: rgba(255,77,109,.16);
-        border-color: var(--danger);
-        color: var(--danger);
-      }
+      .kiosk__icon.is-ok{ background:rgba(43,213,118,.16); border-color:var(--ok); color:var(--ok); }
+      .kiosk__icon.is-fail{ background:rgba(255,77,109,.16); border-color:var(--danger); color:var(--danger); }
 
-      /* ── Yazılar ── */
       .kiosk__title{
-        font-size:38px;
+        font-size:30px;
         font-weight:800;
         line-height:1.15;
         margin:0;
         letter-spacing:0.04em;
       }
+
+      /* Üye adı */
       .kiosk__name{
-        font-size:40px;
+        font-size:28px;
         font-weight:800;
         margin:0;
-        letter-spacing:0.04em;
+        letter-spacing:0.03em;
         color:var(--ok);
-        text-align:center;
+        line-height:1.2;
       }
       .kiosk__name[hidden]{ display:none; }
+
+      /* "Seansınıza giriş kaydedildi" — daha küçük */
       .kiosk__subtitle{
-        font-size:18px;
+        font-size:15px;
         color:var(--muted);
         margin:0;
         white-space:pre-line;
-        text-align:center;
-        line-height:1.6;
+        line-height:1.5;
       }
       .kiosk__subtitle[hidden]{ display:none; }
 
-      /* Satır 3 — büyük paket bilgisi */
-      .kiosk__package-stats{
-        font-size:28px;
+      /* Alt paneldeki paket bilgisi: iki satır, eşit boyda */
+      .kiosk__pkg-name{
+        font-size:22px;
         font-weight:700;
         color:var(--text);
         margin:0;
-        text-align:center;
-        line-height:1.4;
       }
-      .kiosk__package-stats[hidden]{ display:none; }
+      .kiosk__pkg-remaining{
+        font-size:22px;
+        font-weight:700;
+        color:var(--ok);
+        margin:0;
+      }
 
       /* ── Saat ── */
       .kiosk__clock{
         position:absolute;
-        bottom:12px;
-        right:18px;
-        font-size:13px;
+        bottom:10px;
+        right:14px;
+        font-size:12px;
         color:var(--muted);
-        font-variant-numeric: tabular-nums;
+        font-variant-numeric:tabular-nums;
       }
 
       /* Gizli QR input */
@@ -181,9 +188,9 @@
         height:1px;
       }
 
-      /* ── Telefon girişi butonu ── */
+      /* ── Telefon butonu ── */
       .kiosk__phone-btn{
-        margin-top:4px;
+        margin-top:8px;
         padding:14px 44px;
         background:rgba(124,92,255,.10);
         border:1.5px solid rgba(124,92,255,.38);
@@ -194,16 +201,16 @@
         letter-spacing:0.07em;
         cursor:pointer;
         font-family:var(--font);
-        transition: background .2s, border-color .2s;
+        transition:background .2s,border-color .2s;
         -webkit-user-select:none;
         user-select:none;
       }
-      .kiosk__phone-btn:hover, .kiosk__phone-btn:active{
+      .kiosk__phone-btn:hover,.kiosk__phone-btn:active{
         background:rgba(124,92,255,.26);
         border-color:var(--accent);
       }
 
-      /* ── Telefon overlay — tüm kiosk-right'ı kaplar (satır 2+3 tek parça) ── */
+      /* ── Telefon overlay: tüm sağ paneli kaplar ── */
       .kiosk__phone-overlay{
         position:absolute;
         inset:0;
@@ -234,8 +241,8 @@
       }
       .kiosk__phone-pad{
         display:grid;
-        grid-template-columns:repeat(3, 86px);
-        grid-template-rows:repeat(4, 72px);
+        grid-template-columns:repeat(3,86px);
+        grid-template-rows:repeat(4,72px);
         gap:10px;
       }
       .kiosk__phone-pad button{
@@ -247,26 +254,18 @@
         font-weight:700;
         font-family:var(--font);
         cursor:pointer;
-        transition: background .15s, border-color .15s;
+        transition:background .15s,border-color .15s;
         -webkit-user-select:none;
         user-select:none;
       }
-      .kiosk__phone-pad button:active{
-        background:rgba(124,92,255,.25);
-        border-color:var(--accent);
-      }
-      .kiosk__phone-pad button:disabled{
-        opacity:.3;
-        pointer-events:none;
-      }
+      .kiosk__phone-pad button:active{ background:rgba(124,92,255,.25); border-color:var(--accent); }
+      .kiosk__phone-pad button:disabled{ opacity:.3; pointer-events:none; }
       .kiosk__phone-pad .btn-confirm{
         background:rgba(43,213,118,.15);
         border-color:var(--ok);
         color:var(--ok);
       }
-      .kiosk__phone-pad .btn-confirm:active{
-        background:rgba(43,213,118,.35);
-      }
+      .kiosk__phone-pad .btn-confirm:active{ background:rgba(43,213,118,.35); }
       .kiosk__phone-timer{
         width:270px;
         height:3px;
@@ -282,8 +281,8 @@
         transition:none;
       }
       .kiosk__phone-timer-bar.is-running{
-        transition: transform 15s linear;
-        transform: scaleX(0);
+        transition:transform 15s linear;
+        transform:scaleX(0);
       }
       .kiosk__phone-cancel{
         background:transparent;
@@ -317,41 +316,41 @@
         white-space:nowrap;
         -webkit-user-select:none;
         user-select:none;
-        transition: color .2s, border-color .2s;
+        transition:color .2s,border-color .2s;
       }
-      .kiosk__reload-btn:hover, .kiosk__reload-btn:active{
-        color:rgba(255,255,255,.8);
-        border-color:rgba(255,255,255,.4);
-      }
+      .kiosk__reload-btn:hover,.kiosk__reload-btn:active{ color:rgba(255,255,255,.8); border-color:rgba(255,255,255,.4); }
     </style>
   </head>
   <body>
     <!-- Sol: Logo -->
     <div class="kiosk-left">
       <div class="kiosk__logo"></div>
-      <button class="kiosk__reload-btn" onclick="location.reload(true)" title="Yenile (Ctrl+F5)">⟳ Yenile</button>
+      <button class="kiosk__reload-btn" onclick="location.reload(true)" title="Yenile">⟳ Yenile</button>
     </div>
 
-    <!-- Sağ: 2 satır -->
-    <div class="kiosk-right">
+    <!-- Sağ: bekleme=tek panel / başarı=üst+alt -->
+    <div class="kiosk-right" id="kioskRight">
 
-      <!-- Satır 2: ikon + başlık + isim + mesaj + telefon butonu -->
-      <div class="kiosk-top">
-        <div class="kiosk__icon" id="kioskIcon" hidden></div>
-        <h1 class="kiosk__title" id="kioskTitle">HOŞGELDİNİZ</h1>
+      <!-- Üst: ikon + başlık + isim + mesaj + telefon btn -->
+      <div class="kiosk-top" id="kioskTop">
+        <div class="kiosk__header-row kiosk__header-row--stacked" id="kioskHeaderRow">
+          <div class="kiosk__icon" id="kioskIcon" hidden></div>
+          <h1 class="kiosk__title" id="kioskTitle">HOŞGELDİNİZ</h1>
+        </div>
         <p class="kiosk__name" id="kioskName" hidden></p>
         <p class="kiosk__subtitle" id="kioskSubtitle" hidden></p>
         <button class="kiosk__phone-btn" id="kioskPhoneBtn">TELEFON İLE GİRİŞ</button>
       </div>
 
-      <!-- Satır 3: kalan seans bilgisi -->
-      <div class="kiosk-bottom">
-        <p class="kiosk__package-stats" id="kioskPackageStats" hidden></p>
+      <!-- Alt: paket bilgisi (varsayılan gizli) -->
+      <div class="kiosk-bottom" id="kioskBottom" hidden>
+        <p class="kiosk__pkg-name" id="kioskPkgName"></p>
+        <p class="kiosk__pkg-remaining" id="kioskPkgRemaining"></p>
       </div>
 
       <div class="kiosk__clock" id="kioskClock"></div>
 
-      <!-- Telefon overlay: satır 2+3'ü tek parça kapatır -->
+      <!-- Telefon overlay: tüm sağ paneli kaplar -->
       <div class="kiosk__phone-overlay" id="phoneOverlay" hidden>
         <div class="kiosk__phone-display" id="phoneDisplay">0(_ _ _) _ _ _ - _ _ - _ _</div>
         <div class="kiosk__phone-pad" id="phonePad">
