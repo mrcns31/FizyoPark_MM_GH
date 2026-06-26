@@ -532,22 +532,29 @@ router.post('/push-token', verifyToken, async (req, res) => {
   if (!token || typeof token !== 'string') {
     return res.status(400).json({ error: 'Token gerekli' });
   }
+  const client = await db.pool.connect();
   try {
-    // Aynı fiziksel token başka kullanıcılarda kayıtlıysa sil (cihaz el değiştirince karışmasın)
-    await db.query(
+    await client.query('BEGIN');
+    // Aynı fiziksel token başka kullanıcılarda varsa sil — transaction içinde atomik
+    await client.query(
       'DELETE FROM push_tokens WHERE token = $1 AND user_id != $2',
       [token, req.user.userId]
     );
-    await db.query(
+    // UNIQUE(token) constraint'i sayesinde ON CONFLICT DO UPDATE yeterli
+    await client.query(
       `INSERT INTO push_tokens (user_id, token)
        VALUES ($1, $2)
-       ON CONFLICT (user_id, token) DO UPDATE SET updated_at = CURRENT_TIMESTAMP`,
+       ON CONFLICT (token) DO UPDATE SET user_id = $1, updated_at = CURRENT_TIMESTAMP`,
       [req.user.userId, token]
     );
+    await client.query('COMMIT');
     res.json({ ok: true });
   } catch (error) {
+    await client.query('ROLLBACK').catch(() => {});
     console.error('Push token kayıt hatası:', error);
     res.status(500).json({ error: 'Token kaydedilemedi' });
+  } finally {
+    client.release();
   }
 });
 
