@@ -504,11 +504,9 @@ router.post('/check-availability', [
       }
     };
 
-    // Tarih formatlama (DD.MM.YYYY)
-    const fmtDate = (dateObj) => {
-      const dd = String(dateObj.getDate()).padStart(2, '0');
-      const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
-      const yyyy = dateObj.getFullYear();
+    // Tarih formatlama (DD.MM.YYYY) — Istanbul tarihi üzerinden
+    const fmtDateStr = (istDateStr) => {
+      const [yyyy, mm, dd] = istDateStr.split('-');
       return `${dd}.${mm}.${yyyy}`;
     };
 
@@ -521,17 +519,23 @@ router.post('/check-availability', [
       return staffNameCache[staffId];
     };
 
+    // UTC+3 (Istanbul) sabit offset — sunucu TZ'sinden bağımsız timestamp üretimi için
+    const CA_TZ_OFFSET_MS = 3 * 60 * 60 * 1000;
+
     for (const slot of slots) {
       const { day_of_week, start_time, staff_id } = slot;
       const [h, m] = (start_time + '').split(':').map(Number);
+      const hStr = String(h).padStart(2, '0');
+      const mStr = String(m || 0).padStart(2, '0');
       let d = new Date(start);
       while (d <= end) {
-        if (d.getDay() === day_of_week) {
-          const slotStart = new Date(d);
-          slotStart.setHours(h, m || 0, 0, 0);
-          const slotEnd = new Date(slotStart.getTime() + SLOT_DURATION_MS);
-          const startTs = slotStart.getTime();
-          const endTs = slotEnd.getTime();
+        // Günü Istanbul saatine göre hesapla (sunucu TZ'sinden bağımsız)
+        const dInTR = new Date(d.getTime() + CA_TZ_OFFSET_MS);
+        const istDateStr = dInTR.toISOString().slice(0, 10); // "YYYY-MM-DD" Istanbul
+        if (dInTR.getUTCDay() === day_of_week) {
+          // Timestamp'i +03:00 ile oluştur — sunucu TZ ne olursa olsun 18:00 İstanbul = 15:00 UTC
+          const startTs = new Date(`${istDateStr}T${hStr}:${mStr}:00+03:00`).getTime();
+          const endTs = startTs + SLOT_DURATION_MS;
 
           // Grup seans destekleniyor: personelin başka seansı olması çakışma değil.
           // Sadece oda kapasitesi ve çalışma saati kısıtı kontrol edilir.
@@ -540,14 +544,14 @@ router.post('/check-availability', [
             const staffName = await getStaffName(staff_id);
             const neden = reasonLabel(validation.reason);
             conflicts.push({
-              date: d.toISOString().slice(0, 10),
+              date: istDateStr,
               day_name: dayNames[day_of_week],
               start_time,
               staff_id,
               staff_name: staffName,
               reason: validation.reason || 'müsait_değil',
               reason_label: neden,
-              message: `${fmtDate(d)} ${dayNames[day_of_week]} ${start_time} — ${staffName}: ${neden}`,
+              message: `${fmtDateStr(istDateStr)} ${dayNames[day_of_week]} ${start_time} — ${staffName}: ${neden}`,
             });
           }
         }
