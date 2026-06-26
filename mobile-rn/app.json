@@ -3,6 +3,13 @@
     "name": "FizyoPark",
     "slug": "mobile-rn",
     "version": "1.0.0",
+    "runtimeVersion": "1.0.0",
+    "updates": {
+      "url": "https://u.expo.dev/c69218e6-f372-4625-8359-1723351dc7f1",
+      "enabled": true,
+      "fallbackToCacheTimeout": 0,
+      "checkAutomatically": "ON_LOAD"
+    },
     "scheme": "fizyoparkrn",
     "orientation": "default",
     "icon": "./assets/icon.png",
@@ -29,6 +36,7 @@
       "expo-secure-store",
       "@react-native-community/datetimepicker",
       "expo-router",
+      "expo-updates",
       [
         "expo-notifications",
         {
