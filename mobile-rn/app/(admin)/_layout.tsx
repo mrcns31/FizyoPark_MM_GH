@@ -61,6 +61,7 @@ export default function AdminLayout() {
         { key: 'entry', label: 'Giriş Listesi', icon: 'enter-outline', active: active('/more/entry-list'), onPress: () => router.push('/(admin)/more/entry-list') },
         { key: 'reports', label: 'Raporlar', icon: 'bar-chart-outline', active: active('/more/reports'), onPress: () => router.push('/(admin)/more/reports') },
         { key: 'notif', label: 'Bildirimler', icon: 'notifications', active: active('/notifications'), badge: unread > 0, onPress: () => go('/(admin)/notifications') },
+        { key: 'broadcast', label: 'Bildirim Gönder', icon: 'megaphone-outline', active: active('/more/broadcast-members'), onPress: () => router.push('/(admin)/more/broadcast-members') },
         { key: 'req', label: 'Talepler', icon: 'file-tray-full', active: active('/more/requests'), badge: reqCount > 0, onPress: () => go('/(admin)/more/requests') },
       ],
     },

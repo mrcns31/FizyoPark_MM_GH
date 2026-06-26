@@ -15,6 +15,7 @@ export default function MoreLayout() {
       <Stack.Screen name="entry-list" options={{ headerShown: false }} />
       <Stack.Screen name="activity-logs" options={{ headerShown: false }} />
       <Stack.Screen name="broadcasts" options={{ headerShown: false }} />
+      <Stack.Screen name="broadcast-members" options={{ headerShown: false }} />
       <Stack.Screen name="reports" options={{ headerShown: false }} />
       <Stack.Screen name="account" options={{ headerShown: false }} />
       <Stack.Screen name="staff-form" options={{ ...modalScreenOptions, title: 'Personel' }} />

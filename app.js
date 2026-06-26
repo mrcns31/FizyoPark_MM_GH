@@ -1233,6 +1233,13 @@ function cacheEls() {
     "packagesSummary",
     "openActivityLogsBtn",
     "openBroadcastsBtn",
+    "openBroadcastMembersBtn",
+    "adminBroadcastView",
+    "broadcastContent",
+    "broadcastHistoryBtn",
+    "broadcastTabActive",
+    "broadcastTabPassive",
+    "broadcastTabAll",
     "packagesList",
     "packagesTable",
     "packagesRefreshBtn",
@@ -4625,6 +4632,168 @@ function openBroadcastsPage() {
   window.open("./broadcasts.html", "_blank", "noopener,noreferrer");
 }
 
+// ── Bildirim Gönder View ──────────────────────────────────────────────────
+
+var _broadcastTab = 'active';       // 'active' | 'passive' | 'all'
+var _broadcastSelected = new Set(); // seçili member id'leri
+var _broadcastQ = '';
+
+function showAdminBroadcastView() {
+  showAdminMainView('broadcast');
+  renderBroadcastView();
+}
+
+function renderBroadcastView() {
+  var content = els.broadcastContent;
+  if (!content) return;
+
+  var activePackageIds = new Set(
+    (state.memberPackages || []).filter(function (mp) { return isMemberPackageActive(mp); }).map(function (mp) { return normId(mp.memberId); })
+  );
+
+  function getMemberList() {
+    var all = state.members || [];
+    if (_broadcastTab === 'active')  return all.filter(function (m) { return activePackageIds.has(normId(m.id)); });
+    if (_broadcastTab === 'passive') return all.filter(function (m) { return !activePackageIds.has(normId(m.id)); });
+    return all;
+  }
+
+  function applyFilter(list) {
+    var q = _broadcastQ.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter(function (m) {
+      return getMemberDisplayName(m).toLowerCase().includes(q) ||
+        (m.phone || '').includes(q) ||
+        (m.memberNo || '').toLowerCase().includes(q);
+    });
+  }
+
+  function render() {
+    var list = applyFilter(getMemberList());
+    content.innerHTML = '';
+
+    // Arama + tümünü seç satırı
+    var topBar = document.createElement('div');
+    topBar.style.cssText = 'display:flex;gap:8px;align-items:center;padding:8px 0 4px;flex-wrap:wrap;';
+
+    var searchInp = document.createElement('input');
+    searchInp.type = 'text';
+    searchInp.className = 'input';
+    searchInp.placeholder = 'Üye ara…';
+    searchInp.value = _broadcastQ;
+    searchInp.style.cssText = 'flex:1;min-width:160px;';
+    searchInp.addEventListener('input', function () { _broadcastQ = searchInp.value; render(); });
+
+    var selAllChk = document.createElement('input');
+    selAllChk.type = 'checkbox';
+    selAllChk.title = 'Tümünü seç';
+    var allSel = list.length > 0 && list.every(function (m) { return _broadcastSelected.has(normId(m.id)); });
+    var someSel = list.some(function (m) { return _broadcastSelected.has(normId(m.id)); });
+    selAllChk.checked = allSel;
+    selAllChk.indeterminate = someSel && !allSel;
+    selAllChk.addEventListener('change', function () {
+      list.forEach(function (m) { selAllChk.checked ? _broadcastSelected.add(normId(m.id)) : _broadcastSelected.delete(normId(m.id)); });
+      render();
+    });
+
+    var selAllLabel = document.createElement('label');
+    selAllLabel.style.cssText = 'font-size:13px;color:var(--color-muted,#8890a0);cursor:pointer;white-space:nowrap;';
+    selAllLabel.textContent = 'Tümünü seç (' + list.length + ')';
+
+    topBar.append(searchInp, selAllChk, selAllLabel);
+
+    // Seçili sayısı + gönder butonu
+    var actionBar = document.createElement('div');
+    actionBar.style.cssText = 'display:flex;gap:8px;align-items:center;padding:4px 0 8px;';
+    var selCountEl = document.createElement('span');
+    selCountEl.style.cssText = 'font-size:13px;color:var(--color-muted,#8890a0);flex:1;';
+    selCountEl.textContent = _broadcastSelected.size > 0 ? _broadcastSelected.size + ' üye seçili' : '';
+    var sendBtn = document.createElement('button');
+    sendBtn.type = 'button';
+    sendBtn.className = 'btn btn--primary btn--sm';
+    sendBtn.innerHTML = '📢 Bildirim Gönder';
+    sendBtn.disabled = _broadcastSelected.size === 0;
+    sendBtn.addEventListener('click', function () { openBroadcastModal([..._broadcastSelected]); });
+    actionBar.append(selCountEl, sendBtn);
+
+    // Liste (tablo veya kart)
+    var listEl = document.createElement('div');
+    listEl.style.cssText = 'display:flex;flex-direction:column;gap:4px;';
+
+    if (list.length === 0) {
+      listEl.innerHTML = '<p class="hint">Üye bulunamadı.</p>';
+    } else {
+      list.forEach(function (m) {
+        var isActive = activePackageIds.has(normId(m.id));
+        var isSel = _broadcastSelected.has(normId(m.id));
+        var row = document.createElement('label');
+        row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;border:1px solid ' +
+          (isSel ? 'rgba(124,92,255,.5)' : 'var(--color-border,rgba(255,255,255,.1))') +
+          ';background:' + (isSel ? 'rgba(124,92,255,.08)' : 'rgba(255,255,255,.02)') + ';cursor:pointer;';
+        var chk = document.createElement('input');
+        chk.type = 'checkbox';
+        chk.checked = isSel;
+        chk.style.flexShrink = '0';
+        chk.addEventListener('change', function () {
+          chk.checked ? _broadcastSelected.add(normId(m.id)) : _broadcastSelected.delete(normId(m.id));
+          render();
+        });
+        var nameEl = document.createElement('span');
+        nameEl.style.cssText = 'flex:1;font-size:14px;font-weight:600;color:var(--color-text,#e8ecff);';
+        nameEl.textContent = getMemberDisplayName(m);
+        var badge = document.createElement('span');
+        badge.style.cssText = 'font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px;border:1px solid ' +
+          (isActive ? 'rgba(46,204,113,.4)' : 'rgba(255,255,255,.1)') +
+          ';color:' + (isActive ? '#2ecc71' : 'var(--color-muted,#8890a0)') + ';flex-shrink:0;';
+        badge.textContent = isActive ? 'Aktif' : 'Pasif';
+        row.append(chk, nameEl, badge);
+        listEl.appendChild(row);
+      });
+    }
+
+    content.appendChild(topBar);
+    content.appendChild(actionBar);
+    content.appendChild(listEl);
+  }
+
+  // Tab butonları
+  ['broadcastTabActive', 'broadcastTabPassive', 'broadcastTabAll'].forEach(function (id) {
+    var btn = els[id];
+    if (!btn) return;
+    btn.addEventListener('click', function () {
+      _broadcastTab = btn.dataset.broadcastTab;
+      _broadcastSelected.clear();
+      document.querySelectorAll('[data-broadcast-tab]').forEach(function (b) {
+        b.classList.toggle('is-active', b.dataset.broadcastTab === _broadcastTab);
+      });
+      render();
+    }, { once: false });
+  });
+
+  if (els.broadcastHistoryBtn) {
+    els.broadcastHistoryBtn.addEventListener('click', openBroadcastsPage, { once: false });
+  }
+
+  render();
+}
+
+// Tab event'lerini yeniden bağlamak için view açılışında çağrılır
+function initBroadcastTabListeners() {
+  ['broadcastTabActive', 'broadcastTabPassive', 'broadcastTabAll'].forEach(function (id) {
+    var btn = els[id];
+    if (!btn || btn._broadcastBound) return;
+    btn._broadcastBound = true;
+    btn.addEventListener('click', function () {
+      _broadcastTab = btn.dataset.broadcastTab;
+      _broadcastSelected.clear();
+      document.querySelectorAll('[data-broadcast-tab]').forEach(function (b) {
+        b.classList.toggle('is-active', b.dataset.broadcastTab === _broadcastTab);
+      });
+      renderBroadcastView();
+    });
+  });
+}
+
 function openActivityLogsModal() {
   openActivityLogsPage();
 }
@@ -6915,6 +7084,7 @@ function updateAdminMainViewUI() {
   if (els.adminEntryListView) els.adminEntryListView.classList.toggle("hidden", view !== "entry-list");
   if (els.adminNotificationsView) els.adminNotificationsView.classList.toggle("hidden", view !== "notifications");
   if (els.adminReportsView) els.adminReportsView.classList.toggle("hidden", view !== "reports");
+  if (els.adminBroadcastView) els.adminBroadcastView.classList.toggle("hidden", view !== "broadcast");
   if (els.openCalendarBtn) els.openCalendarBtn.classList.toggle("sidebar-nav__btn--active", isCalendar);
   if (els.openListMembersBtn) els.openListMembersBtn.classList.toggle("sidebar-nav__btn--active", view === "members-list");
   if (els.openExpiredMembershipsBtn) els.openExpiredMembershipsBtn.classList.toggle("sidebar-nav__btn--active", view === "expired-memberships");
@@ -6922,6 +7092,7 @@ function updateAdminMainViewUI() {
   if (els.openEntryListBtn) els.openEntryListBtn.classList.toggle("sidebar-nav__btn--active", view === "entry-list");
   if (els.openNotificationsBtn) els.openNotificationsBtn.classList.toggle("sidebar-nav__btn--active", view === "notifications");
   if (els.openReportsBtn) els.openReportsBtn.classList.toggle("sidebar-nav__btn--active", view === "reports");
+  if (els.openBroadcastMembersBtn) els.openBroadcastMembersBtn.classList.toggle("sidebar-nav__btn--active", view === "broadcast");
   updateTopbarFilterPlaceholder();
   refreshAdminListPanels();
 }
@@ -12940,6 +13111,13 @@ function bindEvents() {
   if (els.openStaffBtn) els.openStaffBtn.addEventListener("click", openStaffModal);
   if (els.openActivityLogsBtn) els.openActivityLogsBtn.addEventListener("click", openActivityLogsPage);
   if (els.openBroadcastsBtn) els.openBroadcastsBtn.addEventListener("click", openBroadcastsPage);
+  if (els.openBroadcastMembersBtn) els.openBroadcastMembersBtn.addEventListener("click", function () {
+    _broadcastSelected.clear();
+    _broadcastTab = 'active';
+    _broadcastQ = '';
+    initBroadcastTabListeners();
+    showAdminBroadcastView();
+  });
 
   // Sidebar: mobil drawer + geniş ekranda < / > rail
   if (els.sidebarMenuBtn) {
