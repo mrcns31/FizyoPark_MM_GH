@@ -33,18 +33,16 @@
         user-select:none;
         cursor:none;
       }
-      .kiosk-left,
-      .kiosk-right{
+
+      /* ── Sol panel: logo ── */
+      .kiosk-left{
         flex:0 0 50%;
         width:50%;
-        min-width:0;
         height:100%;
         display:flex;
         align-items:center;
         justify-content:center;
         position:relative;
-      }
-      .kiosk-left{
         border-right:1px solid var(--border);
       }
       .kiosk__logo{
@@ -68,24 +66,47 @@
           filter: drop-shadow(0 0 28px rgba(124,92,255,.45));
         }
       }
-      .kiosk{
-        width:min(92%, 560px);
-        max-width:100%;
-        text-align:center;
+
+      /* ── Sağ panel: 2 satır ── */
+      .kiosk-right{
+        flex:0 0 50%;
+        width:50%;
+        height:100%;
+        display:flex;
+        flex-direction:column;
+        position:relative;
+      }
+
+      /* Satır 2 — ikon + isim + mesaj + telefon butonu */
+      .kiosk-top{
+        flex:1 1 0;
         display:flex;
         flex-direction:column;
         align-items:center;
-        gap:20px;
+        justify-content:center;
+        gap:16px;
+        padding:24px 16px;
+        border-bottom:1px solid var(--border);
       }
-      /* Durum ikonu — sadece kontrol/başarı/hata anında gösterilir */
+
+      /* Satır 3 — kalan seans bilgisi */
+      .kiosk-bottom{
+        flex:0 0 36%;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        padding:16px;
+      }
+
+      /* ── Durum ikonu ── */
       .kiosk__icon{
-        width:130px;
-        height:130px;
+        width:100px;
+        height:100px;
         border-radius:50%;
         display:flex;
         align-items:center;
         justify-content:center;
-        font-size:64px;
+        font-size:52px;
         line-height:1;
         background:var(--panel);
         border:2px solid var(--border);
@@ -102,19 +123,22 @@
         border-color: var(--danger);
         color: var(--danger);
       }
+
+      /* ── Yazılar ── */
       .kiosk__title{
-        font-size:44px;
+        font-size:38px;
         font-weight:800;
         line-height:1.15;
         margin:0;
         letter-spacing:0.04em;
       }
       .kiosk__name{
-        font-size:28px;
+        font-size:40px;
         font-weight:800;
         margin:0;
         letter-spacing:0.04em;
         color:var(--ok);
+        text-align:center;
       }
       .kiosk__name[hidden]{ display:none; }
       .kiosk__subtitle{
@@ -126,23 +150,29 @@
         line-height:1.6;
       }
       .kiosk__subtitle[hidden]{ display:none; }
+
+      /* Satır 3 — büyük paket bilgisi */
       .kiosk__package-stats{
-        font-size:26px;
+        font-size:28px;
         font-weight:700;
-        color:var(--fg);
-        margin:8px 0 0;
+        color:var(--text);
+        margin:0;
         text-align:center;
         line-height:1.4;
       }
       .kiosk__package-stats[hidden]{ display:none; }
+
+      /* ── Saat ── */
       .kiosk__clock{
         position:absolute;
-        bottom:24px;
-        right:28px;
-        font-size:14px;
+        bottom:12px;
+        right:18px;
+        font-size:13px;
         color:var(--muted);
         font-variant-numeric: tabular-nums;
       }
+
+      /* Gizli QR input */
       .kiosk__input{
         position:absolute;
         opacity:0;
@@ -150,7 +180,8 @@
         width:1px;
         height:1px;
       }
-      /* Telefon girişi butonu */
+
+      /* ── Telefon girişi butonu ── */
       .kiosk__phone-btn{
         margin-top:4px;
         padding:14px 44px;
@@ -171,7 +202,8 @@
         background:rgba(124,92,255,.26);
         border-color:var(--accent);
       }
-      /* Telefon overlay — kiosk-right paneli içinde, logo kalmaya devam eder */
+
+      /* ── Telefon overlay — tüm kiosk-right'ı kaplar (satır 2+3 tek parça) ── */
       .kiosk__phone-overlay{
         position:absolute;
         inset:0;
@@ -184,13 +216,6 @@
         z-index:10;
       }
       .kiosk__phone-overlay[hidden]{ display:none; }
-      .kiosk__phone-title{
-        font-size:20px;
-        font-weight:700;
-        color:var(--muted);
-        margin:0;
-        letter-spacing:1.03em;
-      }
       .kiosk__phone-display{
         font-size:20px;
         font-weight:800;
@@ -242,7 +267,6 @@
       .kiosk__phone-pad .btn-confirm:active{
         background:rgba(43,213,118,.35);
       }
-      /* 15 saniyelik geri sayım çubuğu */
       .kiosk__phone-timer{
         width:270px;
         height:3px;
@@ -275,7 +299,8 @@
         user-select:none;
       }
       .kiosk__phone-cancel:active{ border-color:var(--danger); color:var(--danger); }
-      /* Geçici yenile butonu — sol panelin en altı */
+
+      /* ── Yenile butonu ── */
       .kiosk__reload-btn{
         position:absolute;
         bottom:18px;
@@ -301,23 +326,33 @@
     </style>
   </head>
   <body>
+    <!-- Sol: Logo -->
     <div class="kiosk-left">
       <div class="kiosk__logo"></div>
       <button class="kiosk__reload-btn" onclick="location.reload(true)" title="Yenile (Ctrl+F5)">⟳ Yenile</button>
     </div>
+
+    <!-- Sağ: 2 satır -->
     <div class="kiosk-right">
-      <main class="kiosk">
+
+      <!-- Satır 2: ikon + başlık + isim + mesaj + telefon butonu -->
+      <div class="kiosk-top">
         <div class="kiosk__icon" id="kioskIcon" hidden></div>
         <h1 class="kiosk__title" id="kioskTitle">HOŞGELDİNİZ</h1>
         <p class="kiosk__name" id="kioskName" hidden></p>
         <p class="kiosk__subtitle" id="kioskSubtitle" hidden></p>
-        <p class="kiosk__package-stats" id="kioskPackageStats" hidden></p>
         <button class="kiosk__phone-btn" id="kioskPhoneBtn">TELEFON İLE GİRİŞ</button>
-      </main>
+      </div>
+
+      <!-- Satır 3: kalan seans bilgisi -->
+      <div class="kiosk-bottom">
+        <p class="kiosk__package-stats" id="kioskPackageStats" hidden></p>
+      </div>
+
       <div class="kiosk__clock" id="kioskClock"></div>
 
+      <!-- Telefon overlay: satır 2+3'ü tek parça kapatır -->
       <div class="kiosk__phone-overlay" id="phoneOverlay" hidden>
-    <!--    <p class="kiosk__phone-title">Telefon Numaranızı Girin</p>   -->
         <div class="kiosk__phone-display" id="phoneDisplay">0(_ _ _) _ _ _ - _ _ - _ _</div>
         <div class="kiosk__phone-pad" id="phonePad">
           <button data-digit="1">1</button>
@@ -336,9 +371,10 @@
         <div class="kiosk__phone-timer">
           <div class="kiosk__phone-timer-bar" id="phoneTimerBar"></div>
         </div>
-        <button class="kiosk__phone-cancel" id="phoneCancelBtn">Vazgeç</button> 
+        <button class="kiosk__phone-cancel" id="phoneCancelBtn">Vazgeç</button>
       </div>
     </div>
+
     <input class="kiosk__input" id="kioskInput" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" />
     <script>window.__API_BASE__ = 'https://admin.fizyopark.com/api';</script>
     <script src="./api.js"></script>
