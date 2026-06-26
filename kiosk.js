@@ -332,7 +332,10 @@
   }
 
   function checkServer() {
-    fetch('/health', { method: 'GET', cache: 'no-store' })
+    // API base'den /health URL'i türet: ".../api" → ".../health"
+    var base = (window.__API_BASE__ || '').replace(/\/api\/?$/, '');
+    var healthUrl = base ? base + '/health' : '/health';
+    fetch(healthUrl, { method: 'GET', cache: 'no-store' })
       .then(function (r) {
         var wasOffline = !serverOnline;
         serverOnline = r.ok;
