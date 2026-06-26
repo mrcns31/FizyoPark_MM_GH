@@ -34,7 +34,8 @@ function remainingColor(remaining: number | null, total: number): string {
 /** Admin üye listesi — sadece aktif paketliler + paketsiz uyarı kutusu (web parity). */
 export function AdminMembersScreen() {
   const router = useRouter();
-  const { data, isLoading, refetch, isRefetching } = useMembers();
+  const { data, isLoading, refetch } = useMembers();
+  const [manualRefreshing, setManualRefreshing] = useState(false);
   const { data: allPackages } = useMemberPackages();
   const del = useDeleteMember();
   const [q, setQ] = useState('');
@@ -237,8 +238,8 @@ export function AdminMembersScreen() {
           keyExtractor={(m) => String(m.id)}
           numColumns={columns}
           columnWrapperStyle={columns > 1 ? { gap: 12, justifyContent: 'space-between' } : undefined}
-          refreshing={isRefetching}
-          onRefresh={refetch}
+          refreshing={manualRefreshing}
+          onRefresh={async () => { setManualRefreshing(true); try { await refetch(); } finally { setManualRefreshing(false); } }}
           onEndReached={() => hasMore && loadMore()}
           onEndReachedThreshold={0.5}
           contentContainerStyle={[styles.list, wide]}

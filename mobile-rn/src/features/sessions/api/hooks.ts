@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import {
   confirmAttendance,
@@ -20,7 +20,8 @@ export function useSessions(q: SessionQuery = {}) {
   return useQuery({
     queryKey: sessionKeys.list(q),
     queryFn: () => getSessions(q),
-    refetchInterval: 10_000, // takvim 10 sn'de bir yenilenir (kullanıcı isteği)
+    refetchInterval: 10_000,
+    placeholderData: keepPreviousData, // eski veri yerinde kalsın, ekran titremez
   });
 }
 

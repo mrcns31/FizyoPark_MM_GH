@@ -11,15 +11,21 @@ import { colors } from '../../../theme/colors';
 import { ACTION_LABELS, actionLabel } from '../api/activity-logs';
 import { useActivityLogs } from '../api/hooks';
 
+const logDateFmt = new Intl.DateTimeFormat('tr-TR', {
+  timeZone: 'Europe/Istanbul',
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
+
 function fmtDateTime(v: string): string {
   if (!v) return '';
-  const ts = new Date(v).getTime();
-  if (Number.isNaN(ts)) return v;
-  // Türkiye her zaman UTC+3 (2016'dan beri yaz saati yok)
-  const d = new Date(ts + 3 * 3600 * 1000);
-  const date = `${String(d.getUTCDate()).padStart(2, '0')}.${String(d.getUTCMonth() + 1).padStart(2, '0')}.${d.getUTCFullYear()}`;
-  const time = `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
-  return `${date} ${time}`;
+  const d = new Date(v);
+  if (Number.isNaN(d.getTime())) return v;
+  return logDateFmt.format(d);
 }
 
 /** İşlem Logları — sistem aktivite kayıtları (web activity-logs.html). Sayfalı liste. */

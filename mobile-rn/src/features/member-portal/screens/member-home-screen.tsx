@@ -1,37 +1,58 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Linking, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from 'expo-router';
 
 import { Badge, Button, Card, Muted, SectionTitle } from '../../../components/ui';
 import { BottomSheet } from '../../../components/bottom-sheet';
-import { formatDayLabel, formatSessionRange } from '../../../lib/datetime';
+import { formatDayLabel, formatSessionRange, formatTime, weekdayLong, dayOfWeekOfTs } from '../../../lib/datetime';
 import { useResponsive } from '../../../lib/responsive';
 import { colors } from '../../../theme/colors';
 import { useAuth } from '../../auth';
 import { useCancelMemberSession, useMemberDashboard } from '../api/hooks';
 import type { MemberNotification, MemberSession } from '../api/member-portal';
-import { SessionStatusBadge } from '../components/session-status';
 
-/** Üye ana ekranı (Seanslar) — üst sabit (selam + paket), Gelecek/Geçmiş sekmeli seans listesi. */
+const TZ = 3 * 3600 * 1000;
+function nowIst() { return Date.now(); }
+
+/** Web memberSessionStatusLabel mantığıyla birebir durum tonu. */
+function statusTone(s: MemberSession): 'green' | 'orange' | 'neutral' | 'red' | 'accent' {
+  if (s.isCancelled) return 'red';
+  if (s.isConsumed || s.checkedIn) return 'green';
+  if (s.status === 'locked') return 'orange';
+  if (s.startTs > nowIst()) return 'accent'; // planlandı
+  return 'neutral'; // yapıldı ama onay yok
+}
+
+/** Durum etiketi — "Gelmedi" → üye tarafında "Otomatik Düşen Seans" */
+function statusLabel(s: MemberSession): string {
+  const raw = s.statusLabel || '';
+  if (raw === 'Gelmedi' || raw === 'Gelmedi (Onaylanmadı)') return 'Otomatik Düşen Seans';
+  if (raw) return raw;
+  if (s.isCancelled) return 'İptal edildi';
+  if (s.checkedIn) return 'Giriş yapıldı';
+  if (s.isConsumed) return 'Yapıldı';
+  if (s.startTs > nowIst()) return s.canCancel ? 'Planlandı' : 'İptal edilemez';
+  return 'Yapıldı';
+}
+
+/** Üye ana ekranı — web renderMemberHome paritesi. */
 export function MemberHomeScreen() {
   const { user } = useAuth();
-  const { data, isLoading, error, refetch, isRefetching } = useMemberDashboard();
+  const { data, isLoading, error, refetch } = useMemberDashboard();
+  const [manualRefreshing, setManualRefreshing] = useState(false);
   const cancelMutation = useCancelMemberSession();
   const { contentMaxWidth, gutter } = useResponsive();
   const [cancelTarget, setCancelTarget] = useState<MemberSession | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [wantReschedule, setWantReschedule] = useState(false);
-  const [tab, setTab] = useState<'upcoming' | 'past'>('upcoming');
-
   const allSessions = data?.activePackage?.sessions ?? [];
-  // Gelecek: kronolojik artan; Geçmiş: en yeni üstte.
-  const sessions = useMemo(() => {
-    const now = Date.now();
-    const list = allSessions.slice();
-    if (tab === 'upcoming') return list.filter((s) => s.startTs >= now).sort((a, b) => a.startTs - b.startTs);
-    return list.filter((s) => s.startTs < now).sort((a, b) => b.startTs - a.startTs);
-  }, [allSessions, tab]);
+
+  const sessions = useMemo(
+    () => allSessions.filter((s) => !s.isCancelled).sort((a, b) => a.startTs - b.startTs),
+    [allSessions],
+  );
 
   function openCancel(s: MemberSession) {
     setCancelTarget(s);
@@ -49,16 +70,18 @@ export function MemberHomeScreen() {
       });
       setCancelTarget(null);
       await refetch();
-      // Yeni randevu istendi + tesis WhatsApp'ı varsa WhatsApp'ı aç (web paritesi).
       const wa = (data?.contactWhatsApp || '').replace(/\D/g, '');
       if (wantReschedule && wa) {
-        const msg = `Merhaba, ${formatDayLabel(s.startTs)} ${formatSessionRange(s.startTs, s.endTs)} seansımı iptal ettim, yeni randevu talep ediyorum.${cancelReason.trim() ? ` Sebep: ${cancelReason.trim()}` : ''}`;
+        const msg = `Merhaba, ${formatDayLabel(s.startTs)} ${formatTime(s.startTs)} seansımı iptal ettim, yeni randevu talep ediyorum.${cancelReason.trim() ? ` Sebep: ${cancelReason.trim()}` : ''}`;
         Linking.openURL(`https://wa.me/${wa}?text=${encodeURIComponent(msg)}`).catch(() => {});
       }
     } catch (e) {
       Alert.alert('Hata', (e as Error).message);
     }
   }
+
+  // Ekrana her dönüşte (admin değişikliği dahil) anında yenile
+  useFocusEffect(useCallback(() => { refetch(); }, [refetch]));
 
   const ap = data?.activePackage;
   const wide = { width: '100%' as const, maxWidth: contentMaxWidth, alignSelf: 'center' as const };
@@ -86,8 +109,8 @@ export function MemberHomeScreen() {
               <Badge label={ap.packageType === 'flexible' ? 'Esnek' : 'Sabit'} tone="accent" />
             </View>
             <View style={styles.statsRow}>
-              <Stat value={ap.remainingSessions} label="Kalan" tone="green" />
               <Stat value={ap.usedSessions} label="Kullanılan" />
+              <Stat value={ap.remainingSessions} label="Kalan" tone="green" />
               <Stat value={ap.totalSessions} label="Toplam" />
             </View>
             <Muted>{ap.startDate} → {ap.endDate}</Muted>
@@ -104,54 +127,68 @@ export function MemberHomeScreen() {
         ) : null}
 
         {ap ? (
-          <View style={styles.tabs}>
-            <Pressable style={[styles.tab, tab === 'upcoming' && styles.tabOn]} onPress={() => setTab('upcoming')}>
-              <Text style={[styles.tabText, tab === 'upcoming' && styles.tabTextOn]}>Gelecek</Text>
-            </Pressable>
-            <Pressable style={[styles.tab, tab === 'past' && styles.tabOn]} onPress={() => setTab('past')}>
-              <Text style={[styles.tabText, tab === 'past' && styles.tabTextOn]}>Geçmiş</Text>
-            </Pressable>
-          </View>
+          <Text style={styles.sectionLabel}>Randevularım ({sessions.length})</Text>
         ) : null}
       </View>
 
-      {/* KAYDIRILABİLİR SEANS LİSTESİ */}
+      {/* SEANS LİSTESİ */}
       {isLoading ? (
         <ActivityIndicator color={colors.accent} style={{ marginTop: 40 }} />
       ) : ap ? (
         <FlatList
           data={sessions}
           keyExtractor={(s) => String(s.id)}
-          refreshing={isRefetching}
-          onRefresh={refetch}
+          refreshing={manualRefreshing}
+          onRefresh={async () => { setManualRefreshing(true); try { await refetch(); } finally { setManualRefreshing(false); } }}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[styles.list, wide, { paddingHorizontal: gutter }]}
           ListEmptyComponent={
-            <Card>
-              <Muted>{tab === 'upcoming' ? 'Yaklaşan seans yok.' : 'Geçmiş seans yok.'}</Muted>
-            </Card>
+            <Card><Muted>Randevu bulunmuyor.</Muted></Card>
           }
-          renderItem={({ item: s }) => (
-            <Card style={styles.sessionCard}>
-              <View style={styles.rowBetween}>
-                <Text style={styles.day}>{formatDayLabel(s.startTs)}</Text>
-                <SessionStatusBadge session={s} />
+          renderItem={({ item: s, index }) => {
+            const now = nowIst();
+            const isPast = s.startTs < now;
+            const lbl = statusLabel(s);
+            const tone = statusTone(s);
+            const dayName = weekdayLong(dayOfWeekOfTs(s.startTs));
+            // Gelecek seans ama iptal edilemez → "İptal edilemez" buton pozisyonunda
+            const showLocked = !s.isCancelled && !s.isConsumed && !isPast && !s.canCancel;
+            return (
+              <View style={[styles.sessionCard, isPast && styles.sessionCardPast]}>
+                {/* Satır 1: No + Tarih / Saat · Gün | İptal veya İptal Edilemez */}
+                <View style={styles.rowBetween}>
+                  <View style={styles.rowLeft}>
+                    <Text style={[styles.seqNo, isPast && styles.seqNoPast]}>{index + 1}.</Text>
+                    <View>
+                      <Text style={[styles.dateText, isPast && styles.dateTextPast]}>
+                        {formatDayLabel(s.startTs)} / {formatTime(s.startTs)}
+                      </Text>
+                      <Text style={styles.dayName}>{dayName}</Text>
+                    </View>
+                  </View>
+                  {s.canCancel ? (
+                    <Pressable onPress={() => openCancel(s)} style={styles.cancelBtn}>
+                      <Text style={styles.cancelBtnText}>İptal</Text>
+                    </Pressable>
+                  ) : showLocked ? (
+                    <View style={styles.lockedBtn}>
+                      <Text style={styles.lockedBtnText}>İptal edilemez</Text>
+                    </View>
+                  ) : null}
+                </View>
+                {/* Satır 2: Durum (sadece tamamlanmış/iptal/otomatik düşen için) */}
+                {(isPast || s.isCancelled) ? (
+                  <View style={styles.badgeRow}>
+                    <Badge label={lbl} tone={tone} />
+                  </View>
+                ) : null}
               </View>
-              <Text style={styles.time}>{formatSessionRange(s.startTs, s.endTs)}</Text>
-              {s.staffName ? <Muted>{s.staffName}</Muted> : null}
-              {s.roomName ? <Muted>{s.roomName}</Muted> : null}
-              {s.canCancel ? (
-                <Text style={styles.cancel} onPress={() => openCancel(s)}>
-                  Seansı iptal et
-                </Text>
-              ) : s.cancelReason ? (
-                <Muted>{s.cancelReason}</Muted>
-              ) : null}
-            </Card>
-          )}
+            );
+          }}
         />
       ) : null}
 
+      {/* İPTAL SHEET */}
       <BottomSheet
         visible={!!cancelTarget}
         onClose={() => setCancelTarget(null)}
@@ -159,9 +196,9 @@ export function MemberHomeScreen() {
       >
         {cancelTarget ? (
           <View style={styles.cancelSheet}>
-            <Muted>
-              {formatDayLabel(cancelTarget.startTs)} · {formatSessionRange(cancelTarget.startTs, cancelTarget.endTs)}
-            </Muted>
+            <Text style={styles.cancelSheetDate}>
+              {formatDayLabel(cancelTarget.startTs)} / {formatTime(cancelTarget.startTs)}
+            </Text>
             <Text style={styles.cancelLabel}>İptal sebebi (opsiyonel)</Text>
             <TextInput
               style={styles.cancelInput}
@@ -202,68 +239,90 @@ function Stat({ value, label, tone }: { value: number; label: string; tone?: 'gr
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
-  fixed: { paddingTop: 8, paddingBottom: 8, gap: 16 },
+  fixed: { paddingTop: 8, paddingBottom: 8, gap: 12 },
   hello: { fontSize: 20, fontWeight: '800', color: colors.text },
   error: { color: colors.danger },
   notif: { backgroundColor: 'rgba(255,149,0,0.12)', borderColor: 'rgba(255,149,0,0.3)' },
   notifText: { color: '#FFD9A0', fontSize: 14 },
-  // kompakt paket kartı
+
   pkgCard: {
     backgroundColor: colors.panel,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: colors.radius,
-    padding: 10,
-    gap: 4,
+    borderWidth: 1, borderColor: colors.border,
+    borderRadius: colors.radius, padding: 10, gap: 4,
   },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   pkgName: { flex: 1, fontSize: 14, fontWeight: '700', color: colors.text, marginRight: 8 },
   statsRow: { flexDirection: 'row', gap: 8 },
-  stat: { flex: 1, backgroundColor: colors.panel2, borderRadius: 10, borderWidth: 1, borderColor: colors.border, paddingVertical: 6, alignItems: 'center' },
+  stat: {
+    flex: 1, backgroundColor: colors.panel2,
+    borderRadius: 10, borderWidth: 1, borderColor: colors.border,
+    paddingVertical: 6, alignItems: 'center',
+  },
   statValue: { fontSize: 17, fontWeight: '800', color: colors.text },
   statLabel: { fontSize: 10, color: colors.muted, marginTop: 1 },
+
+  sectionLabel: { color: colors.muted, fontSize: 13, fontWeight: '700' },
   tabs: { flexDirection: 'row', gap: 8 },
   tab: {
-    flex: 1,
-    paddingVertical: 9,
-    borderRadius: 10,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.03)',
+    flex: 1, paddingVertical: 9, borderRadius: 10,
+    alignItems: 'center', borderWidth: 1,
+    borderColor: colors.border, backgroundColor: 'rgba(255,255,255,0.03)',
   },
   tabOn: { backgroundColor: 'rgba(124,92,255,0.20)', borderColor: 'rgba(124,92,255,0.5)' },
-  tabText: { color: colors.muted, fontWeight: '700', fontSize: 14 },
+  tabText: { color: colors.muted, fontWeight: '700', fontSize: 13 },
   tabTextOn: { color: colors.text },
-  list: { paddingTop: 8, paddingBottom: 16 },
-  sessionCard: { marginBottom: 12 },
-  day: { fontSize: 15, fontWeight: '700', color: colors.text },
-  time: { fontSize: 18, fontWeight: '800', color: colors.accent },
-  cancel: { color: colors.danger, fontWeight: '700', fontSize: 14, marginTop: 6 },
+
+  list: { paddingTop: 8, paddingBottom: 24, gap: 8 },
+
+  sessionCard: {
+    padding: 12, borderWidth: 1,
+    borderColor: colors.border, borderRadius: 12,
+    backgroundColor: colors.panel, gap: 6,
+  },
+  sessionCardPast: { opacity: 0.6 },
+
+  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  rowLeft: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, flex: 1 },
+  seqNo: { color: colors.muted, fontSize: 13, fontWeight: '700', minWidth: 22, paddingTop: 2 },
+  seqNoPast: { color: 'rgba(232,236,255,0.3)' },
+  dateText: { fontSize: 14, fontWeight: '700', color: colors.text },
+  dateTextPast: { color: colors.muted },
+  dayName: { fontSize: 11, color: colors.muted, marginTop: 1 },
+
+  cancelBtn: {
+    paddingHorizontal: 12, paddingVertical: 5,
+    borderRadius: 8, borderWidth: 1,
+    borderColor: 'rgba(255,77,109,0.5)',
+    backgroundColor: 'rgba(255,77,109,0.1)',
+    marginLeft: 8,
+  },
+  cancelBtnText: { color: colors.danger, fontSize: 12, fontWeight: '700' },
+  lockedBtn: {
+    paddingHorizontal: 10, paddingVertical: 5,
+    borderRadius: 8, borderWidth: 1,
+    borderColor: 'rgba(255,149,0,0.4)',
+    backgroundColor: 'rgba(255,149,0,0.08)',
+    marginLeft: 8,
+  },
+  lockedBtnText: { color: colors.fpOrange, fontSize: 11, fontWeight: '600' },
+
+  badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  cancelReasonText: { color: colors.muted, fontSize: 12, flex: 1 },
+
   cancelSheet: { gap: 12 },
+  cancelSheetDate: { color: colors.text, fontWeight: '700', fontSize: 15 },
   cancelLabel: { color: colors.muted, fontSize: 12 },
   cancelInput: {
     backgroundColor: 'rgba(255,255,255,0.03)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    minHeight: 76,
-    textAlignVertical: 'top',
-    color: colors.text,
-    fontSize: 16,
+    borderRadius: 12, borderWidth: 1, borderColor: colors.border,
+    paddingHorizontal: 12, paddingVertical: 10,
+    minHeight: 76, textAlignVertical: 'top',
+    color: colors.text, fontSize: 16,
   },
   rescheduleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   check: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 22, height: 22, borderRadius: 6, borderWidth: 1,
+    borderColor: colors.border, backgroundColor: 'rgba(255,255,255,0.03)',
+    alignItems: 'center', justifyContent: 'center',
   },
   checkOn: { backgroundColor: colors.accent, borderColor: colors.accent },
   rescheduleText: { flex: 1, color: colors.text, fontSize: 14 },

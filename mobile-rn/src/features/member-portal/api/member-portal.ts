@@ -34,6 +34,7 @@ export interface MemberSession {
   checkedIn: boolean;
   isPast: boolean;
   isCancelled: boolean;
+  cancelledByMember: boolean;
   isConsumed: boolean;
   canCancel: boolean;
   cancelReason?: string;

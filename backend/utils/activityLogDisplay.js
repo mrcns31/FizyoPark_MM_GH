@@ -26,18 +26,22 @@ function parseDetails(raw) {
   return {};
 }
 
+const logDateTimeFmt = new Intl.DateTimeFormat('tr-TR', {
+  timeZone: 'Europe/Istanbul',
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  hour12: false,
+});
+
 function fmtLogDateTime(ts) {
   const n = Number(ts);
   if (!Number.isFinite(n)) return '';
   const d = new Date(n);
   if (Number.isNaN(d.getTime())) return '';
-  return d.toLocaleString('tr-TR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return logDateTimeFmt.format(d);
 }
 
 function personName(first, last, fallback) {

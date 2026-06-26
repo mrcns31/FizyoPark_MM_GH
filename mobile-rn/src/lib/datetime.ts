@@ -55,10 +55,14 @@ export function dayOfWeekOfTs(ts: number): number {
 }
 
 const WEEKDAYS_SHORT = ['Paz', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
+const WEEKDAYS_LONG  = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
 
 /** 0=Pazar ... 6=Cumartesi */
 export function weekdayShort(dow: number): string {
   return WEEKDAYS_SHORT[((dow % 7) + 7) % 7];
+}
+export function weekdayLong(dow: number): string {
+  return WEEKDAYS_LONG[((dow % 7) + 7) % 7];
 }
 
 const DAY_MS = 24 * 3600 * 1000;

@@ -52,6 +52,22 @@
     database: "Veritabanı"
   };
 
+  var webLogDateFmt = new Intl.DateTimeFormat('tr-TR', {
+    timeZone: 'Europe/Istanbul',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+
+  function fmtLogDate(v) {
+    if (!v) return '—';
+    var d = new Date(v);
+    return isNaN(d.getTime()) ? '—' : webLogDateFmt.format(d);
+  }
+
   function escapeHtml(s) {
     return String(s == null ? "" : s)
       .replace(/&/g, "&amp;")
@@ -133,7 +149,7 @@
       return;
     }
     items.forEach(function (row) {
-      var created = row.created_at ? new Date(row.created_at).toLocaleString("tr-TR") : "—";
+      var created = fmtLogDate(row.created_at);
       var who = row.actor_display || row.actor_name || (row.actor_type === "user" ? "Kullanıcı #" + (row.actor_id || "?") : row.actor_type) || "—";
       var entity = row.entity_display || formatEntity(row.entity_type, row.entity_id);
       var details = row.details_display || formatDetails(row.details, row.action);
@@ -159,7 +175,7 @@
     }
     items.forEach(function (row) {
       var tr = document.createElement("tr");
-      var created = row.created_at ? new Date(row.created_at).toLocaleString("tr-TR") : "—";
+      var created = fmtLogDate(row.created_at);
       var who = row.actor_display || row.actor_name || (row.actor_type === "user" ? "Kullanıcı #" + (row.actor_id || "?") : row.actor_type) || "—";
       var entity = row.entity_display || formatEntity(row.entity_type, row.entity_id);
       var details = row.details_display || formatDetails(row.details, row.action);

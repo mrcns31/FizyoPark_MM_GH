@@ -5,6 +5,7 @@ import { useAuth } from '../../src/features/auth';
 import { useUnreadCount } from '../../src/features/notifications/api/hooks';
 import { NotificationToaster } from '../../src/features/notifications/components/notification-toaster';
 import { useStaffShiftReminderPoll } from '../../src/features/staff/api/hooks';
+import { StaffDateProvider } from '../../src/features/staff/context/staff-date-context';
 
 /** Personel kabuğu — web staff-mobile-bar: tek "Menü" butonu + drawer. */
 export default function StaffLayout() {
@@ -33,9 +34,11 @@ export default function StaffLayout() {
     items: [{ key: 'logout', label: 'Çıkış', icon: 'log-out', danger: true, onPress: signOut }],
   };
   return (
-    <RoleShell brandText="Seans Planlayıcı" sections={sections} footer={footer}>
-      <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: 'transparent' } }} />
-      <NotificationToaster />
-    </RoleShell>
+    <StaffDateProvider>
+      <RoleShell brandText="Seans Planlayıcı" sections={sections} footer={footer}>
+        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: 'transparent' } }} />
+        <NotificationToaster />
+      </RoleShell>
+    </StaffDateProvider>
   );
 }

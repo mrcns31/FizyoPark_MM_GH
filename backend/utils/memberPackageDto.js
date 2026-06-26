@@ -179,8 +179,42 @@ export async function buildPackageWithSessions(mpRow, memberId, staffMap) {
     [mpRow.id, memberId]
   );
 
+  // Üyenin bizzat iptal ettiği seans ID'leri
+  // entity_id: istenen seans, details.cancelledIds: gerçekte silinen seanslar
+  let memberCancelledIds = new Set();
+  const cancelledIdStrs = sessionsRes.rows
+    .filter((s) => s.deleted_at != null)
+    .map((s) => String(s.id));
+  if (cancelledIdStrs.length > 0) {
+    // details->'cancelledIds' JSONB array içindeki tüm ID'leri TEXT olarak çek
+    const alRes = await db.query(
+      `SELECT entity_id, cid
+       FROM activity_logs al,
+            jsonb_array_elements_text(
+              CASE jsonb_typeof(al.details->'cancelledIds')
+                WHEN 'array' THEN al.details->'cancelledIds'
+                ELSE '[]'::jsonb
+              END
+            ) AS cid
+       WHERE al.action = 'session.cancel_by_member'
+         AND (
+           al.entity_id = ANY($1::text[])
+           OR cid = ANY($1::text[])
+         )`,
+      [cancelledIdStrs]
+    );
+    for (const row of alRes.rows) {
+      if (row.entity_id) memberCancelledIds.add(Number(row.entity_id));
+      if (row.cid) memberCancelledIds.add(Number(row.cid));
+    }
+  }
+
   const packageType = mpRow.package_type || 'fixed';
-  const sessions = sessionsRes.rows.map((s) => sessionToDto(s, staffMap, packageType, mpRow.status));
+  const sessions = sessionsRes.rows.map((s) => {
+    const dto = sessionToDto(s, staffMap, packageType, mpRow.status);
+    dto.cancelledByMember = dto.isCancelled ? memberCancelledIds.has(s.id) : false;
+    return dto;
+  });
   const counts = computePackageSessionCounts(sessionsRes.rows, mpRow.lesson_count);
 
   return {

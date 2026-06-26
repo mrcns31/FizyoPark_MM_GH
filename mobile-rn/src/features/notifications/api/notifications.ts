@@ -44,7 +44,12 @@ function fromApi(row: any): StaffNotification {
 
   let title = '';
   let body = '';
-  if (type === 'cancel') {
+
+  if (type === 'shift_reminder') {
+    // Backend'den direkt title/body gelir
+    title = row.title || 'Onay bekleyen seanslar';
+    body  = row.body  || 'Bu gün için onaylanmamış seans var.';
+  } else if (type === 'cancel') {
     title = `İptal: ${memberName}`;
     body = staffName
       ? `${memberName}, ${staffName} ile seansını iptal etti`

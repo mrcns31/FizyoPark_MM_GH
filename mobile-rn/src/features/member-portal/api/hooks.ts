@@ -17,6 +17,8 @@ export function useMemberDashboard() {
   return useQuery({
     queryKey: memberPortalKeys.dashboard,
     queryFn: getMemberDashboard,
+    staleTime: 0,          // her zaman eski kabul et — focus'ta anında yenile
+    refetchInterval: 10_000, // 10 sn'de bir arka planda kontrol
   });
 }
 

@@ -1,18 +1,17 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useCallback, useState } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Badge, Button, Card, Muted } from '../../../components/ui';
 import { ScreenHeader } from '../../../components/screen-header';
-import { formatDayLabel, formatSessionRange, toDateStr } from '../../../lib/datetime';
+import { formatTime, toDateStr } from '../../../lib/datetime';
 import { useResponsive } from '../../../lib/responsive';
 import { colors } from '../../../theme/colors';
 import { useAuth } from '../../auth';
 import { useConfirmAttendance, useSessions } from '../../sessions/api/hooks';
+import { StaffDateBar, useStaffDate } from '../context/staff-date-context';
 import type { PlannerSession } from '../../sessions/api/sessions';
-
-const DAY = 24 * 3600 * 1000;
 
 type AttState = 'qr' | 'present' | 'no_show' | 'future' | 'pending';
 
@@ -28,16 +27,21 @@ function attState(s: PlannerSession, now: number): AttState {
 /** Personel planner — seçili günün seansları, slota göre gruplu, üye başına yoklama. */
 export function StaffPlannerScreen() {
   const { user } = useAuth();
-  const [dayTs, setDayTs] = useState(() => Date.now());
+  const { dayTs } = useStaffDate();
   const dateStr = toDateStr(dayTs);
   const staffId = user?.staffId ?? undefined;
 
-  const { data, isLoading, refetch, isRefetching } = useSessions({
+  const { data, isLoading, refetch } = useSessions({
     startDate: dateStr,
     endDate: dateStr,
     staffId,
   });
   const confirm = useConfirmAttendance();
+  const [manualRefreshing, setManualRefreshing] = useState(false);
+  const onManualRefresh = useCallback(async () => {
+    setManualRefreshing(true);
+    try { await refetch(); } finally { setManualRefreshing(false); }
+  }, [refetch]);
   const { contentMaxWidth, gutter } = useResponsive();
 
   function mark(s: PlannerSession, action: 'present' | 'no_show') {
@@ -59,28 +63,12 @@ export function StaffPlannerScreen() {
       .map(([ts, list]) => ({ ts, list, end: list[0].endTs, room: list[0].roomName }));
   }, [data]);
 
-  const isToday = dateStr === toDateStr(Date.now());
   const wide = { paddingHorizontal: gutter, maxWidth: contentMaxWidth, alignSelf: 'center' as const, width: '100%' as const };
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <ScreenHeader title="Takvim" />
-      <View style={[styles.header, wide]}>
-        <Pressable onPress={() => setDayTs((t) => t - DAY)} hitSlop={10} style={styles.navBtn}>
-          <Ionicons name="chevron-back" size={22} color={colors.white} />
-        </Pressable>
-        <View style={styles.headCenter}>
-          <Text style={styles.dayLabel}>{formatDayLabel(dayTs)}</Text>
-          {!isToday ? (
-            <Pressable onPress={() => setDayTs(Date.now())} style={styles.todayBtn}>
-              <Text style={styles.todayText}>Bugün</Text>
-            </Pressable>
-          ) : null}
-        </View>
-        <Pressable onPress={() => setDayTs((t) => t + DAY)} hitSlop={10} style={styles.navBtn}>
-          <Ionicons name="chevron-forward" size={22} color={colors.white} />
-        </Pressable>
-      </View>
+      <StaffDateBar wide={wide} />
 
       {isLoading ? (
         <ActivityIndicator color={colors.accent} style={{ marginTop: 40 }} />
@@ -88,8 +76,8 @@ export function StaffPlannerScreen() {
         <FlatList
           data={slots}
           keyExtractor={(s) => String(s.ts)}
-          refreshing={isRefetching}
-          onRefresh={refetch}
+          refreshing={manualRefreshing}
+          onRefresh={onManualRefresh}
           contentContainerStyle={[styles.list, wide]}
           ListEmptyComponent={
             <Card>
@@ -99,8 +87,7 @@ export function StaffPlannerScreen() {
           renderItem={({ item }) => (
             <Card>
               <View style={styles.rowBetween}>
-                <Text style={styles.time}>{formatSessionRange(item.ts, item.end)}</Text>
-                {item.room ? <Muted>{item.room}</Muted> : null}
+                <Text style={styles.time}>{formatTime(item.ts)}</Text>
               </View>
               <View style={styles.members}>
                 {item.list.map((s) => (
@@ -172,6 +159,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  navBtnOff: { opacity: 0.3 },
   headCenter: { alignItems: 'center', flex: 1, gap: 4 },
   dayLabel: { fontSize: 16, fontWeight: '750' as '700', color: colors.text },
   todayBtn: {

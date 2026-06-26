@@ -231,36 +231,64 @@ router.get('/notifications', [
       walkinFilter  = ' AND 1=0';
     }
 
+    // Personel için staff_notifications (shift reminder) UNION'ı
+    let shiftReminderSql = '';
+    let shiftParams = [...params];
+    if (req.user.role === 'staff' || req.user.role === 'admin' || req.user.role === 'manager') {
+      // Personel: kendi shift reminder'ları; admin/manager: tüm shift reminder'lar
+      const userIdParam = params.length + 1;
+      shiftParams = [...params, req.user.userId];
+      shiftReminderSql = `
+      UNION ALL
+
+      SELECT sn.id, 'shift_reminder' AS type,
+             EXTRACT(EPOCH FROM sn.created_at AT TIME ZONE 'Europe/Istanbul') * 1000 AS at_ts,
+             NULL::int AS staff_id, NULL::bigint AS start_ts,
+             NULL AS member_name,
+             NULL AS staff_name,
+             NULL AS source,
+             sn.title AS notif_title,
+             sn.body AS notif_body,
+             sn.read_at
+      FROM staff_notifications sn
+      WHERE sn.user_id = $${userIdParam}
+        AND sn.created_at AT TIME ZONE 'Europe/Istanbul' > to_timestamp($1 / 1000.0)
+        AND sn.created_at AT TIME ZONE 'Europe/Istanbul' <= to_timestamp($2 / 1000.0)
+      `;
+    }
+
     const baseSql = `
       SELECT al.id, 'cancel' AS type,
-             EXTRACT(EPOCH FROM al.created_at) * 1000 AS at_ts,
+             EXTRACT(EPOCH FROM al.created_at AT TIME ZONE 'Europe/Istanbul') * 1000 AS at_ts,
              s.staff_id, s.start_ts,
              COALESCE(NULLIF(TRIM(m.first_name || ' ' || m.last_name), ''), NULLIF(TRIM(m.name), '')) AS member_name,
              TRIM(st.first_name || ' ' || st.last_name) AS staff_name,
-             NULL AS source
+             NULL AS source,
+             NULL AS notif_title, NULL AS notif_body, NULL::timestamptz AS read_at
       FROM activity_logs al
       JOIN sessions s ON s.id::text = al.entity_id
       LEFT JOIN members m ON m.id = s.member_id
       LEFT JOIN staff st ON st.id = s.staff_id
       WHERE al.action = 'session.cancel_by_member'
-        AND al.created_at > to_timestamp($1 / 1000.0)
-        AND al.created_at <= to_timestamp($2 / 1000.0)${cancelFilter}
+        AND al.created_at AT TIME ZONE 'Europe/Istanbul' > to_timestamp($1 / 1000.0)
+        AND al.created_at AT TIME ZONE 'Europe/Istanbul' <= to_timestamp($2 / 1000.0)${cancelFilter}
 
       UNION ALL
 
       SELECT al.id, 'checkin' AS type,
-             EXTRACT(EPOCH FROM al.created_at) * 1000 AS at_ts,
+             EXTRACT(EPOCH FROM al.created_at AT TIME ZONE 'Europe/Istanbul') * 1000 AS at_ts,
              s.staff_id, s.start_ts,
              COALESCE(NULLIF(TRIM(m.first_name || ' ' || m.last_name), ''), NULLIF(TRIM(m.name), '')) AS member_name,
              TRIM(st.first_name || ' ' || st.last_name) AS staff_name,
-             al.details->>'checkInMethod' AS source
+             al.details->>'checkInMethod' AS source,
+             NULL AS notif_title, NULL AS notif_body, NULL::timestamptz AS read_at
       FROM activity_logs al
       JOIN sessions s ON s.id::text = al.entity_id
       LEFT JOIN members m ON m.id = s.member_id
       LEFT JOIN staff st ON st.id = s.staff_id
       WHERE al.action = 'session.check_in_qr'
-        AND al.created_at > to_timestamp($1 / 1000.0)
-        AND al.created_at <= to_timestamp($2 / 1000.0)${checkinFilter}
+        AND al.created_at AT TIME ZONE 'Europe/Istanbul' > to_timestamp($1 / 1000.0)
+        AND al.created_at AT TIME ZONE 'Europe/Istanbul' <= to_timestamp($2 / 1000.0)${checkinFilter}
 
       UNION ALL
 
@@ -269,27 +297,28 @@ router.get('/notifications', [
              NULL::int AS staff_id, NULL::bigint AS start_ts,
              COALESCE(NULLIF(TRIM(m.first_name || ' ' || m.last_name), ''), NULLIF(TRIM(m.name), '')) AS member_name,
              NULL AS staff_name,
-             fal.source
+             fal.source,
+             NULL AS notif_title, NULL AS notif_body, NULL::timestamptz AS read_at
       FROM facility_access_logs fal
       LEFT JOIN members m ON m.id = fal.member_id
       WHERE fal.accessed_at > to_timestamp($1 / 1000.0)
         AND fal.accessed_at <= to_timestamp($2 / 1000.0)
-        AND fal.member_id IS NOT NULL${walkinFilter}
+        AND fal.member_id IS NOT NULL${walkinFilter}${shiftReminderSql}
     `;
 
     // Toplam sayı
     let total = 0;
     try {
-      const countResult = await db.query(`SELECT COUNT(*) AS cnt FROM (${baseSql}) combined`, params);
+      const countResult = await db.query(`SELECT COUNT(*) AS cnt FROM (${baseSql}) combined`, shiftParams);
       total = parseInt(countResult.rows[0]?.cnt ?? 0, 10);
     } catch { total = 0; }
 
     // Sayfalı veri
-    const offsetIdx = params.length + 1;
-    const limitIdx = params.length + 2;
+    const offsetIdx = shiftParams.length + 1;
+    const limitIdx = shiftParams.length + 2;
     const result = await db.query(
       `SELECT * FROM (${baseSql}) combined ORDER BY at_ts DESC LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
-      [...params, offset, perPage]
+      [...shiftParams, offset, perPage]
     );
 
     const items = result.rows.map((r) => ({
@@ -301,6 +330,10 @@ router.get('/notifications', [
       memberName: r.member_name,
       startTs: r.start_ts ? Number(r.start_ts) : null,
       source: r.source || null,
+      // shift_reminder özel alanları
+      title: r.notif_title || null,
+      body: r.notif_body || null,
+      readAt: r.read_at || null,
     }));
 
     res.json({ items, total, page, perPage, totalPages: Math.ceil(total / perPage) });
