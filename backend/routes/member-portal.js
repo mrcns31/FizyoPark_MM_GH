@@ -45,11 +45,27 @@ async function expoPush(messages) {
 
 async function sendCancellationPush(memberName, startTs, staffId) {
   try {
-    const date = new Date(Number(startTs));
-    const dateStr = date.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', timeZone: 'Europe/Istanbul' });
-    const timeStr = date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' });
-    const title = 'Randevu İptali';
-    const bodyText = `${memberName} - ${dateStr} ${timeStr} randevusunu iptal etmiştir.`;
+    const TZ_OFFSET = 3 * 60 * 60 * 1000;
+    const dateIst = new Date(Number(startTs) + TZ_OFFSET);
+    const dd = String(dateIst.getUTCDate()).padStart(2, '0');
+    const mm = String(dateIst.getUTCMonth() + 1).padStart(2, '0');
+    const yyyy = dateIst.getUTCFullYear();
+    const hh = String(dateIst.getUTCHours()).padStart(2, '0');
+    const min = String(dateIst.getUTCMinutes()).padStart(2, '0');
+    const DAYS_TR = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
+    const dayName = DAYS_TR[dateIst.getUTCDay()];
+    const dateStr = `${dd}.${mm}.${yyyy}`;
+    const timeStr = `${hh}:${min}`;
+
+    let staffName = '';
+    if (staffId) {
+      const { rows } = await db.query('SELECT first_name, last_name FROM staff WHERE id = $1', [staffId]);
+      if (rows[0]) staffName = `${rows[0].first_name} ${rows[0].last_name}`.trim();
+    }
+    const staffPart = staffName ? ` ${staffName} ile olan` : '';
+
+    const title = 'Üye Randevu İptali';
+    const bodyText = `${memberName} - ${dateStr} ${dayName} ${timeStr}${staffPart} randevusunu iptal etmiştir.`;
 
     // Admin/Manager: push token olmayan kullanıcılar da bildirim listesinde görsün (LEFT JOIN)
     const { rows: adminRows } = await db.query(
@@ -84,7 +100,7 @@ async function sendCancellationPush(memberName, startTs, staffId) {
       seenUsers.add(r.user_id);
       db.query(
         `INSERT INTO staff_notifications (user_id, type, title, body, payload) VALUES ($1, $2, $3, $4, $5)`,
-        [r.user_id, 'cancel', title, bodyText, payload]
+        [r.user_id, 'member_cancel', title, bodyText, payload]
       ).catch(() => {});
     }
 

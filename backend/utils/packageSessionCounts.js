@@ -75,16 +75,19 @@ export async function autoCompletePackageIfExhausted(db, memberPackageId = null)
   }
   sql += `
       AND (
-        SELECT COUNT(*)
-        FROM sessions s
-        WHERE s.member_package_id = mp.id
-          AND s.deleted_at IS NULL
-          AND (
-            s.checked_in_at IS NOT NULL
-            OR s.attendance_outcome = 'no_show'
-            OR s.end_ts < EXTRACT(EPOCH FROM NOW()) * 1000
-          )
-      ) >= p.lesson_count
+        mp.end_date < CURRENT_DATE
+        OR (
+          SELECT COUNT(*)
+          FROM sessions s
+          WHERE s.member_package_id = mp.id
+            AND s.deleted_at IS NULL
+            AND (
+              s.checked_in_at IS NOT NULL
+              OR s.attendance_outcome = 'no_show'
+              OR s.end_ts < EXTRACT(EPOCH FROM NOW()) * 1000
+            )
+        ) >= p.lesson_count
+      )
     RETURNING mp.id
   `;
   const result = await db.query(sql, params);

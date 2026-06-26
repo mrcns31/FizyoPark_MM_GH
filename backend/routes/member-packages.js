@@ -299,7 +299,21 @@ export async function generateSessionsForMemberPackage(db, mpId, memberId, start
   if (limit <= 0) return { conflicts, sessionsCreated };
 
   const inserts = buildPackageSessionInsertPlan(startDate, endDate, slots, limit, { memberId, mpId });
-  const validationConflicts = await validatePackageSessionInserts(db, inserts, {
+
+  // Pakete ait silinmemiş mevcut seanslar varsa aynı timestamp için tekrar seans oluşturma
+  let filteredInserts = inserts;
+  if (mpId) {
+    const existingTsRes = await db.query(
+      'SELECT start_ts FROM sessions WHERE member_package_id = $1 AND deleted_at IS NULL',
+      [mpId]
+    );
+    if (existingTsRes.rows.length > 0) {
+      const existingTsSet = new Set(existingTsRes.rows.map((r) => Number(r.start_ts)));
+      filteredInserts = inserts.filter((row) => !existingTsSet.has(Number(row.start_ts)));
+    }
+  }
+
+  const validationConflicts = await validatePackageSessionInserts(db, filteredInserts, {
     excludeMemberPackageId: options.excludeMemberPackageId,
   });
   if (validationConflicts.length > 0) {
@@ -307,7 +321,7 @@ export async function generateSessionsForMemberPackage(db, mpId, memberId, start
   }
 
   const insertedSessionIds = [];
-  for (const row of inserts) {
+  for (const row of filteredInserts) {
     const pushConflict = (message) => {
       conflicts.push({
         date: row.dateStr,
@@ -852,8 +866,14 @@ router.put('/:id', [
             : todayTurkey;
           // effectiveDateStart: Turkey gece yarısını UTC'ye çevir (TZ bağımsız)
           const effectiveDateStart = new Date(effectiveDateStr + 'T00:00:00+03:00').getTime();
+          // keptCount: effective_date önceki seanslar + effective_date'den itibaren katılım yapılmış seanslar (bunlar silinmez)
           const keptRes = await db.query(
-            'SELECT COUNT(*)::int AS cnt FROM sessions WHERE member_package_id = $1 AND start_ts < $2 AND (deleted_at IS NULL)',
+            `SELECT COUNT(*)::int AS cnt FROM sessions
+             WHERE member_package_id = $1 AND deleted_at IS NULL
+               AND (
+                 start_ts < $2
+                 OR (start_ts >= $2 AND checked_in_at IS NOT NULL AND check_in_method IN ('qr', 'phone', 'card'))
+               )`,
             [id, effectiveDateStart]
           );
           const keptCount = keptRes.rows[0]?.cnt ?? 0;
@@ -993,8 +1013,14 @@ router.put('/:id', [
             : todayTurkey;
           const effectiveDateStart = new Date(effectiveDateStr + 'T00:00:00+03:00').getTime();
 
+          // keptCount: effective_date öncesi + o günden itibaren katılım yapılmış seanslar (silinmeyecek)
           const keptRes = await db.query(
-            'SELECT COUNT(*)::int AS cnt FROM sessions WHERE member_package_id = $1 AND start_ts < $2 AND (deleted_at IS NULL)',
+            `SELECT COUNT(*)::int AS cnt FROM sessions
+             WHERE member_package_id = $1 AND deleted_at IS NULL
+               AND (
+                 start_ts < $2
+                 OR (start_ts >= $2 AND checked_in_at IS NOT NULL AND check_in_method IN ('qr', 'phone', 'card'))
+               )`,
             [id, effectiveDateStart]
           );
           const keptCount = keptRes.rows[0]?.cnt ?? 0;
@@ -1013,13 +1039,17 @@ router.put('/:id', [
             });
           }
           const deleteFromTs = keptCount > 0 ? effectiveDateStart : new Date(generationStartStr + 'T00:00:00+03:00').getTime();
+          // Katılım yapılmış seansları (kart/QR/telefon) silme — giriş kaydı korunmalı
           const futureRes = await db.query(
-            'SELECT id FROM sessions WHERE member_package_id = $1 AND start_ts >= $2 AND (deleted_at IS NULL)',
+            `SELECT id FROM sessions WHERE member_package_id = $1 AND start_ts >= $2 AND deleted_at IS NULL
+             AND (checked_in_at IS NULL OR check_in_method NOT IN ('qr', 'phone', 'card'))`,
             [id, deleteFromTs]
           );
           futureSessionIdsToRestore = futureRes.rows.map((r) => r.id);
           await db.query(
-            'UPDATE sessions SET deleted_at = CURRENT_TIMESTAMP WHERE member_package_id = $1 AND start_ts >= $2 AND (deleted_at IS NULL)',
+            `UPDATE sessions SET deleted_at = CURRENT_TIMESTAMP
+             WHERE member_package_id = $1 AND start_ts >= $2 AND deleted_at IS NULL
+               AND (checked_in_at IS NULL OR check_in_method NOT IN ('qr', 'phone', 'card'))`,
             [id, deleteFromTs]
           );
           const gen = await generateSessionsForMemberPackage(
