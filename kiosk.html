@@ -110,7 +110,7 @@
         letter-spacing:0.04em;
       }
       .kiosk__name{
-        font-size:40px;
+        font-size:28px;
         font-weight:800;
         margin:0;
         letter-spacing:0.04em;
@@ -126,6 +126,15 @@
         line-height:1.6;
       }
       .kiosk__subtitle[hidden]{ display:none; }
+      .kiosk__package-stats{
+        font-size:26px;
+        font-weight:700;
+        color:var(--fg);
+        margin:8px 0 0;
+        text-align:center;
+        line-height:1.4;
+      }
+      .kiosk__package-stats[hidden]{ display:none; }
       .kiosk__clock{
         position:absolute;
         bottom:24px;
@@ -302,6 +311,7 @@
         <h1 class="kiosk__title" id="kioskTitle">HOŞGELDİNİZ</h1>
         <p class="kiosk__name" id="kioskName" hidden></p>
         <p class="kiosk__subtitle" id="kioskSubtitle" hidden></p>
+        <p class="kiosk__package-stats" id="kioskPackageStats" hidden></p>
         <button class="kiosk__phone-btn" id="kioskPhoneBtn">TELEFON İLE GİRİŞ</button>
       </main>
       <div class="kiosk__clock" id="kioskClock"></div>

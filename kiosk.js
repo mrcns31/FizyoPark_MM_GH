@@ -8,6 +8,7 @@
   var titleEl = document.getElementById('kioskTitle');
   var nameEl = document.getElementById('kioskName');
   var subtitleEl = document.getElementById('kioskSubtitle');
+  var packageStatsEl = document.getElementById('kioskPackageStats');
   var clockEl = document.getElementById('kioskClock');
   var inputEl = document.getElementById('kioskInput');
   var phoneOverlay = document.getElementById('phoneOverlay');
@@ -118,6 +119,7 @@
     nameEl.textContent = '';
     subtitleEl.setAttribute('hidden', '');
     subtitleEl.textContent = '';
+    if (packageStatsEl) { packageStatsEl.setAttribute('hidden', ''); packageStatsEl.textContent = ''; }
     kioskPhoneBtn.style.display = '';
     focusInput();
   }
@@ -130,6 +132,7 @@
     titleEl.textContent = 'Kontrol ediliyor…';
     nameEl.setAttribute('hidden', '');
     subtitleEl.setAttribute('hidden', '');
+    if (packageStatsEl) packageStatsEl.setAttribute('hidden', '');
     kioskPhoneBtn.style.display = 'none';
   }
 
@@ -160,14 +163,19 @@
     } else {
       lines.push('Bugün için planlı bir seansınız yok');
     }
-    if ((source === 'phone' || source === 'card') && packageStats && packageStats.totalSessions) {
-      lines.push(packageStats.totalSessions + ' Seans Paketinizden Kalan : ' + packageStats.remainingSessions);
-    }
     if (lines.length > 0) {
       subtitleEl.textContent = lines.join('\n');
       subtitleEl.removeAttribute('hidden');
     } else {
       subtitleEl.setAttribute('hidden', '');
+    }
+    if (packageStatsEl) {
+      if ((source === 'phone' || source === 'card') && packageStats && packageStats.totalSessions) {
+        packageStatsEl.textContent = packageStats.totalSessions + ' Seans Paketinizden Kalan : ' + packageStats.remainingSessions;
+        packageStatsEl.removeAttribute('hidden');
+      } else {
+        packageStatsEl.setAttribute('hidden', '');
+      }
     }
 
     kioskPhoneBtn.style.display = 'none';
@@ -182,6 +190,7 @@
     nameEl.setAttribute('hidden', '');
     subtitleEl.textContent = message || 'Lütfen tekrar deneyin';
     subtitleEl.removeAttribute('hidden');
+    if (packageStatsEl) packageStatsEl.setAttribute('hidden', '');
     kioskPhoneBtn.style.display = 'none';
     scheduleReset();
   }
