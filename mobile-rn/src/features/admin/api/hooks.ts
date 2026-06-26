@@ -5,6 +5,8 @@ import {
   dismissPackageRequest,
   getDeletionRequests,
   getPackageRequests,
+  getPasswordResetRequests,
+  handlePasswordResetRequest,
   openDoor,
   rejectDeletion,
 } from './requests';
@@ -12,6 +14,7 @@ import {
 export const adminKeys = {
   packageRequests: ['admin', 'package-requests'] as const,
   deletionRequests: ['admin', 'deletion-requests'] as const,
+  passwordResetRequests: ['admin', 'password-reset-requests'] as const,
 };
 
 export function usePackageRequests() {
@@ -56,4 +59,20 @@ export function useRejectDeletion() {
 
 export function useOpenDoor() {
   return useMutation({ mutationFn: openDoor });
+}
+
+export function usePasswordResetRequests() {
+  return useQuery({
+    queryKey: adminKeys.passwordResetRequests,
+    queryFn: getPasswordResetRequests,
+    refetchInterval: 15_000,
+  });
+}
+
+export function useHandlePasswordResetRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => handlePasswordResetRequest(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: adminKeys.passwordResetRequests }),
+  });
 }

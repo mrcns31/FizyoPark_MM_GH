@@ -10,7 +10,9 @@ import {
   useApproveDeletion,
   useDeletionRequests,
   useDismissPackageRequest,
+  useHandlePasswordResetRequest,
   usePackageRequests,
+  usePasswordResetRequests,
   useRejectDeletion,
 } from '../api/hooks';
 
@@ -18,9 +20,11 @@ import {
 export function AdminRequestsScreen() {
   const pkgReqs = usePackageRequests();
   const delReqs = useDeletionRequests();
+  const pwReqs = usePasswordResetRequests();
   const dismiss = useDismissPackageRequest();
   const approve = useApproveDeletion();
   const reject = useRejectDeletion();
+  const handlePwReset = useHandlePasswordResetRequest();
   const router = useRouter();
   const { contentMaxWidth, gutter } = useResponsive();
 
@@ -70,6 +74,39 @@ export function AdminRequestsScreen() {
                   onPress={() =>
                     confirm('Talebi kaldır', `${r.memberName} için «${r.packageName}» talebi kaldırılsın mı?`, () =>
                       dismiss.mutate(r.id)
+                    )
+                  }
+                />
+              </View>
+            </View>
+          </Card>
+        ))}
+
+        <View style={{ height: 8 }} />
+        <SectionTitle>Şifre sıfırlama talepleri ({pwReqs.data?.length ?? 0})</SectionTitle>
+        {(pwReqs.data ?? []).length === 0 ? <Muted>Bekleyen şifre sıfırlama talebi yok.</Muted> : null}
+        {(pwReqs.data ?? []).map((r) => (
+          <Card key={r.id}>
+            <Text style={styles.name}>{r.email}</Text>
+            <Muted>{new Date(r.createdAt).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</Muted>
+            <View style={styles.actions}>
+              <View style={{ flex: 1 }}>
+                <Button
+                  title="Şifreyi Sıfırla"
+                  variant="primary"
+                  loading={handlePwReset.isPending}
+                  onPress={() =>
+                    confirm(
+                      'Şifreyi Sıfırla',
+                      `${r.email} kullanıcısının şifresi sıfırlansın mı? Geçici şifre size gösterilecektir.`,
+                      () =>
+                        handlePwReset.mutate(r.id, {
+                          onSuccess: (result) =>
+                            Alert.alert(
+                              'Şifre Sıfırlandı',
+                              `Giriş: ${result.loginEmail}\nGeçici şifre: ${result.temporaryPassword}\n\nKullanıcıyla paylaşın. İlk girişte şifre değiştirilecektir.`
+                            ),
+                        })
                     )
                   }
                 />

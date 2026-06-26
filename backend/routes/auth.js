@@ -527,6 +527,133 @@ router.post('/verify-password', verifyToken, [
   }
 });
 
+// Şifremi unuttum — herkese açık, e-posta ile talep oluştur
+router.post('/forgot-password', [
+  body('email').trim().isEmail().withMessage('Geçerli bir e-posta girin'),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ error: errors.array()[0]?.msg || 'Geçersiz e-posta' });
+    }
+
+    const email = String(req.body.email).trim().toLowerCase();
+
+    // Kullanıcı var mı kontrol et (ama bilgi sızdırmamak için hep 200 döndür)
+    const userRes = await db.query(
+      'SELECT id FROM users WHERE LOWER(email) = $1 AND is_active = true',
+      [email]
+    );
+
+    if (userRes.rows.length > 0) {
+      // Aynı e-posta için zaten bekleyen talep varsa yeni oluşturma
+      const existing = await db.query(
+        "SELECT id FROM password_reset_requests WHERE email = $1 AND status = 'pending'",
+        [email]
+      );
+      if (existing.rows.length === 0) {
+        await db.query(
+          'INSERT INTO password_reset_requests (email) VALUES ($1)',
+          [email]
+        );
+      }
+    }
+
+    // Kullanıcı var ya da yok — her iki durumda da aynı yanıt (güvenlik)
+    res.json({ message: 'Talebiniz alındı. Yönetici en kısa sürede sizinle iletişime geçecektir.' });
+  } catch (error) {
+    console.error('Forgot password error:', error);
+    res.status(500).json({ error: 'Talep oluşturulurken hata oluştu' });
+  }
+});
+
+// Şifre sıfırlama taleplerini listele — sadece admin/manager
+router.get('/password-reset-requests', verifyToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin' && req.user.role !== 'manager') {
+      return res.status(403).json({ error: 'Yetki yok' });
+    }
+    const result = await db.query(
+      `SELECT r.id, r.email, r.status, r.created_at, r.handled_at,
+              u.display_name AS handled_by_name
+       FROM password_reset_requests r
+       LEFT JOIN users u ON u.id = r.handled_by_user_id
+       WHERE r.status = 'pending'
+       ORDER BY r.created_at ASC`
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Password reset requests list error:', error);
+    res.status(500).json({ error: 'Talepler alınırken hata oluştu' });
+  }
+});
+
+// Şifre sıfırlama talebini işle — şifreyi sıfırla ve talebi kapat
+router.post('/password-reset-requests/:id/reset', verifyToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin' && req.user.role !== 'manager') {
+      return res.status(403).json({ error: 'Yetki yok' });
+    }
+
+    const { id } = req.params;
+    const requestRes = await db.query(
+      "SELECT id, email FROM password_reset_requests WHERE id = $1 AND status = 'pending'",
+      [id]
+    );
+    if (requestRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Talep bulunamadı veya zaten işlendi' });
+    }
+    const email = requestRes.rows[0].email;
+
+    const userRes = await db.query(
+      `SELECT u.id, u.phone, s.phone AS staff_phone, m.phone AS member_phone
+       FROM users u
+       LEFT JOIN staff s ON s.user_id = u.id
+       LEFT JOIN members m ON m.user_id = u.id AND m.deleted_at IS NULL
+       WHERE LOWER(u.email) = LOWER($1) AND u.is_active = true`,
+      [email]
+    );
+    if (userRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Bu e-postaya ait aktif kullanıcı bulunamadı' });
+    }
+    const user = userRes.rows[0];
+
+    // Geçici şifre: telefon son 4 hane, yoksa rastgele 4 rakam
+    const phone = user.phone || user.staff_phone || user.member_phone || '';
+    const digits = phone.replace(/\D/g, '');
+    const tempPassword = digits.length >= 4 ? digits.slice(-4) : String(Math.floor(1000 + Math.random() * 9000));
+
+    const passwordHash = await bcrypt.hash(tempPassword, 10);
+    await db.query(
+      'UPDATE users SET password_hash = $1, must_change_password = true, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [passwordHash, user.id]
+    );
+
+    await db.query(
+      `UPDATE password_reset_requests
+       SET status = 'handled', handled_at = CURRENT_TIMESTAMP, handled_by_user_id = $1
+       WHERE id = $2`,
+      [req.user.userId, id]
+    );
+
+    await activityLog(req, {
+      action: 'auth.reset_password_request_handled',
+      entityType: 'user',
+      entityId: user.id,
+      details: { email },
+    }).catch(() => {});
+
+    res.json({
+      message: 'Şifre sıfırlandı',
+      loginEmail: email,
+      temporaryPassword: tempPassword,
+    });
+  } catch (error) {
+    console.error('Password reset request handle error:', error);
+    res.status(500).json({ error: 'Şifre sıfırlanırken hata oluştu' });
+  }
+});
+
 router.post('/push-token', verifyToken, async (req, res) => {
   const { token } = req.body;
   if (!token || typeof token !== 'string') {

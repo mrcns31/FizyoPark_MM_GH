@@ -62,6 +62,10 @@ export async function verifyAdminPassword(password: string): Promise<void> {
   await apiClient.post('/auth/verify-password', { password });
 }
 
+export async function requestPasswordReset(email: string): Promise<void> {
+  await apiClient.post('/auth/forgot-password', { email });
+}
+
 export async function logout(): Promise<void> {
   try {
     if (await getToken()) {

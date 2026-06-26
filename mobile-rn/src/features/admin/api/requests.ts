@@ -74,3 +74,34 @@ export async function rejectDeletion(id: number): Promise<void> {
 export async function openDoor(): Promise<void> {
   await apiClient.post('/door/open', {});
 }
+
+export interface PasswordResetRequest {
+  id: number;
+  email: string;
+  status: string;
+  createdAt: string;
+}
+
+function passwordResetRequestFromApi(row: any): PasswordResetRequest {
+  return {
+    id: row.id,
+    email: row.email,
+    status: row.status,
+    createdAt: row.created_at || row.createdAt || '',
+  };
+}
+
+export async function getPasswordResetRequests(): Promise<PasswordResetRequest[]> {
+  const { data } = await apiClient.get('/auth/password-reset-requests');
+  return (Array.isArray(data) ? data : []).map(passwordResetRequestFromApi);
+}
+
+export interface ResetPasswordResult {
+  loginEmail: string;
+  temporaryPassword: string;
+}
+
+export async function handlePasswordResetRequest(id: number): Promise<ResetPasswordResult> {
+  const { data } = await apiClient.post(`/auth/password-reset-requests/${id}/reset`, {});
+  return { loginEmail: data.loginEmail, temporaryPassword: data.temporaryPassword };
+}

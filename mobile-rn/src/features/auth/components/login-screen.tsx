@@ -11,6 +11,8 @@ import {
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
+import { useRouter } from 'expo-router';
+
 import { FadeIn } from '../../../components/fade-in';
 import { ScreenContainer } from '../../../components/screen-container';
 import { ApiError } from '../../../lib/api-client';
@@ -31,6 +33,7 @@ const LEGAL_LINKS = [
 
 export function LoginScreen() {
   const { signIn } = useAuth();
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
@@ -90,12 +93,17 @@ export function LoginScreen() {
           </View>
         </View>
 
-        <Pressable style={styles.rememberRow} onPress={() => setRemember((v) => !v)} hitSlop={6}>
-          <View style={[styles.checkbox, remember && styles.checkboxOn]}>
-            {remember ? <Ionicons name="checkmark" size={13} color={colors.white} /> : null}
-          </View>
-          <Text style={styles.rememberText}>Beni hatırla</Text>
-        </Pressable>
+        <View style={styles.rememberForgotRow}>
+          <Pressable style={styles.rememberRow} onPress={() => setRemember((v) => !v)} hitSlop={6}>
+            <View style={[styles.checkbox, remember && styles.checkboxOn]}>
+              {remember ? <Ionicons name="checkmark" size={13} color={colors.white} /> : null}
+            </View>
+            <Text style={styles.rememberText}>Beni hatırla</Text>
+          </Pressable>
+          <Pressable onPress={() => router.push('/(auth)/forgot-password')} hitSlop={8}>
+            <Text style={styles.forgotText}>Şifremi unuttum</Text>
+          </Pressable>
+        </View>
 
         {error ? (
           <View style={styles.errorBox}>
@@ -168,8 +176,9 @@ const styles = StyleSheet.create({
   pwWrap: { position: 'relative', justifyContent: 'center' },
   pwInput: { paddingRight: 40 },
   pwToggle: { position: 'absolute', right: 8, padding: 4 },
+  rememberForgotRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
   // .login-remember-row + label
-  rememberRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 },
+  rememberRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   checkbox: {
     width: 18,
     height: 18,
@@ -182,6 +191,7 @@ const styles = StyleSheet.create({
   },
   checkboxOn: { backgroundColor: colors.accent, borderColor: colors.accent },
   rememberText: { color: colors.muted, fontSize: 13 },
+  forgotText: { color: '#8ec5ff', fontSize: 13, textDecorationLine: 'underline' },
   // .error
   errorBox: {
     marginTop: 12,
