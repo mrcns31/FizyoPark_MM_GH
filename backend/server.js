@@ -26,6 +26,7 @@ import packageRequestsRoutes from './routes/package-requests.js';
 import closurePeriodsRoutes from './routes/closure-periods.js';
 import doorRoutes from './routes/door.js';
 import adminBroadcastRoutes from './routes/admin-broadcast.js';
+import { run24hReminders, runMorningReminders } from './utils/sessionReminders.js';
 
 dotenv.config();
 
@@ -115,3 +116,22 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server çalışıyor: http://localhost:${PORT}`);
   console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
 });
+
+// Randevu hatırlatma zamanlayıcısı — her saat çalışır
+setInterval(async () => {
+  const now = Date.now();
+  try {
+    await run24hReminders(now);
+  } catch (err) {
+    console.error('[sessionReminders] 24h hata:', err.message);
+  }
+  // Istanbul saati 07:xx ise sabah bildirimleri
+  const istanbulHour = new Date(now + 3 * 3600 * 1000).getUTCHours();
+  if (istanbulHour === 7) {
+    try {
+      await runMorningReminders(now);
+    } catch (err) {
+      console.error('[sessionReminders] morning hata:', err.message);
+    }
+  }
+}, 60 * 60 * 1000);
