@@ -231,7 +231,7 @@
               <span class="pw-change__input-icon" aria-hidden="true">
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 7 10 7 10-7"/></svg>
               </span>
-              <input id="forgotPasswordEmail" class="pw-change__input" type="email" autocomplete="email" placeholder="ornek@email.com" required />
+              <input id="forgotPasswordEmail" class="pw-change__input" type="email" autocomplete="off" placeholder="ornek@email.com" required />
             </div>
           </div>
           <p id="forgotPasswordError" class="error hidden" style="margin-bottom:8px"></p>
@@ -588,6 +588,13 @@
                     <span class="sidebar-nav__label">İptal Talepleri</span>
                     <span id="cancellationRequestsNavBadge" class="sidebar-nav__badge hidden" aria-label="Bekleyen iptal talebi"></span>
                   </button>
+                  <button id="openPasswordResetRequestsBtn" class="sidebar-nav__btn btn btn--ghost" type="button" title="Şifre Talepleri">
+                    <span class="sidebar-nav__icon" aria-hidden="true">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/><circle cx="12" cy="16" r="1" fill="currentColor"/></svg>
+                    </span>
+                    <span class="sidebar-nav__label">Şifre Talepleri</span>
+                    <span id="passwordResetRequestsNavBadge" class="sidebar-nav__badge hidden" aria-label="Bekleyen şifre talebi"></span>
+                  </button>
                 </nav>
               </section>
 
@@ -597,6 +604,20 @@
                 <div id="packageRequestsList" class="package-requests-list"></div>
                 <nav class="sidebar-nav">
                   <button id="closePackageRequestsBtn" class="sidebar-nav__btn btn btn--ghost" type="button" title="Taleplere dön">
+                    <span class="sidebar-nav__icon" aria-hidden="true">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
+                    </span>
+                    <span class="sidebar-nav__label">Taleplere Dön</span>
+                  </button>
+                </nav>
+              </section>
+
+              <section class="panel sidebar-panel hidden" id="sidebarPasswordResetRequestsPanel">
+                <div class="panel__title sidebar-section-title">Şifre Talepleri</div>
+                <p id="passwordResetRequestsEmpty" class="hint hidden">Bekleyen şifre talebi yok.</p>
+                <div id="passwordResetRequestsList" class="package-requests-list"></div>
+                <nav class="sidebar-nav">
+                  <button id="closePasswordResetRequestsBtn" class="sidebar-nav__btn btn btn--ghost" type="button" title="Taleplere dön">
                     <span class="sidebar-nav__icon" aria-hidden="true">
                       <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
                     </span>

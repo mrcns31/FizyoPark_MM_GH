@@ -814,6 +814,7 @@ let ui = {
   memberPortal: null, // üye girişi: dashboard verisi
   packageRequests: [], // admin: bekleyen paket talepleri
   deletionRequests: [], // admin: bekleyen üyelik iptal talepleri
+  passwordResetRequests: [], // admin: bekleyen şifre sıfırlama talepleri
   notifications: [], // admin: iptal/giriş bildirimleri
   notificationsTypeFilter: "all", // all | cancel | checkin
   sidebarPackageRequestsOpen: false,
@@ -1489,6 +1490,12 @@ function cacheEls() {
     "forgotPasswordError",
     "forgotPasswordSuccess",
     "forgotPasswordSubmitBtn",
+    "openPasswordResetRequestsBtn",
+    "closePasswordResetRequestsBtn",
+    "sidebarPasswordResetRequestsPanel",
+    "passwordResetRequestsList",
+    "passwordResetRequestsEmpty",
+    "passwordResetRequestsNavBadge",
     "adminProfileName",
     "adminProfileEmail",
     "adminProfilePhone",
@@ -5705,6 +5712,7 @@ async function refreshAdminPackageRequests(markSeen) {
 function updateAdminRequestsNavBadges() {
   updatePackageRequestsNavBadge();
   updateCancellationRequestsNavBadge();
+  updatePasswordResetRequestsNavBadge();
   updateNotificationsNavBadge();
   updateAdminMobileMenuBadge();
 }
@@ -5799,11 +5807,21 @@ function showCancellationRequestsPanel() {
 function closeRequestsSubPanel() {
   if (els.sidebarPackageRequestsPanel) els.sidebarPackageRequestsPanel.classList.add("hidden");
   if (els.sidebarCancellationRequestsPanel) els.sidebarCancellationRequestsPanel.classList.add("hidden");
+  if (els.sidebarPasswordResetRequestsPanel) els.sidebarPasswordResetRequestsPanel.classList.add("hidden");
   if (els.sidebarRequestsPanel && isAdminUser() && !isStaffUser()) {
     els.sidebarRequestsPanel.classList.remove("hidden");
   }
   ui.sidebarPackageRequestsOpen = false;
   ui.sidebarCancellationRequestsOpen = false;
+}
+
+function showPasswordResetRequestsPanel() {
+  if (els.sidebarRequestsPanel) els.sidebarRequestsPanel.classList.add("hidden");
+  if (els.sidebarPackageRequestsPanel) els.sidebarPackageRequestsPanel.classList.add("hidden");
+  if (els.sidebarCancellationRequestsPanel) els.sidebarCancellationRequestsPanel.classList.add("hidden");
+  if (els.sidebarPasswordResetRequestsPanel) els.sidebarPasswordResetRequestsPanel.classList.remove("hidden");
+  refreshPasswordResetRequests();
+  if (SIDEBAR_DRAWER_MQ.matches) setSidebarOpen(true);
 }
 
 function closePackageRequestsPanel() {
@@ -5831,6 +5849,74 @@ function updateCancellationRequestsNavBadge() {
   } else {
     els.cancellationRequestsNavBadge.textContent = "";
     els.cancellationRequestsNavBadge.classList.add("hidden");
+  }
+}
+
+function updatePasswordResetRequestsNavBadge() {
+  if (!els.passwordResetRequestsNavBadge) return;
+  var count = (ui.passwordResetRequests || []).length;
+  if (count > 0) {
+    els.passwordResetRequestsNavBadge.textContent = String(count);
+    els.passwordResetRequestsNavBadge.classList.remove("hidden");
+  } else {
+    els.passwordResetRequestsNavBadge.textContent = "";
+    els.passwordResetRequestsNavBadge.classList.add("hidden");
+  }
+}
+
+async function refreshPasswordResetRequests() {
+  if (!isAdminUser() || !window.API || !window.API.getPasswordResetRequests) return;
+  try {
+    var rows = await window.API.getPasswordResetRequests();
+    ui.passwordResetRequests = Array.isArray(rows) ? rows : [];
+    renderPasswordResetRequestsSidebar();
+    updatePasswordResetRequestsNavBadge();
+  } catch (e) {
+    console.warn("Şifre sıfırlama talepleri yüklenemedi:", e);
+  }
+}
+
+function renderPasswordResetRequestsSidebar() {
+  if (!els.passwordResetRequestsList) return;
+  var rows = ui.passwordResetRequests || [];
+  if (els.passwordResetRequestsEmpty) {
+    els.passwordResetRequestsEmpty.classList.toggle("hidden", rows.length > 0);
+  }
+  if (!rows.length) {
+    els.passwordResetRequestsList.innerHTML = "";
+    return;
+  }
+  els.passwordResetRequestsList.innerHTML = rows.map(function (r) {
+    var emailEsc = escapeHtml(r.email || "");
+    var when = r.created_at ? fmtPackageRequestWhen(r.created_at) : "";
+    return (
+      '<div class="package-request-card">' +
+      '<p class="package-request-card__member">' + emailEsc + "</p>" +
+      (when ? '<p class="package-request-card__meta">Talep: ' + when + "</p>" : "") +
+      '<div class="package-request-card__actions">' +
+      '<button type="button" class="btn btn--primary btn--xs" data-pw-reset-handle="' + r.id + '">Şifreyi Sıfırla</button>' +
+      "</div></div>"
+    );
+  }).join("");
+  els.passwordResetRequestsList.querySelectorAll("[data-pw-reset-handle]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var id = parseInt(btn.getAttribute("data-pw-reset-handle"), 10);
+      handlePasswordResetRequestAction(id, btn);
+    });
+  });
+}
+
+async function handlePasswordResetRequestAction(id, btn) {
+  if (!window.API || !window.API.handlePasswordResetRequest) return;
+  if (!confirm("Bu kullanıcının şifresi sıfırlansın mı? Geçici şifre size gösterilecektir.")) return;
+  if (btn) btn.disabled = true;
+  try {
+    var result = await window.API.handlePasswordResetRequest(id);
+    alert("Şifre sıfırlandı.\n\nGiriş e-postası: " + (result.loginEmail || "") + "\nGeçici şifre: " + (result.temporaryPassword || "") + "\n\nKullanıcıyla paylaşın. İlk girişte yeni şifre belirleyecektir.");
+    await refreshPasswordResetRequests();
+  } catch (e) {
+    alert((e.data && e.data.error) || e.message || "Şifre sıfırlanamadı.");
+    if (btn) btn.disabled = false;
   }
 }
 
@@ -13171,8 +13257,10 @@ function bindEvents() {
   if (els.openFormerMembersBtn) els.openFormerMembersBtn.addEventListener("click", openFormerMembersModal);
   if (els.closePackageRequestsBtn) els.closePackageRequestsBtn.addEventListener("click", closeRequestsSubPanel);
   if (els.closeCancellationRequestsBtn) els.closeCancellationRequestsBtn.addEventListener("click", closeRequestsSubPanel);
+  if (els.closePasswordResetRequestsBtn) els.closePasswordResetRequestsBtn.addEventListener("click", closeRequestsSubPanel);
   if (els.openPackageRequestsBtn) els.openPackageRequestsBtn.addEventListener("click", showPackageRequestsPanel);
   if (els.openCancellationRequestsBtn) els.openCancellationRequestsBtn.addEventListener("click", showCancellationRequestsPanel);
+  if (els.openPasswordResetRequestsBtn) els.openPasswordResetRequestsBtn.addEventListener("click", showPasswordResetRequestsPanel);
   if (els.openNotificationsBtn) els.openNotificationsBtn.addEventListener("click", openNotificationsView);
   if (els.openReportsBtn) els.openReportsBtn.addEventListener("click", openReportsView);
   if (els.reportsPrevYearBtn) els.reportsPrevYearBtn.addEventListener("click", function () { reportsYear--; if (els.reportsYearLabel) els.reportsYearLabel.textContent = reportsYear; loadAndRenderReports(); });
@@ -13244,7 +13332,7 @@ function bindEvents() {
     });
     els.sidebarShell.addEventListener("click", function (e) {
       if (!isSidebarDrawerMode() || !ui.sidebarOpen) return;
-      if (e.target.closest("#openPackageRequestsBtn, #openCancellationRequestsBtn, #closePackageRequestsBtn, #closeCancellationRequestsBtn")) {
+      if (e.target.closest("#openPackageRequestsBtn, #openCancellationRequestsBtn, #openPasswordResetRequestsBtn, #closePackageRequestsBtn, #closeCancellationRequestsBtn, #closePasswordResetRequestsBtn")) {
         return;
       }
       if (e.target.closest(".sidebar-nav__btn, #openAdminHubBtn, #addMemberBtn, #openCalendarBtn, #openListMembersBtn, #openExpiredMembershipsBtn, #openEntryListBtn, #openNotificationsBtn, #openReportsBtn")) {
@@ -14002,6 +14090,7 @@ function render() {
   if (isAdminUser() && !isStaffUser()) {
     refreshAdminPackageRequests(false);
     refreshAdminDeletionRequests();
+    refreshPasswordResetRequests();
     loadAdminNotificationsList();
   }
 

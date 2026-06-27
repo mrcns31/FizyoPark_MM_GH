@@ -7,6 +7,7 @@ import { log as activityLog } from '../utils/activityLogger.js';
 import { getInstitutionWhatsApp, setInstitutionWhatsApp } from '../utils/appSettings.js';
 import { CONSENT_VERSION, getConsentStatus, getLegalLinks, setLegalLinks, recordConsent } from '../utils/legalConsent.js';
 import { toPhoneFormat } from '../utils/phone.js';
+import { sendExpoPushBulk } from '../utils/pushNotifications.js';
 
 const router = express.Router();
 
@@ -541,11 +542,19 @@ router.post('/forgot-password', [
 
     // Kullanıcı var mı kontrol et (ama bilgi sızdırmamak için hep 200 döndür)
     const userRes = await db.query(
-      'SELECT id FROM users WHERE LOWER(email) = $1 AND is_active = true',
+      `SELECT u.id, u.display_name,
+              m.first_name AS member_first_name, m.last_name AS member_last_name,
+              s.first_name AS staff_first_name, s.last_name AS staff_last_name
+       FROM users u
+       LEFT JOIN members m ON m.user_id = u.id AND m.deleted_at IS NULL
+       LEFT JOIN staff s ON s.user_id = u.id
+       WHERE LOWER(u.email) = $1 AND u.is_active = true`,
       [email]
     );
 
     if (userRes.rows.length > 0) {
+      const user = userRes.rows[0];
+
       // Aynı e-posta için zaten bekleyen talep varsa yeni oluşturma
       const existing = await db.query(
         "SELECT id FROM password_reset_requests WHERE email = $1 AND status = 'pending'",
@@ -556,6 +565,25 @@ router.post('/forgot-password', [
           'INSERT INTO password_reset_requests (email) VALUES ($1)',
           [email]
         );
+
+        // Kullanıcının adını belirle (bildirim için)
+        let fullName = email;
+        if (user.display_name && String(user.display_name).trim()) {
+          fullName = String(user.display_name).trim();
+        } else if (user.member_first_name || user.member_last_name) {
+          fullName = `${user.member_first_name || ''} ${user.member_last_name || ''}`.trim();
+        } else if (user.staff_first_name || user.staff_last_name) {
+          fullName = `${user.staff_first_name || ''} ${user.staff_last_name || ''}`.trim();
+        }
+
+        // Tüm admin ve manager'lara push bildirimi gönder
+        const adminRes = await db.query(
+          "SELECT id FROM users WHERE role IN ('admin', 'manager') AND is_active = true"
+        );
+        if (adminRes.rows.length > 0) {
+          const adminIds = adminRes.rows.map((r) => r.id);
+          sendExpoPushBulk(db, adminIds, 'Şifre Talebi', `${fullName} şifre sıfırlama talebi göndermiştir.`).catch(() => {});
+        }
       }
     }
 
