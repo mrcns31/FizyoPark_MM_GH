@@ -117,6 +117,7 @@
               <input id="loginRememberMe" type="checkbox" />
               <span>Beni hatırla</span>
             </label>
+            <button type="button" id="loginForgotPasswordBtn" class="login-forgot-link">Şifremi unuttum</button>
           </div>
           <p id="loginError" class="error hidden"></p>
           <button id="loginBtn" class="btn btn--primary" type="submit">Giriş</button>
@@ -203,6 +204,39 @@
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
             <span id="passwordChangeSubmitLabel">Şifreyi Değiştir</span>
           </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Şifremi unuttum ekranı -->
+    <div id="forgotPasswordScreen" class="pw-change hidden" aria-hidden="true" role="dialog" aria-modal="true" aria-labelledby="forgotPasswordTitle">
+      <header class="pw-change__header">
+        <button type="button" id="forgotPasswordBackBtn" class="pw-change__back btn btn--ghost btn--icon" aria-label="Geri">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>
+        </button>
+        <h1 id="forgotPasswordTitle" class="pw-change__header-title">Şifremi Unuttum</h1>
+        <span class="pw-change__header-spacer" aria-hidden="true"></span>
+      </header>
+      <div class="pw-change__scroll">
+        <div class="pw-change__info" role="note" style="margin-bottom:20px">
+          <span class="pw-change__info-icon" aria-hidden="true">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+          </span>
+          <p class="pw-change__info-text">Kayıtlı e-posta adresinizi girin. Yönetici talebinizi görecek ve geçici şifrenizi iletecektir.</p>
+        </div>
+        <form id="forgotPasswordForm" class="pw-change__form-card" novalidate>
+          <div class="pw-change__field">
+            <label class="pw-change__label" for="forgotPasswordEmail">E-posta</label>
+            <div class="pw-change__input-wrap">
+              <span class="pw-change__input-icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m2 7 10 7 10-7"/></svg>
+              </span>
+              <input id="forgotPasswordEmail" class="pw-change__input" type="email" autocomplete="email" placeholder="ornek@email.com" required />
+            </div>
+          </div>
+          <p id="forgotPasswordError" class="error hidden" style="margin-bottom:8px"></p>
+          <p id="forgotPasswordSuccess" class="hidden" style="color:var(--fp-green);font-size:14px;margin-bottom:8px;text-align:center"></p>
+          <button id="forgotPasswordSubmitBtn" class="btn btn--primary" type="submit">Talep Gönder</button>
         </form>
       </div>
     </div>

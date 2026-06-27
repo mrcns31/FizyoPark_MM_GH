@@ -5569,7 +5569,8 @@ select option:checked{
   max-width:100%;
 }
 .login-form .formRow{ margin-bottom:12px; }
-.login-remember-row{ margin-bottom:6px; }
+.login-remember-row{ margin-bottom:6px; display:flex; align-items:center; justify-content:space-between; }
+.login-forgot-link{ background:none; border:none; padding:0; color:#8ec5ff; font-size:13px; text-decoration:underline; cursor:pointer; }
 .login-remember-label{
   display:flex;
   align-items:center;

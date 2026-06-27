@@ -438,6 +438,10 @@
     return apiFetch('/members/' + id + '/reset-password', { method: 'POST', body: JSON.stringify({}) });
   }
 
+  async function forgotPassword(email) {
+    return apiFetch('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) });
+  }
+
   // Nadiren değişen veriler (personel, oda, paket tanımları, çalışma saatleri) — localStorage, 24 saat
   var RARE_CACHE_KEY  = 'fp_rare_v1';
   var RARE_CACHE_TTL  = 24 * 60 * 60 * 1000;
@@ -1046,6 +1050,7 @@
     approveMemberDeletionRequest,
     rejectMemberDeletionRequest,
     resetMemberPassword,
+    forgotPassword,
     createMember,
     getFormerMembers,
     getFormerMemberPackages,

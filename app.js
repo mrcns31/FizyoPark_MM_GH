@@ -1481,6 +1481,14 @@ function cacheEls() {
     "passwordChangeForm",
     "passwordChangeError",
     "passwordChangeSubmitBtn",
+    "loginForgotPasswordBtn",
+    "forgotPasswordScreen",
+    "forgotPasswordBackBtn",
+    "forgotPasswordForm",
+    "forgotPasswordEmail",
+    "forgotPasswordError",
+    "forgotPasswordSuccess",
+    "forgotPasswordSubmitBtn",
     "adminProfileName",
     "adminProfileEmail",
     "adminProfilePhone",
@@ -14047,6 +14055,15 @@ function bindLoginForm() {
   if (!form || !window.API || form.dataset.bound === "1") return;
   form.dataset.bound = "1";
 
+  // Şifremi unuttum
+  const forgotBtn = document.getElementById("loginForgotPasswordBtn");
+  if (forgotBtn) {
+    forgotBtn.addEventListener("click", function () {
+      bindForgotPasswordScreen();
+      showForgotPasswordScreen();
+    });
+  }
+
   // Şifre göster/gizle
   const pwInput = document.getElementById("loginPassword");
   const pwToggle = document.getElementById("loginPasswordToggle");
@@ -14101,6 +14118,67 @@ function bindLoginForm() {
         errEl.classList.remove("hidden");
       }
       if (btn) btn.disabled = false;
+    }
+  });
+}
+
+function showForgotPasswordScreen() {
+  var screen = document.getElementById("forgotPasswordScreen");
+  var emailInput = document.getElementById("forgotPasswordEmail");
+  var errEl = document.getElementById("forgotPasswordError");
+  var successEl = document.getElementById("forgotPasswordSuccess");
+  var btn = document.getElementById("forgotPasswordSubmitBtn");
+  if (!screen) return;
+  if (emailInput) emailInput.value = "";
+  if (errEl) { errEl.textContent = ""; errEl.classList.add("hidden"); }
+  if (successEl) { successEl.textContent = ""; successEl.classList.add("hidden"); }
+  if (btn) btn.disabled = false;
+  screen.classList.remove("hidden");
+  screen.setAttribute("aria-hidden", "false");
+  if (emailInput) setTimeout(function () { emailInput.focus(); }, 100);
+}
+
+function hideForgotPasswordScreen() {
+  var screen = document.getElementById("forgotPasswordScreen");
+  if (!screen) return;
+  screen.classList.add("hidden");
+  screen.setAttribute("aria-hidden", "true");
+}
+
+function bindForgotPasswordScreen() {
+  var backBtn = document.getElementById("forgotPasswordBackBtn");
+  var form = document.getElementById("forgotPasswordForm");
+  var emailInput = document.getElementById("forgotPasswordEmail");
+  var errEl = document.getElementById("forgotPasswordError");
+  var successEl = document.getElementById("forgotPasswordSuccess");
+  var submitBtn = document.getElementById("forgotPasswordSubmitBtn");
+  if (!form || form.dataset.bound === "1") return;
+  form.dataset.bound = "1";
+
+  if (backBtn) {
+    backBtn.addEventListener("click", hideForgotPasswordScreen);
+  }
+
+  form.addEventListener("submit", async function (ev) {
+    ev.preventDefault();
+    var email = emailInput ? emailInput.value.trim() : "";
+    if (!email) return;
+    if (errEl) { errEl.textContent = ""; errEl.classList.add("hidden"); }
+    if (successEl) { successEl.textContent = ""; successEl.classList.add("hidden"); }
+    if (submitBtn) submitBtn.disabled = true;
+    try {
+      await window.API.forgotPassword(email);
+      if (successEl) {
+        successEl.textContent = "Talebiniz alındı. Yönetici en kısa sürede sizinle iletişime geçecektir.";
+        successEl.classList.remove("hidden");
+      }
+      if (submitBtn) submitBtn.disabled = true;
+    } catch (e) {
+      if (errEl) {
+        errEl.textContent = (e.data && e.data.error) || e.message || "Talep gönderilemedi";
+        errEl.classList.remove("hidden");
+      }
+      if (submitBtn) submitBtn.disabled = false;
     }
   });
 }
