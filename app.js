@@ -4997,7 +4997,8 @@ function updateUserBranding() {
   }
   if (els.memberHomeName) {
     var mp = ui.memberPortal && ui.memberPortal.profile;
-    els.memberHomeName.textContent = (mp && mp.fullName) || profile.name || "Üye";
+    var displayName = (mp && mp.fullName) || profile.name || "";
+    els.memberHomeName.textContent = displayName ? "Merhaba, " + displayName + " 👋" : "Merhaba 👋";
   }
   if (els.memberProfileBtn && isMemberUser()) {
     var mp = ui.memberPortal && ui.memberPortal.profile;
@@ -5456,6 +5457,14 @@ function fillMemberProfileModal() {
   if (els.memberInlineProfileName) els.memberInlineProfileName.textContent = p.fullName || "—";
   if (els.memberInlineProfileEmail) els.memberInlineProfileEmail.textContent = p.email || "—";
   if (els.memberInlineProfilePhone) els.memberInlineProfilePhone.textContent = p.phone || "—";
+  var memberNoRow = document.getElementById("memberInlineProfileMemberNoRow");
+  var memberNoEl = document.getElementById("memberInlineProfileMemberNo");
+  if (memberNoEl && p.memberNo) {
+    memberNoEl.textContent = p.memberNo;
+    if (memberNoRow) memberNoRow.style.display = "";
+  } else if (memberNoRow) {
+    memberNoRow.style.display = "none";
+  }
   updateMemberDeletionRequestUI();
   renderMemberPackagesInto(els.memberProfilePastPackages, els.memberProfileNotifications);
   updateMemberSessionsBtn();
@@ -6636,41 +6645,48 @@ function memberSessionStatusDetailHtml(detail) {
 function renderMemberSessionBoxHtml(s, options) {
   options = options || {};
   var d = new Date(Number(s.startTs));
-  var st = memberSessionStatusLabel(s);
-  var cancelBtn =
-    options.showCancel && memberCanCancelSession(s)
-      ? '<button type="button" class="member-session-box__cancel member-cancel-session-btn" data-session-id="' +
-        escapeHtml(String(s.id)) +
-        '">İptal</button>'
-      : "";
+  var now = Date.now();
+  var isPast = !!(options.isPast != null ? options.isPast : (Number(s.startTs) < now || s.isPast || isPackageSessionConsumed(s, now)));
+  var seqNo = options.index != null ? options.index : null;
+  var dateStr = fmtMemberCardDate(d);
+  var timeStr = fmtSessionListTime(d);
+  var dayStr  = fmtCalendarHeaderDayName(d);
+
+  // Sağ taraf: İptal butonu veya "İptal edilemez" etiketi (sadece gelecek seanslar için)
+  var actionHtml = "";
+  if (!isPast && !isPackageSessionCancelled(s)) {
+    if (memberCanCancelSession(s)) {
+      actionHtml = '<button type="button" class="member-session-box__cancel member-cancel-session-btn" data-session-id="' +
+        escapeHtml(String(s.id)) + '">İptal</button>';
+    } else {
+      actionHtml = '<span class="member-session-box__locked">İptal edilemez</span>';
+    }
+  }
+
+  // Durum rozeti: sadece geçmiş veya iptal edilmiş seanslar için
+  var statusHtml = "";
+  if (isPast || isPackageSessionCancelled(s)) {
+    var st = memberSessionStatusLabel(s);
+    statusHtml = '<div class="member-session-box__status">' +
+      '<span class="member-session-status ' + st.cls + '">' + escapeHtml(st.text) + '</span>' +
+      memberSessionStatusDetailHtml(st.detail) + '</div>';
+  }
+
+  var pastClass = isPast ? " member-session-box--past" : "";
   return (
-    '<article class="member-session-box">' +
-    '<div class="member-session-box__main">' +
-    '<div class="member-session-box__datetime">' +
-    '<span class="member-session-box__cal-icon" aria-hidden="true">' +
-    '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>' +
-    "</span>" +
+    '<article class="member-session-box' + pastClass + '">' +
+    '<div class="member-session-box__row1">' +
+    '<div class="member-session-box__left">' +
+    (seqNo != null ? '<span class="member-session-box__seq">' + seqNo + '.</span>' : '') +
     '<div class="member-session-box__date-lines">' +
-    '<div class="member-session-box__date-row">' +
-    '<span class="member-session-box__date-time">' +
-    escapeHtml(fmtMemberCardDate(d)) +
-    "</span>" +
-    cancelBtn +
-    "</div>" +
-    '<span class="member-session-box__day">' +
-    escapeHtml(fmtCalendarHeaderDayName(d) + " " + fmtSessionListTime(d)) +
-    "</span>" +
-    "</div>" +
-    "</div>" +
-    '<div class="member-session-box__status"><span class="member-session-status ' +
-    st.cls +
-    '">' +
-    escapeHtml(st.text) +
-    "</span>" +
-    memberSessionStatusDetailHtml(st.detail) +
-    "</div>" +
-    "</div>" +
-    "</article>"
+    '<span class="member-session-box__date-time">' + escapeHtml(dateStr + " / " + timeStr) + '</span>' +
+    '<span class="member-session-box__day">' + escapeHtml(dayStr) + '</span>' +
+    '</div>' +
+    '</div>' +
+    actionHtml +
+    '</div>' +
+    statusHtml +
+    '</article>'
   );
 }
 
@@ -6729,72 +6745,96 @@ function bindMemberHomePackageInfoActions(ap) {
 }
 
 function renderMemberHomePackageInfo(ap) {
-  if (!els.memberHomePackageInfo) return;
   var onHome = (ui.memberTab || "home") === "home";
   var show = !!(ap && onHome);
   if (els.memberTabBar) {
-    els.memberTabBar.classList.toggle("member-tab-bar--fab-only", !show);
+    els.memberTabBar.classList.toggle("member-tab-bar--fab-only", false);
   }
+  // Eski alt-bar elamanları (gizli, JS uyumluluğu)
+  if (els.memberHomePackageInfo) {
+    if (ap) {
+      if (els.memberHomePackageName) els.memberHomePackageName.textContent = ap.packageName || "Paket";
+      if (els.memberHomePackageRemaining) els.memberHomePackageRemaining.textContent = fmtPackageSessionsRemainingSummary(ap);
+      if (els.memberHomePackageEnd) els.memberHomePackageEnd.textContent = fmtActivePackageSummaryMetaLine(ap);
+    }
+  }
+  bindMemberHomePackageInfoActions(ap && onHome ? ap : null);
+  // İnline paket kartı
+  var inlinePkg = document.getElementById("memberHomeInlinePkg");
+  if (!inlinePkg) return;
   if (!show) {
-    els.memberHomePackageInfo.classList.add("hidden");
-    bindMemberHomePackageInfoActions(null);
+    inlinePkg.classList.add("hidden");
     return;
   }
-  els.memberHomePackageInfo.classList.remove("hidden");
-  if (els.memberHomePackageName) {
-    els.memberHomePackageName.textContent = ap.packageName || "Paket";
+  inlinePkg.classList.remove("hidden");
+  var p = normalizePackageSummary(ap);
+  if (!p) return;
+  var nameEl = document.getElementById("memberHomeInlinePkgName");
+  var typeEl = document.getElementById("memberHomeInlinePkgType");
+  var usedEl = document.getElementById("memberHomeInlinePkgUsed");
+  var remEl  = document.getElementById("memberHomeInlinePkgRemaining");
+  var totEl  = document.getElementById("memberHomeInlinePkgTotal");
+  var datesEl = document.getElementById("memberHomeInlinePkgDates");
+  if (nameEl) nameEl.textContent = p.packageName || "Paket";
+  if (typeEl) {
+    typeEl.textContent = fmtPackageTypeLabel(p.packageType);
   }
-  if (els.memberHomePackageRemaining) {
-    els.memberHomePackageRemaining.textContent = fmtPackageSessionsRemainingSummary(ap);
-  }
-  if (els.memberHomePackageEnd) {
-    els.memberHomePackageEnd.textContent = fmtActivePackageSummaryMetaLine(ap);
-  }
-  bindMemberHomePackageInfoActions(ap);
+  var total = p.lessonCount != null ? Number(p.lessonCount) : null;
+  var used  = p.usedSessions != null ? Number(p.usedSessions) : null;
+  var rem   = p.remainingSessions != null ? Number(p.remainingSessions)
+              : (total != null && used != null ? Math.max(0, total - used) : null);
+  if (usedEl) usedEl.textContent = used != null ? used : "—";
+  if (remEl)  remEl.textContent  = rem  != null ? rem  : "—";
+  if (totEl)  totEl.textContent  = total != null ? total : "—";
+  if (datesEl) datesEl.textContent = fmtMemberPackagePeriodRange(p.startDate, p.endDate) || "—";
 }
 
 function renderMemberHome() {
   if (!isMemberUser() || !els.memberHomeView) return;
   updateUserBranding();
-  updateMemberHomeTabsUI();
   var ap = ui.memberPortal && ui.memberPortal.activePackage;
   renderMemberHomePackageInfo(ap);
   if (els.memberQrFabBtn) els.memberQrFabBtn.classList.toggle("hidden", !ap);
-  var split = splitMemberPackageSessions(ap ? ap.sessions : []);
-  renderMemberPastSessionsStats(ap);
-  if (els.memberPastSessionsList) {
-    if (!ap || !split.past.length) {
-      els.memberPastSessionsList.innerHTML = "";
-      if (els.memberPastSessionsEmpty) els.memberPastSessionsEmpty.classList.toggle("hidden", !!(ap && split.past.length));
-      if (els.memberPastSessionsFooter) els.memberPastSessionsFooter.classList.add("hidden");
-    } else {
-      if (els.memberPastSessionsEmpty) els.memberPastSessionsEmpty.classList.add("hidden");
-      els.memberPastSessionsList.innerHTML = split.past
-        .map(function (s) {
-          return renderMemberSessionBoxHtml(s, { showCancel: false });
-        })
-        .join("");
-      if (els.memberPastSessionsFooter) els.memberPastSessionsFooter.classList.remove("hidden");
-    }
-  }
-  if (els.memberUpcomingSessionsList) {
-    if (!ap || !split.upcoming.length) {
-      els.memberUpcomingSessionsList.innerHTML = "";
+
+  // Birleşik seans listesi: iptal edilmeyenler, tarihe göre artan sıra
+  var unifiedList = document.getElementById("memberUnifiedSessionsList");
+  var unifiedEmpty = document.getElementById("memberUnifiedSessionsEmpty");
+  var sessionLabel = document.getElementById("memberHomeSessionsLabel");
+
+  if (unifiedList) {
+    if (!ap) {
+      unifiedList.innerHTML = "";
+      if (unifiedEmpty) unifiedEmpty.classList.add("hidden");
+      if (sessionLabel) sessionLabel.classList.add("hidden");
       renderMemberPackageRequestEmptyState(ap);
-      if (els.memberUpcomingSessionsFooter) els.memberUpcomingSessionsFooter.classList.add("hidden");
     } else {
-      if (els.memberUpcomingSessionsEmpty) els.memberUpcomingSessionsEmpty.classList.add("hidden");
+      var allSessions = ap.sessions || [];
+      var now = Date.now();
+      var sessions = allSessions
+        .filter(function (s) { return !isPackageSessionCancelled(s); })
+        .sort(function (a, b) { return Number(a.startTs) - Number(b.startTs); });
+
+      if (sessionLabel) {
+        sessionLabel.textContent = "Randevularım (" + sessions.length + ")";
+        sessionLabel.classList.remove("hidden");
+      }
+
+      if (!sessions.length) {
+        unifiedList.innerHTML = "";
+        if (unifiedEmpty) unifiedEmpty.classList.remove("hidden");
+      } else {
+        if (unifiedEmpty) unifiedEmpty.classList.add("hidden");
+        unifiedList.innerHTML = sessions.map(function (s, idx) {
+          var isPast = Number(s.startTs) < now || !!s.isPast || isPackageSessionConsumed(s, now);
+          return renderMemberSessionBoxHtml(s, { index: idx + 1, isPast: isPast, showCancel: !isPast });
+        }).join("");
+        bindMemberHomeSessionActions(unifiedList);
+      }
       if (els.memberPackageRequestCta) els.memberPackageRequestCta.classList.add("hidden");
       if (els.memberPackageRequestPending) els.memberPackageRequestPending.classList.add("hidden");
-      els.memberUpcomingSessionsList.innerHTML = split.upcoming
-        .map(function (s) {
-          return renderMemberSessionBoxHtml(s, { showCancel: true });
-        })
-        .join("");
-      bindMemberHomeSessionActions(els.memberUpcomingSessionsList);
-      if (els.memberUpcomingSessionsFooter) els.memberUpcomingSessionsFooter.classList.remove("hidden");
     }
   }
+
   renderMemberNotificationsBanner();
 }
 
@@ -7644,6 +7684,12 @@ function updateMemberTabUI() {
     var panelTab = panel.getAttribute("data-member-tab-panel");
     panel.classList.toggle("hidden", onHome || panelTab !== tab);
   });
+  // Alt tab bar butonlarının aktif durumu
+  var homeTabBtn = document.getElementById("memberTabHomeBtn");
+  var profileTabBtn = document.getElementById("memberTabProfileBtn");
+  if (homeTabBtn) homeTabBtn.classList.toggle("member-tab-bar__tab--active", onHome);
+  if (profileTabBtn) profileTabBtn.classList.toggle("member-tab-bar__tab--active", !onHome);
+
   if (onHome) renderMemberHome();
   renderMemberHomePackageInfo(ui.memberPortal && ui.memberPortal.activePackage);
 }
@@ -8645,6 +8691,20 @@ function bindMemberProfileActions() {
   }
   if (els.memberInlineLogoutBtn) {
     els.memberInlineLogoutBtn.addEventListener("click", performLogout);
+  }
+  var changePasswordBtn = document.getElementById("memberInlineChangePasswordBtn");
+  if (changePasswordBtn) {
+    changePasswordBtn.addEventListener("click", function () {
+      openPasswordChangeScreen("change");
+    });
+  }
+  var tabHomeBtn = document.getElementById("memberTabHomeBtn");
+  if (tabHomeBtn) {
+    tabHomeBtn.addEventListener("click", function () { setMemberTab("home"); });
+  }
+  var tabProfileBtn = document.getElementById("memberTabProfileBtn");
+  if (tabProfileBtn) {
+    tabProfileBtn.addEventListener("click", function () { setMemberTab("profile"); });
   }
   if (els.memberSessionsBtn) {
     els.memberSessionsBtn.addEventListener("click", openMemberActivePackageSessions);

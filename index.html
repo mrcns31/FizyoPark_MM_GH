@@ -683,39 +683,54 @@
         <div id="memberNotificationsBanner" class="member-notifications-banner hidden" aria-live="polite"></div>
 
         <header class="member-home-header hidden" id="memberHomeHeader">
-          <div class="member-home-header__profile">
-            <span class="member-home-header__avatar" aria-hidden="true">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-            </span>
-            <h1 class="member-home-header__name member-home-header__name--clickable" id="memberHomeName" role="button" tabindex="0" aria-label="Ayarlar">—</h1>
-          </div>
-          <button type="button" id="memberHomeSettingsBtn" class="member-home-header__settings btn btn--ghost btn--icon" aria-label="Ayarlar">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+          <h1 class="member-home-header__name member-home-header__name--clickable" id="memberHomeName" role="button" tabindex="0" aria-label="Profil">Merhaba 👋</h1>
+          <button type="button" id="memberHomeSettingsBtn" class="member-home-header__settings btn btn--ghost btn--icon" aria-label="Profil">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
           </button>
         </header>
 
         <section class="member-home hidden" id="memberHomeView" aria-label="Seanslarım">
-          <div class="member-home-tabs" role="tablist" aria-label="Seans filtresi">
-            <button type="button" id="memberSessionsTabUpcoming" class="member-home-tabs__btn is-active" role="tab" aria-selected="true" aria-controls="memberUpcomingSessionsPanel">Gelecek</button>
-            <button type="button" id="memberSessionsTabPast" class="member-home-tabs__btn" role="tab" aria-selected="false" aria-controls="memberPastSessionsPanel">Geçmiş</button>
-          </div>
-          <div id="memberUpcomingSessionsPanel" class="member-home__panel" role="tabpanel" aria-labelledby="memberSessionsTabUpcoming">
-            <div id="memberUpcomingSessionsList" class="member-session-box-list"></div>
-            <p id="memberUpcomingSessionsEmpty" class="member-home__empty hint hidden">Planlanmış seans bulunmuyor.</p>
-            <div id="memberPackageRequestCta" class="member-package-request-cta hidden">
-              <p class="member-package-request-cta__text">Aktif paket bulunmuyor. Yeni paket için talep oluşturabilirsiniz.</p>
-              <button type="button" id="memberOpenPackageRequestBtn" class="btn btn--primary btn--block">Yeni Paket Talebi Oluştur</button>
+          <!-- İnline aktif paket kartı -->
+          <div id="memberHomeInlinePkg" class="member-home-pkg hidden">
+            <div class="member-home-pkg__header">
+              <span id="memberHomeInlinePkgName" class="member-home-pkg__name">—</span>
+              <span id="memberHomeInlinePkgType" class="member-home-pkg__type">Sabit</span>
             </div>
-            <div id="memberPackageRequestPending" class="member-package-request-pending hidden" role="status">
-              <p class="hint" id="memberPackageRequestPendingText"></p>
+            <div class="member-home-pkg__stats">
+              <div class="member-home-pkg__stat">
+                <span id="memberHomeInlinePkgUsed" class="member-home-pkg__stat-value">—</span>
+                <span class="member-home-pkg__stat-label">Kullanılan</span>
+              </div>
+              <div class="member-home-pkg__stat member-home-pkg__stat--highlight">
+                <span id="memberHomeInlinePkgRemaining" class="member-home-pkg__stat-value">—</span>
+                <span class="member-home-pkg__stat-label">Kalan</span>
+              </div>
+              <div class="member-home-pkg__stat">
+                <span id="memberHomeInlinePkgTotal" class="member-home-pkg__stat-value">—</span>
+                <span class="member-home-pkg__stat-label">Toplam</span>
+              </div>
             </div>
-            <p id="memberUpcomingSessionsFooter" class="member-home__footer-note hidden">* Tüm randevular gösterildi</p>
+            <div id="memberHomeInlinePkgDates" class="member-home-pkg__dates">—</div>
           </div>
-          <div id="memberPastSessionsPanel" class="member-home__panel hidden" role="tabpanel" aria-labelledby="memberSessionsTabPast">
-            <div id="memberPastSessionsList" class="member-session-box-list"></div>
-            <p id="memberPastSessionsEmpty" class="member-home__empty hint hidden">Geçmiş seans yok.</p>
-            <div id="memberPastSessionsStats" class="member-home__stats hidden" aria-label="Paket özeti"></div>
-            <p id="memberPastSessionsFooter" class="member-home__footer-note hidden">* Tüm randevular gösterildi</p>
+          <!-- Seans listesi başlığı: "Randevularım (X)" -->
+          <p id="memberHomeSessionsLabel" class="member-home-section-label hidden"></p>
+          <!-- Birleşik seans listesi — iptal edilmeyenler, tarihe göre sıralı -->
+          <div id="memberUnifiedSessionsList" class="member-session-box-list"></div>
+          <p id="memberUnifiedSessionsEmpty" class="member-home__empty hint hidden">Randevu bulunmuyor.</p>
+          <!-- Aktif paket yok → talep CTA veya beklemede -->
+          <div id="memberPackageRequestCta" class="member-package-request-cta hidden">
+            <p class="member-package-request-cta__text">Aktif paket bulunmuyor. Yeni paket için talep oluşturabilirsiniz.</p>
+            <button type="button" id="memberOpenPackageRequestBtn" class="btn btn--primary btn--block">Yeni Paket Talebi Oluştur</button>
+          </div>
+          <div id="memberPackageRequestPending" class="member-package-request-pending hidden" role="status">
+            <p class="hint" id="memberPackageRequestPendingText"></p>
+          </div>
+          <!-- JS uyumluluğu için gizli eski elemanlar -->
+          <div hidden aria-hidden="true">
+            <button id="memberSessionsTabUpcoming" role="tab" aria-selected="true" aria-controls="memberUpcomingSessionsPanel"></button>
+            <button id="memberSessionsTabPast" role="tab" aria-selected="false" aria-controls="memberPastSessionsPanel"></button>
+            <div id="memberUpcomingSessionsPanel"><div id="memberUpcomingSessionsList"></div><p id="memberUpcomingSessionsEmpty" class="hidden"></p><p id="memberUpcomingSessionsFooter" class="hidden"></p></div>
+            <div id="memberPastSessionsPanel"><div id="memberPastSessionsList"></div><p id="memberPastSessionsEmpty" class="hidden"></p><div id="memberPastSessionsStats" class="hidden"></div><p id="memberPastSessionsFooter" class="hidden"></p></div>
           </div>
         </section>
 
@@ -853,30 +868,32 @@
           </section>
           <section class="member-portal-panel hidden" id="memberPanelProfile" data-member-tab-panel="profile">
             <div class="member-subpage-head">
-              <button type="button" id="memberProfileBackBtn" class="member-subpage-head__back btn btn--ghost btn--icon" aria-label="Geri">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
-              </button>
-              <h2 class="member-subpage-head__title">Ayarlar</h2>
+              <span class="member-subpage-head__spacer" aria-hidden="true"></span>
+              <h2 class="member-subpage-head__title">Profil</h2>
               <span class="member-subpage-head__spacer" aria-hidden="true"></span>
             </div>
-            <h2 class="member-portal-panel__title member-portal-panel__title--visually-hidden">Hesabım</h2>
+            <!-- Gizli eski back button — JS uyumluluğu -->
+            <button type="button" id="memberProfileBackBtn" class="hidden" aria-label="Geri" hidden></button>
             <div class="profile-card">
               <div class="profile-card__row">
                 <span class="profile-card__label">Ad Soyad</span>
                 <span class="profile-card__value" id="memberInlineProfileName">—</span>
               </div>
-              <div class="profile-card__row">
-                <span class="profile-card__label">E-posta</span>
-                <span class="profile-card__value" id="memberInlineProfileEmail">—</span>
+              <div class="profile-card__row" id="memberInlineProfileMemberNoRow" style="display:none">
+                <span class="profile-card__label">Üye No</span>
+                <span class="profile-card__value" id="memberInlineProfileMemberNo">—</span>
               </div>
               <div class="profile-card__row">
                 <span class="profile-card__label">Telefon</span>
                 <span class="profile-card__value" id="memberInlineProfilePhone">—</span>
               </div>
+              <div class="profile-card__row">
+                <span class="profile-card__label">E-posta</span>
+                <span class="profile-card__value" id="memberInlineProfileEmail">—</span>
+              </div>
             </div>
             <div id="memberDeletionRequestNotice" class="member-deletion-notice hidden" role="status"></div>
             <div class="member-settings-card">
-              <h3 class="member-settings-card__title">Sistem</h3>
               <div class="member-settings-list">
                 <button type="button" id="memberInlinePackagesBtn" class="member-settings-row">
                   <span class="member-settings-row__icon member-settings-row__icon--primary" aria-hidden="true">
@@ -885,6 +902,16 @@
                   <span class="member-settings-row__text">
                     <span class="member-settings-row__title">Paketlerim</span>
                     <span class="member-settings-row__desc">Geçmiş paketler</span>
+                  </span>
+                  <span class="member-settings-row__chev" aria-hidden="true">›</span>
+                </button>
+                <button type="button" id="memberInlineChangePasswordBtn" class="member-settings-row">
+                  <span class="member-settings-row__icon member-settings-row__icon--primary" aria-hidden="true">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>
+                  </span>
+                  <span class="member-settings-row__text">
+                    <span class="member-settings-row__title">Şifre Değiştir</span>
+                    <span class="member-settings-row__desc">Hesap şifrenizi güncelleyin</span>
                   </span>
                   <span class="member-settings-row__chev" aria-hidden="true">›</span>
                 </button>
@@ -904,7 +931,7 @@
                   </span>
                   <span class="member-settings-row__text">
                     <span class="member-settings-row__title">Hesabımı Sil</span>
-                    <span class="member-settings-row__desc">Hesabımı kalıcı olacak silin</span>
+                    <span class="member-settings-row__desc">Hesabımı kalıcı olarak silin</span>
                   </span>
                   <span class="member-settings-row__chev" aria-hidden="true">›</span>
                 </button>
@@ -957,14 +984,23 @@
       </nav>
 
       <nav class="member-tab-bar hidden" id="memberTabBar" aria-label="Üye menüsü">
-        <div id="memberHomePackageInfo" class="member-tab-bar__package hidden" aria-label="Aktif paket bilgisi" tabindex="-1">
-          <div id="memberHomePackageName" class="member-tab-bar__package-name">—</div>
-          <div id="memberHomePackageRemaining" class="member-tab-bar__package-line">—</div>
-          <div id="memberHomePackageEnd" class="member-tab-bar__package-line member-tab-bar__package-line--muted">—</div>
-        </div>
+        <button type="button" id="memberTabHomeBtn" class="member-tab-bar__tab member-tab-bar__tab--active" aria-label="Ana Ekran">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          <span class="member-tab-bar__tab-label">Ana Ekran</span>
+        </button>
         <button type="button" class="member-qr-fab" id="memberQrFabBtn" aria-label="Giriş QR kodu">
           <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/></svg>
         </button>
+        <button type="button" id="memberTabProfileBtn" class="member-tab-bar__tab" aria-label="Profil">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          <span class="member-tab-bar__tab-label">Profil</span>
+        </button>
+        <!-- JS uyumluluğu için gizli eski paket bilgisi elemanları -->
+        <div id="memberHomePackageInfo" class="hidden" aria-hidden="true">
+          <div id="memberHomePackageName">—</div>
+          <div id="memberHomePackageRemaining">—</div>
+          <div id="memberHomePackageEnd">—</div>
+        </div>
       </nav>
     </div>
 

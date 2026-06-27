@@ -1026,6 +1026,186 @@ body.login-screen-open{
   font-size:13px;
   color:var(--muted);
 }
+/* ── Üye ana ekranı: selamlama başlığı ─────────────── */
+.member-home-header{
+  border-bottom:none;
+  background:var(--bg,#0b1020);
+}
+.member-home-header__name{
+  font-size:20px;
+  flex:1;
+  min-width:0;
+  background:none;
+  border:none;
+  padding:0;
+  margin:0;
+  text-align:left;
+  color:var(--text);
+  cursor:pointer;
+  line-height:1.2;
+}
+/* ── Üye alt nav bar: Ana Ekran / QR / Profil sekmeleri */
+.member-tab-bar__tab{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:4px;
+  flex:1;
+  padding:6px 8px;
+  border:none;
+  background:transparent;
+  color:rgba(232,236,255,.40);
+  font:inherit;
+  font-size:11px;
+  font-weight:700;
+  cursor:pointer;
+  border-radius:10px;
+  min-height:var(--touch-min);
+  transition:color .15s ease;
+}
+.member-tab-bar__tab--active{
+  color:var(--accent,#7c5cff);
+}
+.member-tab-bar__tab-label{
+  font-size:11px;
+  font-weight:700;
+  white-space:nowrap;
+}
+/* ── İnline aktif paket kartı ────────────────────────── */
+.member-home-pkg{
+  padding:12px;
+  border-radius:12px;
+  border:1px solid rgba(255,255,255,.08);
+  background:rgba(255,255,255,.04);
+  margin-bottom:12px;
+  display:flex;
+  flex-direction:column;
+  gap:8px;
+}
+.member-home-pkg__header{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+}
+.member-home-pkg__name{
+  font-size:14px;
+  font-weight:700;
+  color:var(--text);
+  flex:1;
+  min-width:0;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+.member-home-pkg__type{
+  flex:0 0 auto;
+  display:inline-flex;
+  align-items:center;
+  padding:3px 10px;
+  border-radius:99px;
+  font-size:11px;
+  font-weight:700;
+  background:rgba(124,92,255,.18);
+  color:#b39dff;
+  border:1px solid rgba(124,92,255,.35);
+}
+.member-home-pkg__stats{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:6px;
+}
+.member-home-pkg__stat{
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  padding:8px 4px;
+  border-radius:10px;
+  border:1px solid rgba(255,255,255,.07);
+  background:rgba(255,255,255,.03);
+  gap:3px;
+}
+.member-home-pkg__stat--highlight .member-home-pkg__stat-value{
+  color:#4ade80;
+}
+.member-home-pkg__stat-value{
+  font-size:18px;
+  font-weight:800;
+  color:var(--text);
+  line-height:1;
+}
+.member-home-pkg__stat-label{
+  font-size:10px;
+  color:var(--muted);
+  font-weight:600;
+}
+.member-home-pkg__dates{
+  font-size:12px;
+  color:var(--muted);
+}
+/* ── Seans listesi başlık etiketi ────────────────────── */
+.member-home-section-label{
+  font-size:13px;
+  font-weight:700;
+  color:var(--muted);
+  margin:0 0 8px;
+}
+/* ── Seans kartı: yeni mobil stili ───────────────────── */
+.member-session-box--past{
+  opacity:0.6;
+}
+.member-session-box__row1{
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:6px;
+}
+.member-session-box__left{
+  display:flex;
+  align-items:flex-start;
+  gap:6px;
+  flex:1;
+  min-width:0;
+}
+.member-session-box__seq{
+  flex:0 0 auto;
+  font-size:13px;
+  font-weight:700;
+  color:var(--muted);
+  min-width:22px;
+  padding-top:2px;
+}
+.member-session-box__date-lines{
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  min-width:0;
+}
+.member-session-box__date-time{
+  font-size:14px;
+  font-weight:700;
+  color:var(--text);
+  white-space:nowrap;
+}
+.member-session-box__day{
+  font-size:11px;
+  color:var(--muted);
+}
+.member-session-box__locked{
+  flex:0 0 auto;
+  display:inline-flex;
+  align-items:center;
+  padding:4px 10px;
+  border-radius:8px;
+  border:1px solid rgba(255,149,0,.38);
+  background:rgba(255,149,0,.07);
+  color:#ffb347;
+  font-size:11px;
+  font-weight:600;
+  white-space:nowrap;
+  margin-top:1px;
+}
 .staff-attendance-btn{
   position:relative;
 }
