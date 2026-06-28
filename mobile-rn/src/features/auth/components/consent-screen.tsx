@@ -27,13 +27,17 @@ export function ConsentScreen() {
   const [checked, setChecked] = useState<Record<string, boolean>>({});
 
   const allChecked = CONSENT_ITEMS.every((i) => checked[i.key]);
+  const [attempted, setAttempted] = useState(false);
 
   function toggle(key: string) {
     setChecked((c) => ({ ...c, [key]: !c[key] }));
   }
 
   async function onAccept() {
-    if (!allChecked) return;
+    if (!allChecked) {
+      setAttempted(true);
+      return;
+    }
     setError(null);
     try {
       await accept.mutateAsync();
@@ -72,26 +76,37 @@ export function ConsentScreen() {
 
           {/* form card */}
           <View style={styles.formCard}>
-            {CONSENT_ITEMS.map((item) => (
-              <View key={item.key} style={styles.consentItem}>
-                <Text style={styles.consentLink} onPress={() => Linking.openURL(item.url)}>
-                  {item.label}
-                </Text>
-                <Pressable style={styles.checkboxField} onPress={() => toggle(item.key)} hitSlop={4}>
-                  <View style={[styles.checkbox, checked[item.key] && styles.checkboxOn]}>
-                    {checked[item.key] ? <Ionicons name="checkmark" size={13} color="#fff" /> : null}
-                  </View>
-                  <Text style={styles.checkboxText}>Okudum ve kabul ediyorum.</Text>
-                </Pressable>
-              </View>
-            ))}
+            {CONSENT_ITEMS.map((item) => {
+              const isError = attempted && !checked[item.key];
+              return (
+                <View
+                  key={item.key}
+                  style={[styles.consentItem, isError && styles.consentItemError]}
+                >
+                  <Text style={styles.consentLink} onPress={() => Linking.openURL(item.url)}>
+                    {item.label}
+                  </Text>
+                  <Pressable style={styles.checkboxField} onPress={() => toggle(item.key)} hitSlop={4}>
+                    <View style={[styles.checkbox, checked[item.key] && styles.checkboxOn, isError && styles.checkboxError]}>
+                      {checked[item.key] ? <Ionicons name="checkmark" size={13} color="#fff" /> : null}
+                    </View>
+                    <Text style={[styles.checkboxText, isError && styles.checkboxTextError]}>
+                      Okudum ve kabul ediyorum.
+                    </Text>
+                  </Pressable>
+                  {isError ? (
+                    <Text style={styles.requiredLabel}>* Zorunlu alan</Text>
+                  ) : null}
+                </View>
+              );
+            })}
 
             {error ? <ErrorBox>{error}</ErrorBox> : null}
 
             <Pressable
-              style={[styles.submit, (!allChecked || accept.isPending) && styles.submitDisabled]}
+              style={[styles.submit, accept.isPending && styles.submitDisabled]}
               onPress={onAccept}
-              disabled={!allChecked || accept.isPending}
+              disabled={accept.isPending}
             >
               <Ionicons name="checkmark" size={18} color="#fff" />
               <Text style={styles.submitText}>Kabul Ediyorum ve Devam Et</Text>
@@ -167,6 +182,10 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     backgroundColor: 'rgba(255,255,255,0.03)',
   },
+  consentItemError: {
+    borderColor: '#ef4444',
+    backgroundColor: 'rgba(239,68,68,0.07)',
+  },
   consentLink: { fontSize: 14, fontWeight: '700', color: '#6b9fff', textDecorationLine: 'underline' },
   checkboxField: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
   checkbox: {
@@ -181,7 +200,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   checkboxOn: { backgroundColor: '#4a69ff', borderColor: '#4a69ff' },
+  checkboxError: { borderColor: '#ef4444', borderWidth: 2 },
   checkboxText: { flex: 1, fontSize: 13, lineHeight: 20, color: colors.text },
+  checkboxTextError: { color: '#ef4444' },
+  requiredLabel: { fontSize: 12, color: '#ef4444', fontWeight: '600' },
   // submit
   submit: {
     flexDirection: 'row',

@@ -824,7 +824,12 @@ router.put('/:id', [
     }
     const slotsUnchanged = slotsEqual(oldSlots, validSlotsAfter);
 
-    if (!finalSkip && validSlotsAfter.length > 0) {
+    // Sadece bitiş tarihi değiştiyse (gün/saat/personel ve başlangıç tarihi aynıysa) randevu dağılımına dokunma
+    const startDateUnchanged = start_date === undefined || String(start_date).slice(0, 10) === String(mp.start_date).slice(0, 10);
+    const packageIdUnchanged = body_package_id === undefined || Number(body_package_id) === Number(mp.package_id);
+    const onlyEndDateChanged = slotsUnchanged && startDateUnchanged && packageIdUnchanged;
+
+    if (!finalSkip && validSlotsAfter.length > 0 && !onlyEndDateChanged) {
       const pkgRow = await db.query('SELECT lesson_count FROM packages WHERE id = $1', [finalPackageId]);
       const lessonCount = pkgRow.rows[0]?.lesson_count ?? 0;
       if (lessonCount > 0) {
@@ -968,8 +973,8 @@ router.put('/:id', [
       );
     }
 
-    // "Gün dağılımı yapıyorum" (finalSkip=false) ve slotlar varken
-    if (!finalSkip && validSlotsAfter.length > 0) {
+    // "Gün dağılımı yapıyorum" (finalSkip=false), slotlar varken ve sadece bitiş tarihi değişmediyse
+    if (!finalSkip && validSlotsAfter.length > 0 && !onlyEndDateChanged) {
       const pkgRow = await db.query('SELECT lesson_count FROM packages WHERE id = $1', [finalPackageId]);
       const lessonCount = pkgRow.rows[0]?.lesson_count ?? 0;
       if (lessonCount > 0) {

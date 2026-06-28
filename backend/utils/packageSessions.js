@@ -159,7 +159,9 @@ export async function addNextSessionAfterLastForPackage(db, memberPackageId, opt
         if (Number(slot.day_of_week) !== dayOfWeek) continue;
         const timeStr = String(slot.start_time || '08:00');
         const [h, m] = timeStr.split(':').map((x) => parseInt(x, 10) || 0);
-        const slotStart = new Date(d.getFullYear(), d.getMonth(), d.getDate(), h, m, 0, 0);
+        // buildPackageSessionInsertPlan ile tutarlı: Türkiye saati (+03:00) kullan
+        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+        const slotStart = new Date(`${dateStr}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00+03:00`);
         const startTs = slotStart.getTime();
         const endTs = startTs + SLOT_DURATION_MS;
 

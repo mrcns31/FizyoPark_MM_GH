@@ -43,6 +43,45 @@ async function expoPush(messages) {
   }
 }
 
+async function sendDeletionRequestPush(memberName, memberId) {
+  try {
+    const title = 'Üyelik İptal Talebi';
+    const bodyText = `${memberName} üyelik iptali talebinde bulundu.`;
+
+    const { rows: adminRows } = await db.query(
+      `SELECT u.id AS user_id, pt.token
+       FROM users u
+       LEFT JOIN push_tokens pt ON pt.user_id = u.id
+       WHERE u.role IN ('admin', 'manager')`
+    );
+
+    const payload = JSON.stringify({ memberId });
+    const seenUsers = new Set();
+    for (const r of adminRows) {
+      if (!r.user_id || seenUsers.has(r.user_id)) continue;
+      seenUsers.add(r.user_id);
+      db.query(
+        `INSERT INTO staff_notifications (user_id, type, title, body, payload) VALUES ($1, $2, $3, $4, $5)`,
+        [r.user_id, 'deletion_request', title, bodyText, payload]
+      ).catch(() => {});
+    }
+
+    const seenTokens = new Set();
+    const messages = adminRows
+      .filter((r) => {
+        if (!r.token) return false;
+        if (seenTokens.has(r.token)) return false;
+        seenTokens.add(r.token);
+        return true;
+      })
+      .map((r) => ({ to: r.token, title, body: bodyText, sound: 'default', priority: 'high', channelId: 'fizyopark' }));
+
+    await expoPush(messages);
+  } catch {
+    // push hatası talebi engellemesin
+  }
+}
+
 async function sendCancellationPush(memberName, startTs, staffName) {
   try {
     const TZ = 3 * 60 * 60 * 1000;
@@ -837,7 +876,7 @@ router.post('/request-account-deletion', requireMember, async (req, res) => {
     let memberRes;
     try {
       memberRes = await db.query(
-        'SELECT id, deletion_requested_at FROM members WHERE id = $1 AND (deleted_at IS NULL)',
+        'SELECT id, deletion_requested_at, name, first_name, last_name FROM members WHERE id = $1 AND (deleted_at IS NULL)',
         [memberId]
       );
     } catch (colErr) {
@@ -876,6 +915,9 @@ router.post('/request-account-deletion', requireMember, async (req, res) => {
       actorId: req.user.userId,
       actorType: 'member',
     }).catch(() => {});
+
+    const memberName = (member.name || `${member.first_name || ''} ${member.last_name || ''}`.trim()) || 'Üye';
+    sendDeletionRequestPush(memberName, memberId).catch(() => {});
 
     res.json({
       message: 'Üyelik iptal talebiliniz iletilmiştir. Onaylandıktan sonra bilgilendirileceksiniz.',
