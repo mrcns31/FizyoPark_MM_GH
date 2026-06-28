@@ -258,18 +258,18 @@ router.get('/notifications', [
     }
 
     const baseSql = `
-      SELECT al.id, 'cancel' AS type,
+      SELECT al.id, 'admin_cancel' AS type,
              EXTRACT(EPOCH FROM al.created_at AT TIME ZONE 'Europe/Istanbul') * 1000 AS at_ts,
              s.staff_id, s.start_ts,
              COALESCE(NULLIF(TRIM(m.first_name || ' ' || m.last_name), ''), NULLIF(TRIM(m.name), '')) AS member_name,
              TRIM(st.first_name || ' ' || st.last_name) AS staff_name,
              NULL AS source,
-             NULL AS notif_title, NULL AS notif_body, NULL::timestamptz AS read_at
+             'Admin Randevu İptali' AS notif_title, NULL AS notif_body, NULL::timestamptz AS read_at
       FROM activity_logs al
       JOIN sessions s ON s.id::text = al.entity_id
       LEFT JOIN members m ON m.id = s.member_id
       LEFT JOIN staff st ON st.id = s.staff_id
-      WHERE al.action = 'session.cancel_by_member'
+      WHERE al.action = 'session.delete'
         AND al.created_at AT TIME ZONE 'Europe/Istanbul' > to_timestamp($1 / 1000.0)
         AND al.created_at AT TIME ZONE 'Europe/Istanbul' <= to_timestamp($2 / 1000.0)${cancelFilter}
 
