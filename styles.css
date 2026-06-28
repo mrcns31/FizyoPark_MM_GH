@@ -6661,3 +6661,105 @@ body.splash-screen-open{
   40%{ transform:translateY(-10px); opacity:1; }
 }
 
+/* ── Bildirimler dönem navigasyonu ─────────────────────────────────────── */
+.notif-period-row{
+  display:flex;
+  gap:6px;
+  padding:6px 14px;
+  border-bottom:1px solid var(--border);
+  flex-wrap:wrap;
+}
+.notif-period-btn{
+  flex:1;
+  min-width:52px;
+  padding:7px 4px;
+  border-radius:8px;
+  border:1px solid var(--border);
+  background:rgba(255,255,255,.03);
+  color:var(--muted);
+  font-size:13px;
+  font-weight:700;
+  cursor:pointer;
+  text-align:center;
+  transition:background .15s,border-color .15s,color .15s;
+}
+.notif-period-btn.is-active{
+  background:rgba(124,92,255,.20);
+  border-color:rgba(124,92,255,.5);
+  color:#fff;
+}
+.notif-period-btn:not(.is-active):hover{
+  background:rgba(255,255,255,.06);
+  color:#fff;
+}
+.notif-nav-row{
+  display:flex;
+  align-items:center;
+  gap:6px;
+  padding:4px 14px;
+  border-bottom:1px solid var(--border);
+}
+.notif-nav-label{
+  flex:1;
+  padding:6px 8px;
+  border-radius:8px;
+  border:none;
+  background:transparent;
+  color:#fff;
+  font-size:13px;
+  font-weight:700;
+  text-align:center;
+  cursor:pointer;
+}
+.notif-nav-label:hover{
+  background:rgba(255,255,255,.05);
+}
+.notif-nav-loading{
+  font-size:11px;
+  color:var(--muted);
+  margin-left:4px;
+}
+
+/* ── Bildirim türü rozetleri ───────────────────────────────────────────── */
+.notif-type-badge{
+  display:inline-block;
+  font-size:11px;
+  font-weight:700;
+  border-radius:4px;
+  padding:2px 6px;
+  white-space:nowrap;
+}
+.notif-type-badge--cancel{
+  color:var(--danger,#ff4d6d);
+  background:rgba(255,77,109,.12);
+}
+.notif-type-badge--checkin{
+  color:var(--ok,#2bd576);
+  background:rgba(43,213,118,.10);
+}
+.notif-type-badge--reminder{
+  color:#ff9500;
+  background:rgba(255,149,0,.12);
+}
+
+/* ── Bildirim satır renkleri ───────────────────────────────────────────── */
+.notifications-table__row--cancel td:first-child{
+  border-left:2px solid rgba(255,77,109,.6);
+}
+.notifications-table__row--checkin td:first-child{
+  border-left:2px solid rgba(43,213,118,.5);
+}
+.notifications-table__row--reminder{
+  background:rgba(255,149,0,.04);
+}
+.notifications-table__row--reminder td:first-child{
+  border-left:2px solid rgba(255,149,0,.5);
+}
+.notifications-table__detail{
+  max-width:260px;
+  color:var(--muted);
+  font-size:12px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}

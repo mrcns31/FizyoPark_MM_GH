@@ -5067,6 +5067,16 @@ var NOTIFICATION_INTERVAL_MS = 3000;
 var NOTIFICATION_LIST_LIMIT = 50;
 var NOTIFICATION_SEEN_KEY = "lastSeenNotificationAt";
 
+// Dönem bazlı bildirim görünümü durumu
+var notifPeriod = 'day';
+var notifAnchor = Date.now();
+var notifViewPage = 1;
+var notifViewItems = [];
+var notifViewTotal = 0;
+var notifViewTotalPages = 1;
+var notifViewLoading = false;
+var NOTIF_TZ_MS = 3 * 3600 * 1000; // UTC+3
+
 function formatSessionDateTimeLabel(startTs) {
   var d = new Date(Number(startTs));
   return (
@@ -5122,8 +5132,9 @@ async function pollNotifications() {
   if (isMemberUser()) return;
   if (!notificationSince) notificationSince = Date.now();
   try {
-    var rows = await window.API.getNotifications({ since: notificationSince });
-    if (rows && rows.length > 0) {
+    var data = await window.API.getNotifications({ since: notificationSince, per_page: 50 });
+    var rows = Array.isArray(data) ? data : (data && Array.isArray(data.items) ? data.items : []);
+    if (rows.length > 0) {
       rows.forEach(function (row) {
         showTopNotification(formatNotificationToast(row));
         if (row.at > notificationSince) notificationSince = row.at;
@@ -5993,9 +6004,9 @@ function setLastSeenNotificationAt(ts) {
 async function loadAdminNotificationsList() {
   if (!isAdminUser() || !window.API || !window.API.getNotifications) return;
   try {
-    var rows = await window.API.getNotifications({ limit: NOTIFICATION_LIST_LIMIT });
-    ui.notifications = Array.isArray(rows) ? rows.filter(function (r) { return r.type !== 'checkin'; }) : [];
-    if (isAdminMainViewActive("notifications")) renderNotificationsTable();
+    var data = await window.API.getNotifications({ per_page: NOTIFICATION_LIST_LIMIT });
+    var rows = Array.isArray(data) ? data : (data && Array.isArray(data.items) ? data.items : []);
+    ui.notifications = rows;
     updateNotificationsNavBadge();
   } catch (e) {
     console.warn("Bildirimler yüklenemedi:", e);
@@ -6003,7 +6014,6 @@ async function loadAdminNotificationsList() {
 }
 
 function addNotificationToList(row) {
-  if (row.type === 'checkin') return;
   ui.notifications = ui.notifications || [];
   ui.notifications = ui.notifications.filter(function (n) {
     return !(n.id === row.id && n.type === row.type);
@@ -6012,7 +6022,7 @@ function addNotificationToList(row) {
   if (ui.notifications.length > NOTIFICATION_LIST_LIMIT) {
     ui.notifications = ui.notifications.slice(0, NOTIFICATION_LIST_LIMIT);
   }
-  if (isAdminMainViewActive("notifications")) renderNotificationsTable();
+  if (isAdminMainViewActive("notifications")) loadNotifPeriodData();
   updateNotificationsNavBadge();
 }
 
@@ -6030,10 +6040,125 @@ function updateNotificationsNavBadge() {
 }
 
 function formatNotificationTypeLabel(type, source) {
-  if (type !== "checkin") return "İptal";
-  if (source === "phone") return "Giriş (Telefon)";
-  if (source === "card") return "Giriş (Kart)";
-  return "Giriş (QR)";
+  if (type === 'shift_reminder') return 'Hatırlatma';
+  if (type !== 'checkin') return 'İptal';
+  if (source === 'phone') return 'Giriş (Telefon)';
+  if (source === 'card') return 'Giriş (Kart)';
+  return 'Giriş (QR)';
+}
+
+// ── Dönem navigasyonu yardımcı fonksiyonları ──────────────────────────────
+
+function notifStartOfDayIst(ts) {
+  var d = new Date(ts + NOTIF_TZ_MS);
+  d.setUTCHours(0, 0, 0, 0);
+  return d.getTime() - NOTIF_TZ_MS;
+}
+
+function notifAnchorRange(period, anchor) {
+  var sod = notifStartOfDayIst(anchor);
+  if (period === 'day') return { since: sod, until: sod + 86400000 - 1 };
+  if (period === 'week') {
+    var dow = new Date(sod + NOTIF_TZ_MS).getUTCDay();
+    var mon = sod - ((dow + 6) % 7) * 86400000;
+    return { since: mon, until: mon + 7 * 86400000 - 1 };
+  }
+  if (period === 'month') {
+    var dm = new Date(sod + NOTIF_TZ_MS); dm.setUTCDate(1);
+    var mSince = dm.getTime() - NOTIF_TZ_MS;
+    var em = new Date(mSince + NOTIF_TZ_MS); em.setUTCMonth(em.getUTCMonth() + 1);
+    return { since: mSince, until: em.getTime() - NOTIF_TZ_MS - 1 };
+  }
+  var dy = new Date(sod + NOTIF_TZ_MS); dy.setUTCMonth(0, 1);
+  var ySince = dy.getTime() - NOTIF_TZ_MS;
+  var ey = new Date(ySince + NOTIF_TZ_MS); ey.setUTCFullYear(ey.getUTCFullYear() + 1);
+  return { since: ySince, until: ey.getTime() - NOTIF_TZ_MS - 1 };
+}
+
+function notifStepAnchor(period, anchor, dir) {
+  if (period === 'day') return anchor + dir * 86400000;
+  if (period === 'week') return anchor + dir * 7 * 86400000;
+  if (period === 'month') {
+    var d = new Date(notifStartOfDayIst(anchor) + NOTIF_TZ_MS);
+    d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() + dir);
+    return d.getTime() - NOTIF_TZ_MS;
+  }
+  var d = new Date(notifStartOfDayIst(anchor) + NOTIF_TZ_MS);
+  d.setUTCMonth(0, 1); d.setUTCFullYear(d.getUTCFullYear() + dir);
+  return d.getTime() - NOTIF_TZ_MS;
+}
+
+var NOTIF_TR_MONTHS = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
+var NOTIF_TR_DAYS = ['Pazar','Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumartesi'];
+
+function notifPeriodLabel(period, anchor) {
+  var d = new Date(anchor + NOTIF_TZ_MS);
+  if (period === 'day') {
+    var dd = String(d.getUTCDate()).padStart(2, '0');
+    var mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+    var yyyy = d.getUTCFullYear();
+    return dd + '.' + mm + '.' + yyyy + ' ' + NOTIF_TR_DAYS[d.getUTCDay()];
+  }
+  if (period === 'week') {
+    var sod = notifStartOfDayIst(anchor);
+    var dow = d.getUTCDay();
+    var mon = new Date(sod - ((dow + 6) % 7) * 86400000 + NOTIF_TZ_MS);
+    var sun = new Date(sod + (6 - (dow + 6) % 7) * 86400000 + NOTIF_TZ_MS);
+    return String(mon.getUTCDate()).padStart(2, '0') + '.' + String(mon.getUTCMonth() + 1).padStart(2, '0') +
+      ' – ' + String(sun.getUTCDate()).padStart(2, '0') + '.' + String(sun.getUTCMonth() + 1).padStart(2, '0') + '.' + sun.getUTCFullYear();
+  }
+  if (period === 'month') return NOTIF_TR_MONTHS[d.getUTCMonth()] + ' ' + d.getUTCFullYear();
+  return String(d.getUTCFullYear());
+}
+
+function updateNotifPeriodUI() {
+  var periods = [
+    { key: 'day', id: 'notifPeriodDay' },
+    { key: 'week', id: 'notifPeriodWeek' },
+    { key: 'month', id: 'notifPeriodMonth' },
+    { key: 'year', id: 'notifPeriodYear' },
+  ];
+  periods.forEach(function (p) {
+    var btn = document.getElementById(p.id);
+    if (btn) btn.classList.toggle('is-active', notifPeriod === p.key);
+  });
+  var label = document.getElementById('notifNavLabel');
+  if (label) label.textContent = notifPeriodLabel(notifPeriod, notifAnchor);
+}
+
+async function loadNotifPeriodData() {
+  if (notifViewLoading || !window.API || !window.API.getNotifications) return;
+  var typeFilter = ui.notificationsTypeFilter || 'all';
+  if (typeFilter === 'broadcast') { renderNotificationsTable(); return; }
+  notifViewLoading = true;
+  var loadingEl = document.getElementById('notifNavLoading');
+  if (loadingEl) loadingEl.classList.remove('hidden');
+  var range = notifAnchorRange(notifPeriod, notifAnchor);
+  try {
+    var data = await window.API.getNotifications({
+      since: range.since,
+      until: range.until,
+      page: notifViewPage,
+      per_page: notificationsPageSize,
+    });
+    if (Array.isArray(data)) {
+      notifViewItems = data;
+      notifViewTotal = data.length;
+      notifViewTotalPages = 1;
+    } else {
+      notifViewItems = (data && data.items) || [];
+      notifViewTotal = (data && data.total) || 0;
+      notifViewTotalPages = (data && data.totalPages) || 1;
+    }
+  } catch (e) {
+    notifViewItems = [];
+    notifViewTotal = 0;
+    notifViewTotalPages = 1;
+    console.warn('Bildirimler yüklenemedi:', e);
+  }
+  notifViewLoading = false;
+  if (loadingEl) loadingEl.classList.add('hidden');
+  renderNotificationsTable();
 }
 
 var notificationsPage = 1;
@@ -6041,114 +6166,212 @@ var notificationsPageSize = 20;
 
 function setNotificationsTypeFilter(type) {
   ui.notificationsTypeFilter = type;
-  notificationsPage = 1;
-  if (els.notificationsFilterAll) {
-    els.notificationsFilterAll.classList.toggle("is-active", type === "all");
-    els.notificationsFilterAll.setAttribute("aria-selected", type === "all" ? "true" : "false");
+  notifViewPage = 1;
+  var tabDefs = [
+    { key: 'all', id: 'notificationsFilterAll' },
+    { key: 'cancel', id: 'notificationsFilterCancel' },
+    { key: 'checkin', id: 'notificationsFilterCheckin' },
+    { key: 'shift_reminder', id: 'notificationsFilterReminder' },
+    { key: 'broadcast', id: 'notificationsFilterBroadcast' },
+  ];
+  tabDefs.forEach(function (t) {
+    var btn = document.getElementById(t.id) || els[t.id];
+    if (!btn) return;
+    btn.classList.toggle('is-active', type === t.key);
+    btn.setAttribute('aria-selected', type === t.key ? 'true' : 'false');
+  });
+  if (type === 'broadcast') {
+    renderNotificationsTable();
+  } else {
+    loadNotifPeriodData();
   }
-  if (els.notificationsFilterCancel) {
-    els.notificationsFilterCancel.classList.toggle("is-active", type === "cancel");
-    els.notificationsFilterCancel.setAttribute("aria-selected", type === "cancel" ? "true" : "false");
-  }
-  if (els.notificationsFilterCheckin) {
-    els.notificationsFilterCheckin.classList.toggle("is-active", type === "checkin");
-    els.notificationsFilterCheckin.setAttribute("aria-selected", type === "checkin" ? "true" : "false");
-  }
-  if (els.notificationsFilterBroadcast) {
-    els.notificationsFilterBroadcast.classList.toggle("is-active", type === "broadcast");
-    els.notificationsFilterBroadcast.setAttribute("aria-selected", type === "broadcast" ? "true" : "false");
-  }
-  renderNotificationsTable();
 }
 
 function renderNotificationsTable() {
   var content = els.notificationsContent;
   if (!content) return;
-  var filterText = getAdminListFilterText();
-  var typeFilter = ui.notificationsTypeFilter || "all";
+  var typeFilter = ui.notificationsTypeFilter || 'all';
 
-  // ── Gönderilmiş Bildirimler sekmesi ────────────────────────────────────
-  if (typeFilter === "broadcast") {
+  if (typeFilter === 'broadcast') {
     renderBroadcastHistory(content);
     return;
   }
-  var list = (ui.notifications || []).filter(function (n) {
-    if (typeFilter !== "all" && n.type !== typeFilter) return false;
-    if (filterText) {
-      var haystack = ((n.memberName || "") + " " + (n.staffName || "")).toLowerCase();
-      if (!haystack.includes(filterText.toLowerCase())) return false;
-    }
-    return true;
+
+  if (notifViewLoading) {
+    content.innerHTML = '<div class="admin-panel-loading hint">Yükleniyor…</div>';
+    return;
+  }
+
+  var list = (notifViewItems || []).filter(function (n) {
+    return typeFilter === 'all' || n.type === typeFilter;
   });
 
   if (!list.length) {
     content.innerHTML = '<div class="admin-panel-empty admin-panel-empty--compact"><p>' +
-      ((ui.notifications || []).length === 0 ? "Henüz bildirim yok." : "Filtreye uyan bildirim yok.") +
-      "</p></div>";
+      (notifViewTotal === 0 ? 'Bu dönemde bildirim yok.' : 'Filtreye uyan bildirim yok.') +
+      '</p></div>';
     return;
   }
 
-  var lastSeen = getLastSeenNotificationAt();
-  var wrap = document.createElement("div");
-  wrap.className = "expired-memberships-table-wrap notifications-table-wrap";
-  var table = document.createElement("table");
-  table.className = "expired-memberships-table notifications-table";
+  var wrap = document.createElement('div');
+  wrap.className = 'expired-memberships-table-wrap notifications-table-wrap';
+  var table = document.createElement('table');
+  table.className = 'expired-memberships-table notifications-table';
   table.innerHTML =
-    "<thead><tr><th>İptal Zamanı</th><th>Randevu</th><th>Tür</th><th>Üye</th><th>Personel</th></tr></thead><tbody></tbody>";
-  var tbody = table.querySelector("tbody");
+    '<thead><tr><th>Zaman</th><th>Tür</th><th>Üye / Başlık</th><th>Personel / Detay</th></tr></thead><tbody></tbody>';
+  var tbody = table.querySelector('tbody');
 
-  var paginationEl = document.createElement("div");
-  paginationEl.className = "list-pagination";
-  notificationsPage = renderPaginationBar(paginationEl, {
-    page: notificationsPage,
-    pageSize: notificationsPageSize,
-    total: list.length,
-    onPageChange: function (p) { notificationsPage = p; renderNotificationsTable(); },
-    onPageSizeChange: function (size) { notificationsPageSize = size; notificationsPage = 1; renderNotificationsTable(); },
+  var notifFmt = new Intl.DateTimeFormat('tr-TR', {
+    timeZone: 'Europe/Istanbul',
+    day: '2-digit', month: '2-digit',
+    hour: '2-digit', minute: '2-digit', hour12: false,
   });
-  var pageItems = list.slice(
-    (notificationsPage - 1) * notificationsPageSize,
-    notificationsPage * notificationsPageSize
-  );
 
-  pageItems.forEach(function (n) {
-    var row = document.createElement("tr");
-    row.className = "notifications-table__row";
-    if (n.at > lastSeen) row.classList.add("notifications-table__row--unread");
-    var cancelledAt = new Date(n.at).toLocaleString("tr-TR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-    var apptTime = n.startTs ? formatSessionDateTimeLabel(n.startTs) : "—";
+  list.forEach(function (n) {
+    var row = document.createElement('tr');
+    row.className = 'notifications-table__row';
+
+    var typeLabel, typeCls, rowCls;
+    if (n.type === 'cancel') {
+      typeLabel = 'İptal';
+      typeCls = 'notif-type-badge notif-type-badge--cancel';
+      rowCls = 'notifications-table__row--cancel';
+    } else if (n.type === 'checkin') {
+      var src = n.source === 'phone' ? 'Telefon' : n.source === 'card' ? 'Kart' : 'QR';
+      typeLabel = 'Giriş · ' + src;
+      typeCls = 'notif-type-badge notif-type-badge--checkin';
+      rowCls = 'notifications-table__row--checkin';
+    } else if (n.type === 'shift_reminder') {
+      typeLabel = 'Hatırlatma';
+      typeCls = 'notif-type-badge notif-type-badge--reminder';
+      rowCls = 'notifications-table__row--reminder';
+    } else {
+      typeLabel = n.type || '—';
+      typeCls = 'notif-type-badge';
+      rowCls = '';
+    }
+    if (rowCls) row.classList.add(rowCls);
+
+    var atStr = n.at ? notifFmt.format(new Date(n.at)) : '—';
+
+    var memberOrTitle, staffOrDetail;
+    if (n.type === 'shift_reminder') {
+      memberOrTitle = n.title || 'Onay bekleyen seanslar';
+      staffOrDetail = n.body || '';
+    } else if (n.type === 'cancel') {
+      memberOrTitle = n.memberName || '—';
+      staffOrDetail = (n.staffName || '—') + (n.startTs ? ' · ' + formatSessionDateTimeLabel(n.startTs) : '');
+    } else {
+      memberOrTitle = n.memberName || '—';
+      staffOrDetail = n.staffName || (n.startTs ? formatSessionDateTimeLabel(n.startTs) : '—');
+    }
+
     row.innerHTML =
-      "<td>" + escapeHtml(cancelledAt) + "</td>" +
-      "<td>" + escapeHtml(apptTime) + "</td>" +
-      "<td>" + escapeHtml(formatNotificationTypeLabel(n.type, n.source)) + "</td>" +
-      "<td>" + escapeHtml(n.memberName || "—") + "</td>" +
-      "<td>" + escapeHtml(n.staffName || "—") + "</td>";
+      '<td>' + escapeHtml(atStr) + '</td>' +
+      '<td><span class="' + typeCls + '">' + escapeHtml(typeLabel) + '</span></td>' +
+      '<td>' + escapeHtml(memberOrTitle) + '</td>' +
+      '<td class="notifications-table__detail">' + escapeHtml(staffOrDetail) + '</td>';
     tbody.appendChild(row);
   });
 
-  content.innerHTML = "";
+  var paginationEl = document.createElement('div');
+  paginationEl.className = 'list-pagination';
+  renderPaginationBar(paginationEl, {
+    page: notifViewPage,
+    pageSize: notificationsPageSize,
+    total: notifViewTotal,
+    onPageChange: function (p) { notifViewPage = p; loadNotifPeriodData(); },
+    onPageSizeChange: function (size) { notificationsPageSize = size; notifViewPage = 1; loadNotifPeriodData(); },
+  });
+
+  content.innerHTML = '';
   wrap.appendChild(table);
   content.appendChild(wrap);
   content.appendChild(paginationEl);
 }
 
 function openNotificationsView() {
-  showAdminMainView("notifications");
-  notificationsPage = 1;
+  showAdminMainView('notifications');
+  notifViewPage = 1;
+  notifAnchor = Date.now();
   _broadcastHistoryPage = 1;
   _broadcastHistoryCache = null;
   _broadcastRecipientCache = {};
-  loadAdminNotificationsList().then(function () {
-    var maxAt = (ui.notifications || []).reduce(function (acc, n) { return Math.max(acc, n.at); }, 0);
-    if (maxAt > 0) setLastSeenNotificationAt(maxAt);
-    updateNotificationsNavBadge();
-    renderNotificationsTable();
+  updateNotifPeriodUI();
+
+  // Rozet sayacını sıfırla
+  var maxAt = (ui.notifications || []).reduce(function (acc, n) { return Math.max(acc, n.at); }, 0);
+  if (maxAt > 0) setLastSeenNotificationAt(maxAt);
+  updateNotificationsNavBadge();
+
+  // Dönem bazlı veri yükle
+  loadNotifPeriodData();
+
+  // Dönem butonu listener'ları (bir kez bağla)
+  var periodBtns = [
+    { id: 'notifPeriodDay', period: 'day' },
+    { id: 'notifPeriodWeek', period: 'week' },
+    { id: 'notifPeriodMonth', period: 'month' },
+    { id: 'notifPeriodYear', period: 'year' },
+  ];
+  periodBtns.forEach(function (pb) {
+    var btn = document.getElementById(pb.id);
+    if (btn && !btn._notifBound) {
+      btn._notifBound = true;
+      btn.addEventListener('click', function () {
+        notifPeriod = pb.period;
+        notifViewPage = 1;
+        updateNotifPeriodUI();
+        loadNotifPeriodData();
+      });
+    }
   });
+
+  // Tarih navigasyon listener'ları (bir kez bağla)
+  var prevBtn = document.getElementById('notifNavPrev');
+  if (prevBtn && !prevBtn._notifBound) {
+    prevBtn._notifBound = true;
+    prevBtn.addEventListener('click', function () {
+      notifAnchor = notifStepAnchor(notifPeriod, notifAnchor, -1);
+      notifViewPage = 1;
+      updateNotifPeriodUI();
+      loadNotifPeriodData();
+    });
+  }
+  var nextBtn = document.getElementById('notifNavNext');
+  if (nextBtn && !nextBtn._notifBound) {
+    nextBtn._notifBound = true;
+    nextBtn.addEventListener('click', function () {
+      notifAnchor = notifStepAnchor(notifPeriod, notifAnchor, 1);
+      notifViewPage = 1;
+      updateNotifPeriodUI();
+      loadNotifPeriodData();
+    });
+  }
+  var labelBtn = document.getElementById('notifNavLabel');
+  if (labelBtn && !labelBtn._notifBound) {
+    labelBtn._notifBound = true;
+    labelBtn.addEventListener('click', function () {
+      notifAnchor = Date.now();
+      notifViewPage = 1;
+      updateNotifPeriodUI();
+      loadNotifPeriodData();
+    });
+  }
+
   // Broadcast tab listener (bir kez bağla)
-  if (els.notificationsFilterBroadcast && !els.notificationsFilterBroadcast._bound) {
-    els.notificationsFilterBroadcast._bound = true;
-    els.notificationsFilterBroadcast.addEventListener('click', function () {
+  var broadcastTab = document.getElementById('notificationsFilterBroadcast') || els.notificationsFilterBroadcast;
+  if (broadcastTab && !broadcastTab._bound) {
+    broadcastTab._bound = true;
+    broadcastTab.addEventListener('click', function () {
       setNotificationsTypeFilter('broadcast');
+    });
+  }
+  var reminderTab = document.getElementById('notificationsFilterReminder');
+  if (reminderTab && !reminderTab._bound) {
+    reminderTab._bound = true;
+    reminderTab.addEventListener('click', function () {
+      setNotificationsTypeFilter('shift_reminder');
     });
   }
 }
@@ -13326,9 +13549,9 @@ function bindEvents() {
   if (els.reportsPrevYearBtn) els.reportsPrevYearBtn.addEventListener("click", function () { reportsYear--; if (els.reportsYearLabel) els.reportsYearLabel.textContent = reportsYear; loadAndRenderReports(); });
   if (els.reportsNextYearBtn) els.reportsNextYearBtn.addEventListener("click", function () { reportsYear++; if (els.reportsYearLabel) els.reportsYearLabel.textContent = reportsYear; loadAndRenderReports(); });
   if (els.reportsToggleFormerBtn) els.reportsToggleFormerBtn.addEventListener("click", function () { reportsShowFormer = !reportsShowFormer; updateReportsFormerToggleUI(); renderReportsTable(); });
-  if (els.notificationsFilterAll) els.notificationsFilterAll.addEventListener("click", function () { setNotificationsTypeFilter("all"); });
-  if (els.notificationsFilterCancel) els.notificationsFilterCancel.addEventListener("click", function () { setNotificationsTypeFilter("cancel"); });
-  if (els.notificationsFilterCheckin) els.notificationsFilterCheckin.addEventListener("click", function () { setNotificationsTypeFilter("checkin"); });
+  if (els.notificationsFilterAll) els.notificationsFilterAll.addEventListener('click', function () { setNotificationsTypeFilter('all'); });
+  if (els.notificationsFilterCancel) els.notificationsFilterCancel.addEventListener('click', function () { setNotificationsTypeFilter('cancel'); });
+  if (els.notificationsFilterCheckin) els.notificationsFilterCheckin.addEventListener('click', function () { setNotificationsTypeFilter('checkin'); });
   if (els.memberOpenPackageRequestBtn) els.memberOpenPackageRequestBtn.addEventListener("click", openMemberPackageRequestModal);
   if (els.memberPackageRequestSubmitBtn) {
     els.memberPackageRequestSubmitBtn.addEventListener("click", submitMemberPackageRequestFromModal);

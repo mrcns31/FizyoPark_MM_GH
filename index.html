@@ -785,10 +785,24 @@
             <div class="admin-main-panel__head-row">
               <h2 class="admin-main-panel__title">Bildirimler</h2>
             </div>
+            <div class="notif-period-row">
+              <button type="button" class="notif-period-btn is-active" id="notifPeriodDay" data-period="day">Gün</button>
+              <button type="button" class="notif-period-btn" id="notifPeriodWeek" data-period="week">Hafta</button>
+              <button type="button" class="notif-period-btn" id="notifPeriodMonth" data-period="month">Ay</button>
+              <button type="button" class="notif-period-btn" id="notifPeriodYear" data-period="year">Yıl</button>
+            </div>
+            <div class="notif-nav-row">
+              <button type="button" class="btn btn--ghost btn--icon" id="notifNavPrev" aria-label="Önceki dönem">&#8249;</button>
+              <button type="button" class="notif-nav-label" id="notifNavLabel" title="Bugüne dön">—</button>
+              <button type="button" class="btn btn--ghost btn--icon" id="notifNavNext" aria-label="Sonraki dönem">&#8250;</button>
+              <span class="notif-nav-loading hidden" id="notifNavLoading">yükleniyor…</span>
+            </div>
             <div class="entry-list-tabs" role="tablist" aria-label="Bildirim türü">
               <button type="button" id="notificationsFilterAll" class="entry-list-tab is-active" role="tab" aria-selected="true" data-notification-filter="all">Tümü</button>
               <button type="button" id="notificationsFilterCancel" class="entry-list-tab" role="tab" aria-selected="false" data-notification-filter="cancel">İptaller</button>
-              <button type="button" id="notificationsFilterBroadcast" class="entry-list-tab" role="tab" aria-selected="false" data-notification-filter="broadcast">Gönderilmiş Bildirimler</button>
+              <button type="button" id="notificationsFilterCheckin" class="entry-list-tab" role="tab" aria-selected="false" data-notification-filter="checkin">Check-in</button>
+              <button type="button" id="notificationsFilterReminder" class="entry-list-tab" role="tab" aria-selected="false" data-notification-filter="shift_reminder">Hatırlatmalar</button>
+              <button type="button" id="notificationsFilterBroadcast" class="entry-list-tab" role="tab" aria-selected="false" data-notification-filter="broadcast">Gönderilmiş</button>
             </div>
           </header>
           <div id="notificationsContent" class="admin-main-panel__content"></div>
