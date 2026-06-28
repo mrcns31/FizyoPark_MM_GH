@@ -590,18 +590,43 @@ router.get('/dashboard', requireMember, async (req, res) => {
     }
 
     const notifications = [];
-    if (activePackage && activePackage.remainingSessions < 4 && activePackage.remainingSessions > 0) {
-      notifications.push({
-        type: 'package_low',
-        message: `Paketiniz bitmek üzere. Kalan seans: ${activePackage.remainingSessions}`,
-        remainingSessions: activePackage.remainingSessions,
-      });
-    } else if (activePackage && activePackage.remainingSessions === 0) {
-      notifications.push({
-        type: 'package_empty',
-        message: 'Aktif paketinizde kullanılabilir seans hakkı kalmadı.',
-        remainingSessions: 0,
-      });
+    if (activePackage) {
+      const rem  = activePackage.remainingSessions;
+      const total = activePackage.lessonCount || 0;
+      const sessionThreshold = Math.ceil(total * 0.25);
+
+      if (rem === 0) {
+        notifications.push({
+          type: 'package_empty',
+          message: 'Aktif paketinizde kullanılabilir seans hakkı kalmadı.',
+          remainingSessions: 0,
+        });
+      } else if (rem <= sessionThreshold) {
+        notifications.push({
+          type: 'package_low',
+          message: `Paketiniz bitmek üzere. Kalan seans hakkı: ${rem}`,
+          remainingSessions: rem,
+        });
+      } else {
+        // Seans hâlâ yeterliyse süre bazlı kontrol
+        const startMs = activePackage.startDate
+          ? new Date(activePackage.startDate + 'T00:00:00Z').getTime() : null;
+        const endMs = activePackage.endDate
+          ? new Date(activePackage.endDate + 'T00:00:00Z').getTime() : null;
+        const todayMs = new Date(todayStr + 'T00:00:00Z').getTime();
+        if (startMs && endMs) {
+          const totalDays = Math.round((endMs - startMs) / 86400000);
+          const daysLeft = Math.round((endMs - todayMs) / 86400000);
+          const expiryThresholdDays = Math.ceil(totalDays * 0.25);
+          if (daysLeft > 0 && daysLeft <= expiryThresholdDays) {
+            notifications.push({
+              type: 'package_expiry_warning',
+              message: `Paketinizin kullanım süresi ${daysLeft} gün içinde sona erecek. Kalan seans hakkınız: ${rem}.`,
+              remainingSessions: rem,
+            });
+          }
+        }
+      }
     }
 
     const deletionRequestedAt = member.deletion_requested_at || null;

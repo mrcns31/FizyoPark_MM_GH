@@ -27,6 +27,7 @@ import closurePeriodsRoutes from './routes/closure-periods.js';
 import doorRoutes from './routes/door.js';
 import adminBroadcastRoutes from './routes/admin-broadcast.js';
 import { run24hReminders, runMorningReminders } from './utils/sessionReminders.js';
+import { runAutoCompletePackages, runPackageNotifications } from './utils/packageNotifications.js';
 
 dotenv.config();
 
@@ -132,6 +133,19 @@ setInterval(async () => {
       await runMorningReminders(now);
     } catch (err) {
       console.error('[sessionReminders] morning hata:', err.message);
+    }
+  }
+  // Istanbul saati 09:xx → günlük paket expire + bildirim taraması
+  if (istanbulHour === 9) {
+    try {
+      await runAutoCompletePackages();
+    } catch (err) {
+      console.error('[dailyCron] autoComplete hata:', err.message);
+    }
+    try {
+      await runPackageNotifications();
+    } catch (err) {
+      console.error('[dailyCron] packageNotifications hata:', err.message);
     }
   }
 }, 60 * 60 * 1000);

@@ -51,7 +51,7 @@ export function computePackageSessionCounts(sessions, lessonCount, now = Date.no
     consumedSessions,
     remainingSessions,
     scheduledFuture,
-    totalSessions: active.length,
+    totalSessions: Number(lessonCount || 0),
   };
 }
 

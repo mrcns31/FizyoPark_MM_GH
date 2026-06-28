@@ -126,7 +126,7 @@ export function MemberHomeScreen() {
             <View style={styles.statsRow}>
               <Stat value={ap.usedSessions} label="Kullanılan" />
               <Stat value={ap.remainingSessions} label="Kalan" tone="green" />
-              <Stat value={ap.totalSessions} label="Toplam" />
+              <Stat value={ap.lessonCount} label="Toplam" />
             </View>
             <Muted>{ap.startDate} → {ap.endDate}</Muted>
           </View>
