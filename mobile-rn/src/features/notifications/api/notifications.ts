@@ -2,10 +2,14 @@ import { apiClient } from '../../../lib/api-client';
 
 export interface StaffNotification {
   id: number;
-  type: string;   // 'cancel' | 'checkin'
+  type: string;   // 'admin_cancel' | 'member_cancel' | 'checkin' | 'shift_reminder'
   title: string;
   body: string;
   at: number;     // ms timestamp
+  memberName: string;
+  staffName: string;
+  startTs: number | null;
+  source: string;
   createdAt: string;
   readAt: string | null;
 }
@@ -46,10 +50,13 @@ function fromApi(row: any): StaffNotification {
   let body = '';
 
   if (type === 'shift_reminder') {
-    // Backend'den direkt title/body gelir
     title = row.title || 'Onay bekleyen seanslar';
     body  = row.body  || 'Bu gün için onaylanmamış seans var.';
-  } else if (type === 'cancel') {
+  } else if (type === 'member_cancel') {
+    // staff_notifications'dan gelen üye iptali — title/body zaten hazır
+    title = row.title || 'Üye Randevu İptali';
+    body  = row.body  || '';
+  } else if (type === 'admin_cancel') {
     const startTs = row.startTs ?? row.start_ts;
     let datePart = '';
     if (startTs) {
@@ -63,9 +70,9 @@ function fromApi(row: any): StaffNotification {
       const min = String(sd.getUTCMinutes()).padStart(2, '0');
       datePart = `${dd}.${mm}.${yyyy} ${DAYS[sd.getUTCDay()]} ${hh}:${min}`;
     }
-    title = 'Admin İptali';
-    const parts = [memberName, datePart, staffName, 'Seans İptali'].filter(Boolean);
-    body = parts.join(' / ');
+    title = 'Admin Randevu İptali';
+    const parts: string[] = [memberName, datePart].filter(Boolean);
+    body = parts.join(', ') + (staffName ? ` - ${staffName} ile olan randevusu iptal edildi` : ' iptal edildi');
   } else {
     const methodLabel = source === 'card' ? 'Kart' : source === 'phone' ? 'Telefon' : 'QR';
     const timeLabel = at ? (() => {
@@ -85,6 +92,10 @@ function fromApi(row: any): StaffNotification {
     title,
     body,
     at,
+    memberName,
+    staffName,
+    startTs: row.startTs ?? row.start_ts ?? null,
+    source,
     createdAt: at ? new Date(at).toISOString() : '',
     readAt: null,
   };

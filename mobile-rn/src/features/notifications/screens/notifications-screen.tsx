@@ -130,7 +130,11 @@ function AdminNotifications({ wide }: { wide: object }) {
   const { data, isLoading, isFetching } = useNotifications(since, until, page, PER_PAGE);
 
   const items = useMemo(
-    () => (data?.items ?? []).filter((n) => typeFilter === 'all' || n.type === typeFilter),
+    () => (data?.items ?? []).filter((n) => {
+      if (typeFilter === 'all') return true;
+      if (typeFilter === 'admin_cancel') return n.type === 'admin_cancel' || n.type === 'member_cancel';
+      return n.type === typeFilter;
+    }),
     [data, typeFilter],
   );
 
@@ -224,36 +228,32 @@ function NotificationList({ items, isLoading, totalPages, page, setPage, wide }:
         ) : null
       }
       renderItem={({ item }: { item: StaffNotification }) => {
-        const isAdminCancel = item.type === 'admin_cancel';
-        const isReminder    = item.type === 'shift_reminder';
-        const iconName      = isAdminCancel ? 'close-circle-outline' : isReminder ? 'alert-circle-outline' : 'checkmark-circle-outline';
-        const iconColor     = isAdminCancel ? colors.danger : isReminder ? colors.fpOrange : colors.ok;
-
-        let title = item.title ?? '';
-        let body  = item.body  ?? '';
-        if (isAdminCancel) {
-          title = 'Admin Randevu İptali';
-          const datePart = item.startTs
-            ? new Date(item.startTs).toLocaleString('tr-TR', {
-                timeZone: 'Europe/Istanbul',
-                day: '2-digit', month: '2-digit', year: 'numeric',
-                weekday: 'long', hour: '2-digit', minute: '2-digit',
-              })
-            : '';
-          const parts: string[] = [];
-          if (item.memberName) parts.push(item.memberName);
-          if (datePart) parts.push(datePart);
-          body = parts.join(', ') + (item.staffName ? ' - ' + item.staffName + ' ile olan randevusu iptal edildi' : ' iptal edildi');
-        }
+        const isAdminCancel  = item.type === 'admin_cancel';
+        const isMemberCancel = item.type === 'member_cancel';
+        const isReminder     = item.type === 'shift_reminder';
+        const iconName = isAdminCancel
+          ? 'close-circle-outline'
+          : (isMemberCancel || isReminder)
+            ? 'alert-circle-outline'
+            : 'checkmark-circle-outline';
+        const iconColor = isAdminCancel
+          ? colors.danger
+          : (isMemberCancel || isReminder)
+            ? colors.fpOrange
+            : colors.ok;
 
         return (
-          <View style={[styles.item, isReminder && styles.itemReminder, isAdminCancel && styles.itemCancel]}>
+          <View style={[
+            styles.item,
+            (isMemberCancel || isReminder) && styles.itemReminder,
+            isAdminCancel && styles.itemCancel,
+          ]}>
             <View style={styles.itemHead}>
               <Ionicons name={iconName} size={18} color={iconColor} />
-              <Text style={styles.title} numberOfLines={1}>{title}</Text>
+              <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
               <Text style={styles.time}>{fmtAt(item.at)}</Text>
             </View>
-            {body ? <Text style={styles.body} numberOfLines={2}>{body}</Text> : null}
+            {item.body ? <Text style={styles.body} numberOfLines={2}>{item.body}</Text> : null}
           </View>
         );
       }}
