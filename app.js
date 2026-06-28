@@ -6040,11 +6040,15 @@ function updateNotificationsNavBadge() {
 }
 
 function formatNotificationTypeLabel(type, source) {
+  if (type === 'admin_cancel') return 'Admin İptali';
+  if (type === 'member_cancel') return 'Üye İptali';
   if (type === 'shift_reminder') return 'Hatırlatma';
-  if (type !== 'checkin') return 'İptal';
-  if (source === 'phone') return 'Giriş (Telefon)';
-  if (source === 'card') return 'Giriş (Kart)';
-  return 'Giriş (QR)';
+  if (type === 'checkin') {
+    if (source === 'phone') return 'Giriş (Telefon)';
+    if (source === 'card') return 'Giriş (Kart)';
+    return 'Giriş (QR)';
+  }
+  return type || '—';
 }
 
 // ── Dönem navigasyonu yardımcı fonksiyonları ──────────────────────────────
@@ -6169,7 +6173,7 @@ function setNotificationsTypeFilter(type) {
   notifViewPage = 1;
   var tabDefs = [
     { key: 'all', id: 'notificationsFilterAll' },
-    { key: 'cancel', id: 'notificationsFilterCancel' },
+    { key: 'admin_cancel', id: 'notificationsFilterCancel' },
     { key: 'checkin', id: 'notificationsFilterCheckin' },
     { key: 'shift_reminder', id: 'notificationsFilterReminder' },
     { key: 'broadcast', id: 'notificationsFilterBroadcast' },
@@ -6203,7 +6207,9 @@ function renderNotificationsTable() {
   }
 
   var list = (notifViewItems || []).filter(function (n) {
-    return typeFilter === 'all' || n.type === typeFilter;
+    if (typeFilter === 'all') return true;
+    if (typeFilter === 'admin_cancel') return n.type === 'admin_cancel' || n.type === 'member_cancel';
+    return n.type === typeFilter;
   });
 
   if (!list.length) {
@@ -6232,10 +6238,14 @@ function renderNotificationsTable() {
     row.className = 'notifications-table__row';
 
     var typeLabel, typeCls, rowCls;
-    if (n.type === 'cancel') {
-      typeLabel = 'İptal';
+    if (n.type === 'admin_cancel') {
+      typeLabel = 'Admin İptali';
       typeCls = 'notif-type-badge notif-type-badge--cancel';
       rowCls = 'notifications-table__row--cancel';
+    } else if (n.type === 'member_cancel') {
+      typeLabel = 'Üye İptali';
+      typeCls = 'notif-type-badge notif-type-badge--reminder';
+      rowCls = 'notifications-table__row--reminder';
     } else if (n.type === 'checkin') {
       var src = n.source === 'phone' ? 'Telefon' : n.source === 'card' ? 'Kart' : 'QR';
       typeLabel = 'Giriş · ' + src;
@@ -6255,12 +6265,18 @@ function renderNotificationsTable() {
     var atStr = n.at ? notifFmt.format(new Date(n.at)) : '—';
 
     var memberOrTitle, staffOrDetail;
-    if (n.type === 'shift_reminder') {
-      memberOrTitle = n.title || 'Onay bekleyen seanslar';
+    if (n.type === 'shift_reminder' || n.type === 'member_cancel') {
+      memberOrTitle = n.title || (n.type === 'member_cancel' ? 'Üye Randevu İptali' : 'Onay bekleyen seanslar');
       staffOrDetail = n.body || '';
-    } else if (n.type === 'cancel') {
-      memberOrTitle = n.memberName || '—';
-      staffOrDetail = (n.staffName || '—') + (n.startTs ? ' · ' + formatSessionDateTimeLabel(n.startTs) : '');
+    } else if (n.type === 'admin_cancel') {
+      memberOrTitle = n.title || 'Admin Randevu İptali';
+      var parts = [];
+      if (n.memberName) parts.push(n.memberName);
+      if (n.startTs) parts.push(new Intl.DateTimeFormat('tr-TR', {
+        timeZone: 'Europe/Istanbul', day: '2-digit', month: '2-digit',
+        year: 'numeric', weekday: 'long', hour: '2-digit', minute: '2-digit', hour12: false,
+      }).format(new Date(n.startTs)));
+      staffOrDetail = parts.join(', ') + (n.staffName ? ' - ' + n.staffName + ' ile olan randevusu iptal edildi' : ' iptal edildi');
     } else {
       memberOrTitle = n.memberName || '—';
       staffOrDetail = n.staffName || (n.startTs ? formatSessionDateTimeLabel(n.startTs) : '—');
@@ -13550,7 +13566,7 @@ function bindEvents() {
   if (els.reportsNextYearBtn) els.reportsNextYearBtn.addEventListener("click", function () { reportsYear++; if (els.reportsYearLabel) els.reportsYearLabel.textContent = reportsYear; loadAndRenderReports(); });
   if (els.reportsToggleFormerBtn) els.reportsToggleFormerBtn.addEventListener("click", function () { reportsShowFormer = !reportsShowFormer; updateReportsFormerToggleUI(); renderReportsTable(); });
   if (els.notificationsFilterAll) els.notificationsFilterAll.addEventListener('click', function () { setNotificationsTypeFilter('all'); });
-  if (els.notificationsFilterCancel) els.notificationsFilterCancel.addEventListener('click', function () { setNotificationsTypeFilter('cancel'); });
+  if (els.notificationsFilterCancel) els.notificationsFilterCancel.addEventListener('click', function () { setNotificationsTypeFilter('admin_cancel'); });
   if (els.notificationsFilterCheckin) els.notificationsFilterCheckin.addEventListener('click', function () { setNotificationsTypeFilter('checkin'); });
   if (els.memberOpenPackageRequestBtn) els.memberOpenPackageRequestBtn.addEventListener("click", openMemberPackageRequestModal);
   if (els.memberPackageRequestSubmitBtn) {
