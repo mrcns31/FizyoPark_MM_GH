@@ -508,3 +508,20 @@ export async function getStaffRowForUser(db, userId) {
   );
   return r.rows[0] ?? null;
 }
+
+// Tüm aktif personelin mesai bitimi bildirimleri — server.js cron'undan çağrılır
+export async function runAllShiftEndReminders(db, now = Date.now()) {
+  const { rows: staffRows } = await db.query(
+    `SELECT id, user_id, working_hours FROM staff
+     WHERE deleted_at IS NULL AND user_id IS NOT NULL`
+  );
+  let notified = 0;
+  for (const staff of staffRows) {
+    try {
+      const r = await runShiftEndAttendanceReminder(db, staff, now);
+      if (r.notified) notified++;
+    } catch { /* tek personel hatası diğerlerini engellemesin */ }
+  }
+  if (notified > 0) console.log(`[shiftReminder] ${notified} personele mesai sonu bildirimi gönderildi`);
+  return { notified, checked: staffRows.length };
+}

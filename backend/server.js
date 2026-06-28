@@ -26,8 +26,10 @@ import packageRequestsRoutes from './routes/package-requests.js';
 import closurePeriodsRoutes from './routes/closure-periods.js';
 import doorRoutes from './routes/door.js';
 import adminBroadcastRoutes from './routes/admin-broadcast.js';
-import { run24hReminders, runMorningReminders } from './utils/sessionReminders.js';
+import { run24hReminders } from './utils/sessionReminders.js';
 import { runAutoCompletePackages, runPackageNotifications } from './utils/packageNotifications.js';
+import { runAllShiftEndReminders } from './utils/sessionAttendance.js';
+import db from './config/database.js';
 
 dotenv.config();
 
@@ -118,34 +120,20 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`📊 Environment: ${process.env.NODE_ENV || 'development'}`);
 });
 
-// Randevu hatırlatma zamanlayıcısı — her saat çalışır
+// Saatlik zamanlayıcı
 setInterval(async () => {
   const now = Date.now();
-  try {
-    await run24hReminders(now);
-  } catch (err) {
-    console.error('[sessionReminders] 24h hata:', err.message);
-  }
-  // Istanbul saati 07:xx ise sabah bildirimleri
   const istanbulHour = new Date(now + 3 * 3600 * 1000).getUTCHours();
-  if (istanbulHour === 7) {
-    try {
-      await runMorningReminders(now);
-    } catch (err) {
-      console.error('[sessionReminders] morning hata:', err.message);
-    }
-  }
-  // Istanbul saati 09:xx → günlük paket expire + bildirim taraması
+
+  // Üye randevu hatırlatması: 23-25 saat penceresindeki seanslar (session_reminders ile tekrar engellenir)
+  try { await run24hReminders(now); } catch (err) { console.error('[sessionReminders] 24h hata:', err.message); }
+
+  // Mesai sonu personel bildirimi: tüm personel kontrol edilir, günde bir kez gönderilir
+  try { await runAllShiftEndReminders(db, now); } catch (err) { console.error('[shiftReminder] hata:', err.message); }
+
+  // Günlük (saat 09:xx Istanbul): paket expire + paket bildirim taraması
   if (istanbulHour === 9) {
-    try {
-      await runAutoCompletePackages();
-    } catch (err) {
-      console.error('[dailyCron] autoComplete hata:', err.message);
-    }
-    try {
-      await runPackageNotifications();
-    } catch (err) {
-      console.error('[dailyCron] packageNotifications hata:', err.message);
-    }
+    try { await runAutoCompletePackages(); } catch (err) { console.error('[dailyCron] autoComplete hata:', err.message); }
+    try { await runPackageNotifications(); } catch (err) { console.error('[dailyCron] packageNotifications hata:', err.message); }
   }
 }, 60 * 60 * 1000);
