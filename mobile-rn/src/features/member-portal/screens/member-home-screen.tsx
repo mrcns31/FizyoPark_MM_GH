@@ -47,6 +47,7 @@ export function MemberHomeScreen() {
   const [cancelTarget, setCancelTarget] = useState<MemberSession | null>(null);
   const [cancelReason, setCancelReason] = useState('');
   const [wantReschedule, setWantReschedule] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
   const allSessions = data?.activePackage?.sessions ?? [];
 
   // Okunmamış broadcast bildirimi modal
@@ -73,16 +74,18 @@ export function MemberHomeScreen() {
     setCancelTarget(s);
     setCancelReason('');
     setWantReschedule(false);
+    setCancelError(null);
   }
 
   async function confirmCancel() {
     const s = cancelTarget;
     if (!s) return;
+    setCancelError(null);
     try {
-      await cancelMutation.mutateAsync({
+      const result = await cancelMutation.mutateAsync({
         sessionId: s.id,
         body: { reason: cancelReason.trim(), requestNewAppointment: wantReschedule },
-      });
+      }) as { replenished?: boolean; replenishedReason?: string } | null;
       setCancelTarget(null);
       await refetch();
       const wa = (data?.contactWhatsApp || '').replace(/\D/g, '');
@@ -90,8 +93,11 @@ export function MemberHomeScreen() {
         const msg = `Merhaba, ${formatDayLabel(s.startTs)} ${formatTime(s.startTs)} seansımı iptal ettim, yeni randevu talep ediyorum.${cancelReason.trim() ? ` Sebep: ${cancelReason.trim()}` : ''}`;
         Linking.openURL(`https://wa.me/${wa}?text=${encodeURIComponent(msg)}`).catch(() => {});
       }
+      if (result?.replenished === false && result?.replenishedReason === 'no_available_slot') {
+        Alert.alert('Bilgi', 'Seans iptal edildi ancak paket bitiş tarihine kadar uygun yeni seans bulunamadı.');
+      }
     } catch (e) {
-      Alert.alert('Hata', (e as Error).message);
+      setCancelError((e as Error).message || 'İptal başarısız');
     }
   }
 
@@ -197,6 +203,9 @@ export function MemberHomeScreen() {
                     <Badge label={lbl} tone={tone} />
                   </View>
                 ) : null}
+                {showLocked ? (
+                  <Text style={styles.lockedInfo}>Randevular 2 saat kala iptal edilebilmektedir.</Text>
+                ) : null}
               </View>
             );
           }}
@@ -235,6 +244,9 @@ export function MemberHomeScreen() {
             <Text style={styles.cancelSheetDate}>
               {formatDayLabel(cancelTarget.startTs)} / {formatTime(cancelTarget.startTs)}
             </Text>
+            {ap?.packageType === 'flexible' ? (
+              <Text style={styles.flexibleInfo}>Randevular seans saatine 2 saat kala iptal edilebilmektedir.</Text>
+            ) : null}
             <Text style={styles.cancelLabel}>İptal sebebi (opsiyonel)</Text>
             <TextInput
               style={styles.cancelInput}
@@ -251,6 +263,9 @@ export function MemberHomeScreen() {
               </View>
               <Text style={styles.rescheduleText}>Yeni randevu talep etmek istiyorum</Text>
             </Pressable>
+            {cancelError ? (
+              <Text style={styles.cancelErrorText}>{cancelError}</Text>
+            ) : null}
             <Button
               title="Seansı iptal et"
               variant="danger"
@@ -360,6 +375,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.accent, alignItems: 'center',
   },
   notifCloseBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
+  lockedInfo: { color: colors.muted, fontSize: 11, marginTop: 2 },
+  flexibleInfo: { color: colors.muted, fontSize: 12, lineHeight: 17 },
+  cancelErrorText: { color: colors.danger, fontSize: 13 },
   cancelSheet: { gap: 12 },
   cancelSheetDate: { color: colors.text, fontWeight: '700', fontSize: 15 },
   cancelLabel: { color: colors.muted, fontSize: 12 },
