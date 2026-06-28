@@ -201,6 +201,7 @@ router.get('/notifications', [
   query('limit').optional().isInt({ min: 1, max: 100 }),
   query('page').optional().isInt({ min: 1 }),
   query('per_page').optional().isInt({ min: 1, max: 100 }),
+  query('types').optional().isString(),
 ], async (req, res) => {
   try {
     if (req.user.role === 'member') {
@@ -214,10 +215,14 @@ router.get('/notifications', [
     const page = req.query.page ? Math.max(1, Number(req.query.page)) : 1;
     const offset = (page - 1) * perPage;
 
+    // types=admin_cancel,member_cancel gibi virgülle ayrılmış tip filtresi
+    const ALLOWED_TYPES = new Set(['admin_cancel', 'member_cancel', 'shift_reminder', 'checkin']);
+    const typeFilter = req.query.types
+      ? String(req.query.types).split(',').map(t => t.trim()).filter(t => ALLOWED_TYPES.has(t))
+      : [];
+
     const params = [since, until];
     let cancelFilter = '';
-    let checkinFilter = '';
-    let walkinFilter = '';
 
     if (req.user.role === 'staff') {
       const staffResult = await db.query('SELECT id FROM staff WHERE user_id = $1', [req.user.userId]);
@@ -226,9 +231,7 @@ router.get('/notifications', [
       }
       const staffId = staffResult.rows[0].id;
       params.push(staffId);
-      cancelFilter  = ` AND s.staff_id = $${params.length}`;
-      checkinFilter = ` AND s.staff_id = $${params.length}`;
-      walkinFilter  = ' AND 1=0';
+      cancelFilter = ` AND s.staff_id = $${params.length}`;
     }
 
     // Personel için staff_notifications (shift reminder) UNION'ı
@@ -273,52 +276,34 @@ router.get('/notifications', [
         AND al.created_at AT TIME ZONE 'Europe/Istanbul' > to_timestamp($1 / 1000.0)
         AND al.created_at AT TIME ZONE 'Europe/Istanbul' <= to_timestamp($2 / 1000.0)${cancelFilter}
 
-      UNION ALL
-
-      SELECT al.id, 'checkin' AS type,
-             EXTRACT(EPOCH FROM al.created_at AT TIME ZONE 'Europe/Istanbul') * 1000 AS at_ts,
-             s.staff_id, s.start_ts,
-             COALESCE(NULLIF(TRIM(m.first_name || ' ' || m.last_name), ''), NULLIF(TRIM(m.name), '')) AS member_name,
-             TRIM(st.first_name || ' ' || st.last_name) AS staff_name,
-             al.details->>'checkInMethod' AS source,
-             NULL AS notif_title, NULL AS notif_body, NULL::timestamptz AS read_at
-      FROM activity_logs al
-      JOIN sessions s ON s.id::text = al.entity_id
-      LEFT JOIN members m ON m.id = s.member_id
-      LEFT JOIN staff st ON st.id = s.staff_id
-      WHERE al.action = 'session.check_in_qr'
-        AND al.created_at AT TIME ZONE 'Europe/Istanbul' > to_timestamp($1 / 1000.0)
-        AND al.created_at AT TIME ZONE 'Europe/Istanbul' <= to_timestamp($2 / 1000.0)${checkinFilter}
-
-      UNION ALL
-
-      SELECT fal.id, 'checkin' AS type,
-             EXTRACT(EPOCH FROM fal.accessed_at) * 1000 AS at_ts,
-             NULL::int AS staff_id, NULL::bigint AS start_ts,
-             COALESCE(NULLIF(TRIM(m.first_name || ' ' || m.last_name), ''), NULLIF(TRIM(m.name), '')) AS member_name,
-             NULL AS staff_name,
-             fal.source,
-             NULL AS notif_title, NULL AS notif_body, NULL::timestamptz AS read_at
-      FROM facility_access_logs fal
-      LEFT JOIN members m ON m.id = fal.member_id
-      WHERE fal.accessed_at > to_timestamp($1 / 1000.0)
-        AND fal.accessed_at <= to_timestamp($2 / 1000.0)
-        AND fal.member_id IS NOT NULL${walkinFilter}${shiftReminderSql}
+      ${shiftReminderSql}
     `;
+
+    // Type filtresi SQL koşulu
+    let typeWhere = '';
+    let finalParams = [...shiftParams];
+    if (typeFilter.length > 0) {
+      const idx = finalParams.length + 1;
+      typeWhere = ` WHERE type = ANY($${idx})`;
+      finalParams.push(typeFilter);
+    }
 
     // Toplam sayı
     let total = 0;
     try {
-      const countResult = await db.query(`SELECT COUNT(*) AS cnt FROM (${baseSql}) combined`, shiftParams);
+      const countResult = await db.query(
+        `SELECT COUNT(*) AS cnt FROM (${baseSql}) combined${typeWhere}`,
+        finalParams
+      );
       total = parseInt(countResult.rows[0]?.cnt ?? 0, 10);
     } catch { total = 0; }
 
     // Sayfalı veri
-    const offsetIdx = shiftParams.length + 1;
-    const limitIdx = shiftParams.length + 2;
+    const offsetIdx = finalParams.length + 1;
+    const limitIdx = finalParams.length + 2;
     const result = await db.query(
-      `SELECT * FROM (${baseSql}) combined ORDER BY at_ts DESC LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
-      [...shiftParams, offset, perPage]
+      `SELECT * FROM (${baseSql}) combined${typeWhere} ORDER BY at_ts DESC LIMIT $${limitIdx} OFFSET $${offsetIdx}`,
+      [...finalParams, offset, perPage]
     );
 
     const items = result.rows.map((r) => ({

@@ -826,6 +826,7 @@
     if (params && params.limit != null) qs.push('limit=' + encodeURIComponent(params.limit));
     if (params && params.page != null) qs.push('page=' + encodeURIComponent(params.page));
     if (params && params.per_page != null) qs.push('per_page=' + encodeURIComponent(params.per_page));
+    if (params && params.types) qs.push('types=' + encodeURIComponent(params.types));
     return apiFetch('/sessions/notifications' + (qs.length ? '?' + qs.join('&') : ''));
   }
 

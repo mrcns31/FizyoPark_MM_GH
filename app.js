@@ -6130,6 +6130,12 @@ function updateNotifPeriodUI() {
   if (label) label.textContent = notifPeriodLabel(notifPeriod, notifAnchor);
 }
 
+function notifTypeFilterToTypes(typeFilter) {
+  if (typeFilter === 'admin_cancel') return 'admin_cancel,member_cancel';
+  if (typeFilter === 'shift_reminder') return 'shift_reminder';
+  return null; // 'all' → filtre yok
+}
+
 async function loadNotifPeriodData() {
   if (notifViewLoading || !window.API || !window.API.getNotifications) return;
   var typeFilter = ui.notificationsTypeFilter || 'all';
@@ -6138,12 +6144,14 @@ async function loadNotifPeriodData() {
   var loadingEl = document.getElementById('notifNavLoading');
   if (loadingEl) loadingEl.classList.remove('hidden');
   var range = notifAnchorRange(notifPeriod, notifAnchor);
+  var types = notifTypeFilterToTypes(typeFilter);
   try {
     var data = await window.API.getNotifications({
       since: range.since,
       until: range.until,
       page: notifViewPage,
       per_page: notificationsPageSize,
+      types: types || undefined,
     });
     if (Array.isArray(data)) {
       notifViewItems = data;
@@ -6206,11 +6214,7 @@ function renderNotificationsTable() {
     return;
   }
 
-  var list = (notifViewItems || []).filter(function (n) {
-    if (typeFilter === 'all') return true;
-    if (typeFilter === 'admin_cancel') return n.type === 'admin_cancel' || n.type === 'member_cancel';
-    return n.type === typeFilter;
-  });
+  var list = notifViewItems || [];
 
   if (!list.length) {
     content.innerHTML = '<div class="admin-panel-empty admin-panel-empty--compact"><p>' +

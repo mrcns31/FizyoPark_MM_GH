@@ -8,10 +8,10 @@ export const notificationKeys = {
   latest: ['notifications', 'latest'] as const,
 };
 
-export function useNotifications(since: number, until: number, page: number, perPage = 20) {
+export function useNotifications(since: number, until: number, page: number, perPage = 20, types?: string) {
   return useQuery({
-    queryKey: notificationKeys.list(since, until, page),
-    queryFn: () => listNotifications({ since, until, page, perPage }),
+    queryKey: [...notificationKeys.list(since, until, page), types ?? 'all'],
+    queryFn: () => listNotifications({ since, until, page, perPage, types }),
     staleTime: 15_000,
   });
 }

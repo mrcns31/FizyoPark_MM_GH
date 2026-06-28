@@ -51,7 +51,6 @@ const PERIODS: { key: PeriodKey; label: string }[] = [
 const TYPE_FILTERS = [
   { key: 'all', label: 'Tümü' },
   { key: 'admin_cancel', label: 'İptaller' },
-  { key: 'checkin', label: 'Check-in' },
   { key: 'shift_reminder', label: 'Hatırlatmalar' },
 ] as const;
 type TypeFilter = (typeof TYPE_FILTERS)[number]['key'];
@@ -127,16 +126,11 @@ function AdminNotifications({ wide }: { wide: object }) {
   }, [latestData, anchorReady]);
 
   const { since, until } = useMemo(() => anchorRange(period, anchor), [period, anchor]);
-  const { data, isLoading, isFetching } = useNotifications(since, until, page, PER_PAGE);
-
-  const items = useMemo(
-    () => (data?.items ?? []).filter((n) => {
-      if (typeFilter === 'all') return true;
-      if (typeFilter === 'admin_cancel') return n.type === 'admin_cancel' || n.type === 'member_cancel';
-      return n.type === typeFilter;
-    }),
-    [data, typeFilter],
-  );
+  const types = typeFilter === 'all' ? undefined
+    : typeFilter === 'admin_cancel' ? 'admin_cancel,member_cancel'
+    : typeFilter;
+  const { data, isLoading, isFetching } = useNotifications(since, until, page, PER_PAGE, types);
+  const items = data?.items ?? [];
 
   function changePeriod(p: PeriodKey) { setPeriod(p); setAnchor(Date.now()); setPage(1); }
   function changeType(t: TypeFilter) { setTypeFilter(t); setPage(1); }

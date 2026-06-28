@@ -99,6 +99,7 @@ export async function listNotifications(opts: {
   period?: PeriodFilter;
   page?: number;
   perPage?: number;
+  types?: string;
 } = {}): Promise<NotificationsResult> {
   const { page = 1, perPage = 20 } = opts;
   let since: number;
@@ -111,9 +112,9 @@ export async function listNotifications(opts: {
     since = range.since;
     until = range.until;
   }
-  const { data } = await apiClient.get('/sessions/notifications', {
-    params: { since, until, page, per_page: perPage },
-  });
+  const params: Record<string, any> = { since, until, page, per_page: perPage };
+  if (opts.types) params.types = opts.types;
+  const { data } = await apiClient.get('/sessions/notifications', { params });
   // Geriye dönük uyumluluk: backend eski format dönerse dizi olabilir
   if (Array.isArray(data)) {
     const items = data.map(fromApi);
