@@ -6040,14 +6040,11 @@ function updateNotificationsNavBadge() {
 }
 
 function formatNotificationTypeLabel(type, source) {
-  if (type === 'admin_cancel') return 'Admin İptali';
   if (type === 'shift_reminder') return 'Hatırlatma';
-  if (type === 'checkin') {
-    if (source === 'phone') return 'Giriş (Telefon)';
-    if (source === 'card') return 'Giriş (Kart)';
-    return 'Giriş (QR)';
-  }
-  return type || '—';
+  if (type !== 'checkin') return 'İptal';
+  if (source === 'phone') return 'Giriş (Telefon)';
+  if (source === 'card') return 'Giriş (Kart)';
+  return 'Giriş (QR)';
 }
 
 // ── Dönem navigasyonu yardımcı fonksiyonları ──────────────────────────────
@@ -6172,7 +6169,7 @@ function setNotificationsTypeFilter(type) {
   notifViewPage = 1;
   var tabDefs = [
     { key: 'all', id: 'notificationsFilterAll' },
-    { key: 'admin_cancel', id: 'notificationsFilterCancel' },
+    { key: 'cancel', id: 'notificationsFilterCancel' },
     { key: 'checkin', id: 'notificationsFilterCheckin' },
     { key: 'shift_reminder', id: 'notificationsFilterReminder' },
     { key: 'broadcast', id: 'notificationsFilterBroadcast' },
@@ -6235,8 +6232,8 @@ function renderNotificationsTable() {
     row.className = 'notifications-table__row';
 
     var typeLabel, typeCls, rowCls;
-    if (n.type === 'admin_cancel') {
-      typeLabel = 'Admin İptali';
+    if (n.type === 'cancel') {
+      typeLabel = 'İptal';
       typeCls = 'notif-type-badge notif-type-badge--cancel';
       rowCls = 'notifications-table__row--cancel';
     } else if (n.type === 'checkin') {
@@ -6261,16 +6258,9 @@ function renderNotificationsTable() {
     if (n.type === 'shift_reminder') {
       memberOrTitle = n.title || 'Onay bekleyen seanslar';
       staffOrDetail = n.body || '';
-    } else if (n.type === 'admin_cancel') {
-      memberOrTitle = n.title || 'Admin Randevu İptali';
-      var adminCancelParts = [];
-      if (n.memberName) adminCancelParts.push(n.memberName);
-      if (n.startTs) adminCancelParts.push(new Intl.DateTimeFormat('tr-TR', {
-        timeZone: 'Europe/Istanbul',
-        day: '2-digit', month: '2-digit', year: 'numeric',
-        weekday: 'long', hour: '2-digit', minute: '2-digit', hour12: false,
-      }).format(new Date(n.startTs)));
-      staffOrDetail = adminCancelParts.join(', ') + (n.staffName ? ' - ' + n.staffName + ' ile olan randevusu iptal edildi' : ' iptal edildi');
+    } else if (n.type === 'cancel') {
+      memberOrTitle = n.memberName || '—';
+      staffOrDetail = (n.staffName || '—') + (n.startTs ? ' · ' + formatSessionDateTimeLabel(n.startTs) : '');
     } else {
       memberOrTitle = n.memberName || '—';
       staffOrDetail = n.staffName || (n.startTs ? formatSessionDateTimeLabel(n.startTs) : '—');
@@ -13560,7 +13550,7 @@ function bindEvents() {
   if (els.reportsNextYearBtn) els.reportsNextYearBtn.addEventListener("click", function () { reportsYear++; if (els.reportsYearLabel) els.reportsYearLabel.textContent = reportsYear; loadAndRenderReports(); });
   if (els.reportsToggleFormerBtn) els.reportsToggleFormerBtn.addEventListener("click", function () { reportsShowFormer = !reportsShowFormer; updateReportsFormerToggleUI(); renderReportsTable(); });
   if (els.notificationsFilterAll) els.notificationsFilterAll.addEventListener('click', function () { setNotificationsTypeFilter('all'); });
-  if (els.notificationsFilterCancel) els.notificationsFilterCancel.addEventListener('click', function () { setNotificationsTypeFilter('admin_cancel'); });
+  if (els.notificationsFilterCancel) els.notificationsFilterCancel.addEventListener('click', function () { setNotificationsTypeFilter('cancel'); });
   if (els.notificationsFilterCheckin) els.notificationsFilterCheckin.addEventListener('click', function () { setNotificationsTypeFilter('checkin'); });
   if (els.memberOpenPackageRequestBtn) els.memberOpenPackageRequestBtn.addEventListener("click", openMemberPackageRequestModal);
   if (els.memberPackageRequestSubmitBtn) {

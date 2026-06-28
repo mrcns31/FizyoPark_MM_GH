@@ -50,7 +50,7 @@ const PERIODS: { key: PeriodKey; label: string }[] = [
 ];
 const TYPE_FILTERS = [
   { key: 'all', label: 'Tümü' },
-  { key: 'admin_cancel', label: 'İptaller' },
+  { key: 'cancel', label: 'İptaller' },
   { key: 'checkin', label: 'Check-in' },
   { key: 'shift_reminder', label: 'Hatırlatmalar' },
 ] as const;
@@ -130,11 +130,7 @@ function AdminNotifications({ wide }: { wide: object }) {
   const { data, isLoading, isFetching } = useNotifications(since, until, page, PER_PAGE);
 
   const items = useMemo(
-    () => (data?.items ?? []).filter((n) => {
-      if (typeFilter === 'all') return true;
-      if (typeFilter === 'admin_cancel') return n.type === 'admin_cancel' || n.type === 'member_cancel';
-      return n.type === typeFilter;
-    }),
+    () => (data?.items ?? []).filter((n) => typeFilter === 'all' || n.type === typeFilter),
     [data, typeFilter],
   );
 
@@ -228,26 +224,12 @@ function NotificationList({ items, isLoading, totalPages, page, setPage, wide }:
         ) : null
       }
       renderItem={({ item }: { item: StaffNotification }) => {
-        const isAdminCancel  = item.type === 'admin_cancel';
-        const isMemberCancel = item.type === 'member_cancel';
-        const isReminder     = item.type === 'shift_reminder';
-        const iconName = isAdminCancel
-          ? 'close-circle-outline'
-          : (isMemberCancel || isReminder)
-            ? 'alert-circle-outline'
-            : 'checkmark-circle-outline';
-        const iconColor = isAdminCancel
-          ? colors.danger
-          : (isMemberCancel || isReminder)
-            ? colors.fpOrange
-            : colors.ok;
-
+        const isCancel   = item.type === 'cancel';
+        const isReminder = item.type === 'shift_reminder';
+        const iconName   = isCancel ? 'close-circle-outline' : isReminder ? 'alert-circle-outline' : 'checkmark-circle-outline';
+        const iconColor  = isCancel ? colors.danger : isReminder ? colors.fpOrange : colors.ok;
         return (
-          <View style={[
-            styles.item,
-            (isMemberCancel || isReminder) && styles.itemReminder,
-            isAdminCancel && styles.itemCancel,
-          ]}>
+          <View style={[styles.item, isReminder && styles.itemReminder]}>
             <View style={styles.itemHead}>
               <Ionicons name={iconName} size={18} color={iconColor} />
               <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
@@ -321,10 +303,6 @@ const styles = StyleSheet.create({
   itemReminder: {
     borderColor: 'rgba(255,149,0,0.4)',
     backgroundColor: 'rgba(255,149,0,0.06)',
-  },
-  itemCancel: {
-    borderColor: 'rgba(255,77,109,0.4)',
-    backgroundColor: 'rgba(255,77,109,0.05)',
   },
   itemHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   title: { flex: 1, fontSize: 14, fontWeight: '700', color: colors.text },
