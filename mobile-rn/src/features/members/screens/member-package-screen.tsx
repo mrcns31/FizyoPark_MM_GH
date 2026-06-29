@@ -11,7 +11,12 @@ import { Badge, Button, Card, ErrorBox, Muted, SectionTitle } from '../../../com
 import { ApiError } from '../../../lib/api-client';
 import { colors } from '../../../theme/colors';
 import type { MemberPackage } from '../../../types/api';
-import { checkMemberPackageAvailability, type SlotInput } from '../../member-packages/api/member-packages';
+import {
+  checkMemberPackageAvailability,
+  type AvailabilityConflict,
+  type SlotInput,
+  type SlotOverride,
+} from '../../member-packages/api/member-packages';
 import { usePackages } from '../../packages/api/hooks';
 import { useStaff } from '../../staff/api/hooks';
 import { useWorkingHours } from '../../settings/api/hooks';
@@ -98,6 +103,16 @@ export function MemberPackageScreen() {
   const [days, setDays] = useState<Record<number, DayRow>>({});
   const [error, setError] = useState<string | null>(null);
 
+  // Çakışma çözümleme state'i
+  const [conflicts, setConflicts] = useState<AvailabilityConflict[]>([]);
+  const [overrides, setOverrides] = useState<Record<string, SlotOverride>>({});
+  const [editingConflict, setEditingConflict] = useState<string | null>(null);
+  const [editTime, setEditTime] = useState('');
+  const [editStaffId, setEditStaffId] = useState<number | null>(null);
+
+  // Conflict çözümlenme sayısı
+  const unresolvedCount = conflicts.filter((c) => c.date && !overrides[c.date]).length;
+
   function monthsFor(pkgId: number | null): number {
     const p = (packages ?? []).find((x) => x.id === pkgId);
     return p ? Number(p.monthOverrun ?? 0) || 1 : 1;
@@ -144,6 +159,9 @@ export function MemberPackageScreen() {
     setSkipDist(false);
     setDays({});
     setError(null);
+    setConflicts([]);
+    setOverrides({});
+    setEditingConflict(null);
   }
 
   /** Mevcut paketi forma yükle (web "Düzenle"). */
@@ -185,7 +203,7 @@ export function MemberPackageScreen() {
       slots = checkedDays.map((d) => ({ dayOfWeek: d, startTime: days[d].startTime, staffId: days[d].staffId }));
     }
 
-    // Atama öncesi uygunluk/çakışma kontrolü (web checkMemberPackageAvailability).
+    // Ön çakışma kontrolü (checkMemberPackageAvailability)
     if (!skipDist) {
       try {
         setChecking(true);
@@ -194,56 +212,86 @@ export function MemberPackageScreen() {
           excludeMemberPackageId: editingId ?? undefined,
         });
         if (!res.ok && res.conflicts.length) {
-          // Aynı personel + aynı sebep grubunu tek satırda göster
-          const groups = new Map<string, { staffName: string; reasonLabel: string; dates: string[] }>();
-          for (const c of res.conflicts) {
-            const key = `${c.staff_id ?? c.staff_name ?? 'x'}_${c.reason ?? 'conflict'}`;
-            if (!groups.has(key)) {
-              groups.set(key, {
-                staffName: c.staff_name || 'Personel',
-                reasonLabel: c.reason_label || c.reason || 'müsait değil',
-                dates: [],
-              });
-            }
-            if (c.date && c.day_name) {
-              const [y, m, d] = c.date.split('-');
-              groups.get(key)!.dates.push(`${d}.${m}.${y} ${c.day_name}`);
-            }
-          }
-          const lines = Array.from(groups.values()).map(({ staffName, reasonLabel, dates }) => {
-            if (dates.length === 0) return `${staffName}: ${reasonLabel}`;
-            const shown = dates.slice(0, 5).join(', ');
-            const extra = dates.length > 5 ? ` ...+${dates.length - 5} gün` : '';
-            return `${staffName} — ${reasonLabel}:\n  ${shown}${extra}`;
-          });
-          return setError(`Çakışma var:\n${lines.join('\n')}`);
+          setConflicts(res.conflicts);
+          setOverrides({});
+          setEditingConflict(null);
+          return; // Conflict UI açılır, kayıt engellenir
         }
       } catch {
-        // uygunluk endpoint'i hata verirse engelleme; kaydetmede backend yine doğrular
+        // pre-check hata verirse devam et; PUT backend'de tekrar doğrular
       } finally {
         setChecking(false);
       }
     }
 
+    // Çakışma yoksa direkt kaydet
+    await doSave(slots, []);
+  }
+
+  /** Tüm çakışmalar çözüldükten sonra override listesiyle kaydet. */
+  async function doSave(slots: SlotInput[], slotOverrides: SlotOverride[]) {
+    if (!memberId) return;
     const today = todayStr();
     const onDone = (n: number | null, verb: string) => {
-      Alert.alert(verb, n != null ? `${n} seans oluşturuldu.` : 'İşlem başarılı.');
+      Alert.alert(verb, n != null && n > 0 ? `${n} seans oluşturuldu.` : 'İşlem başarılı.');
       resetForm();
     };
-    const onErr = (e: unknown) =>
-      setError(e instanceof ApiError ? e.message : 'İşlem başarısız (çakışma olabilir).');
+    const onErr = (e: unknown) => {
+      // PUT 409 → çakışmaları güncelle
+      if (e instanceof ApiError && e.status === 409) {
+        const data = (e as any).data as { conflicts?: AvailabilityConflict[] };
+        if (Array.isArray(data?.conflicts) && data.conflicts.length > 0) {
+          setConflicts(data.conflicts);
+          setOverrides({});
+          setEditingConflict(null);
+          return;
+        }
+      }
+      setError(e instanceof ApiError ? e.message : 'İşlem başarısız.');
+    };
 
     if (editingId) {
       update.mutate(
-        { id: editingId, body: { packageId, startDate, endDate, skipDayDistribution: skipDist, slots, effectiveDate: today } },
+        { id: editingId, body: { packageId: packageId ?? undefined, startDate, endDate, skipDayDistribution: skipDist, slots, effectiveDate: today, slotOverrides } },
         { onSuccess: (mp) => onDone(mp.sessionsCreated, 'Paket güncellendi'), onError: onErr },
       );
     } else {
       create.mutate(
-        { memberId, packageId, startDate, endDate, skipDayDistribution: skipDist, slots },
-        { onSuccess: (mp) => onDone(mp.sessionsCreated, 'Paket tanımlandı'), onError: onErr },
+        { memberId, packageId: packageId!, startDate, endDate, skipDayDistribution: skipDist, slots },
+        { onSuccess: (mp) => onDone(mp.sessionsCreated, 'Paket tanımlandı'), onError: (e) => setError(e instanceof ApiError ? e.message : 'İşlem başarısız.') },
       );
     }
+  }
+
+  /** Conflict çakışması için Düzenle: inline edit başlat. */
+  function onConflictEdit(date: string, currentTime: string, currentStaffId: number | null) {
+    setEditingConflict(date);
+    setEditTime(currentTime);
+    setEditStaffId(currentStaffId);
+  }
+
+  /** Düzenlemeyi uygula. */
+  function onConflictApplyEdit(date: string) {
+    if (!editStaffId) return;
+    setOverrides((prev) => ({ ...prev, [date]: { date, startTime: editTime, staffId: editStaffId } }));
+    setEditingConflict(null);
+  }
+
+  /** Çakışmayı atla → seans sonraki uygun tarihe kayar. */
+  function onConflictSkip(date: string) {
+    setOverrides((prev) => ({ ...prev, [date]: { date, skip: true } }));
+    setEditingConflict(null);
+  }
+
+  /** Tüm çakışmalar çözüldükten sonra kaydet. */
+  async function onConflictSave() {
+    if (!memberId || !editingId) return;
+    const checkedDays = openDays.filter((d) => days[d]?.checked);
+    const slots: SlotInput[] = checkedDays.map((d) => ({
+      dayOfWeek: d, startTime: days[d].startTime, staffId: days[d].staffId,
+    }));
+    const slotOverrides = Object.values(overrides);
+    await doSave(slots, slotOverrides);
   }
 
   function onEnd(id: number) {
@@ -387,12 +435,109 @@ export function MemberPackageScreen() {
 
         {error ? <ErrorBox>{error}</ErrorBox> : null}
 
+        {/* Çakışma Çözümleme Bölümü */}
+        {conflicts.length > 0 ? (
+          <View style={styles.conflictSection}>
+            <Text style={styles.conflictTitle}>⚠️ Randevu Çakışmaları</Text>
+            <Text style={styles.conflictSubtitle}>
+              Tümü çözülmeden dağılım kaydedilemez.
+            </Text>
+            {conflicts.map((c) => {
+              const key = c.date ?? '';
+              const res = overrides[key];
+              const isEditing = editingConflict === key;
+              const dateFmt = key ? key.split('-').reverse().join('.') : '';
+              const borderColor = res ? (res.skip ? colors.muted : '#22c55e') : colors.danger;
+
+              return (
+                <View key={key} style={[styles.conflictCard, { borderLeftColor: borderColor }]}>
+                  {res ? (
+                    <View style={styles.conflictRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.conflictDate}>{dateFmt} {c.day_name}</Text>
+                        <Text style={styles.conflictMeta}>
+                          {res.skip
+                            ? '↓ Atlandı — seans sonraki uygun tarihe kayacak'
+                            : `✓ ${res.startTime} · ${(staff ?? []).find(s => s.id === res.staffId)?.fullName ?? ''}`}
+                        </Text>
+                      </View>
+                      <Pressable onPress={() => setOverrides(p => { const n = {...p}; delete n[key]; return n; })} hitSlop={6}>
+                        <Text style={styles.undoText}>Geri al</Text>
+                      </Pressable>
+                    </View>
+                  ) : isEditing ? (
+                    <View style={styles.conflictEditBox}>
+                      <Text style={styles.conflictDate}>{dateFmt} {c.day_name}</Text>
+                      <View style={styles.conflictEditRow}>
+                        <View style={{ flex: 1 }}>
+                          <TimeField
+                            value={editTime}
+                            hourOnly
+                            minHour={dayHourRange(c.day_of_week ?? 1).min}
+                            maxHour={dayHourRange(c.day_of_week ?? 1).max}
+                            onChange={setEditTime}
+                          />
+                        </View>
+                        <View style={{ flex: 2 }}>
+                          <SelectField
+                            label=""
+                            placeholder="Personel seç"
+                            value={editStaffId}
+                            onChange={(v) => setEditStaffId(typeof v === 'number' ? v : null)}
+                            options={(staff ?? []).map((s) => ({ label: s.fullName, value: s.id }))}
+                          />
+                        </View>
+                      </View>
+                      <View style={styles.conflictEditActions}>
+                        <Button title="Uygula" variant="primary" onPress={() => onConflictApplyEdit(key)} style={styles.conflictBtn} />
+                        <Button title="İptal" variant="ghost" onPress={() => setEditingConflict(null)} style={styles.conflictBtn} />
+                      </View>
+                    </View>
+                  ) : (
+                    <View>
+                      <Text style={styles.conflictDate}>{dateFmt} {c.day_name}</Text>
+                      <Text style={styles.conflictMeta}>{c.start_time} · {c.staff_name} · {c.reason ?? 'Oda kapasitesi dolu'}</Text>
+                      <View style={styles.conflictActions}>
+                        <Pressable
+                          style={styles.conflictActionBtn}
+                          onPress={() => onConflictEdit(key, c.start_time ?? '', c.staff_id ?? null)}
+                        >
+                          <Text style={styles.conflictActionText}>Düzenle</Text>
+                        </Pressable>
+                        <Pressable style={[styles.conflictActionBtn, styles.conflictSkipBtn]} onPress={() => onConflictSkip(key)}>
+                          <Text style={styles.conflictActionText}>Atla</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  )}
+                </View>
+              );
+            })}
+            <Text style={[styles.conflictCount, { color: unresolvedCount > 0 ? colors.danger : '#22c55e' }]}>
+              {unresolvedCount > 0
+                ? `Çözülmemiş: ${unresolvedCount} çakışma`
+                : "✓ Tüm çakışmalar çözüldü. Kaydet'e basın."}
+            </Text>
+            <View style={styles.conflictFooter}>
+              <Button title="Vazgeç" variant="ghost" onPress={() => { setConflicts([]); setOverrides({}); }} style={styles.conflictBtn} />
+              <Button
+                title="Kaydet"
+                variant="primary"
+                onPress={onConflictSave}
+                disabled={unresolvedCount > 0}
+                loading={update.isPending}
+                style={styles.conflictBtn}
+              />
+            </View>
+          </View>
+        ) : null}
+
         <Button
           title={editingId ? 'Paketi Güncelle' : 'Paketi Tanımla'}
           variant="primary"
           onPress={onSave}
           loading={create.isPending || update.isPending || checking}
-          disabled={!editingId && hasActive}
+          disabled={(!editingId && hasActive) || conflicts.length > 0}
         />
       </Card> : null}
     </ScreenContainer>
@@ -457,4 +602,37 @@ const styles = StyleSheet.create({
   dayName: { color: colors.text, fontSize: 15, fontWeight: '600' },
   dayInputs: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   dayStaff: { flex: 1 },
+
+  // Conflict UI
+  conflictSection: { gap: 10, marginTop: 4 },
+  conflictTitle: { color: '#f59e0b', fontSize: 15, fontWeight: '700' },
+  conflictSubtitle: { color: colors.muted, fontSize: 12 },
+  conflictCard: {
+    borderLeftWidth: 3,
+    borderRadius: 8,
+    padding: 12,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    gap: 6,
+  },
+  conflictRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  conflictDate: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  conflictMeta: { color: colors.muted, fontSize: 12, marginTop: 2 },
+  conflictActions: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  conflictActionBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 7,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  conflictSkipBtn: { backgroundColor: 'rgba(100,116,139,0.15)' },
+  conflictActionText: { color: colors.text, fontSize: 13, fontWeight: '600' },
+  conflictEditBox: { gap: 8 },
+  conflictEditRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+  conflictEditActions: { flexDirection: 'row', gap: 8 },
+  conflictCount: { fontSize: 13, fontWeight: '600' },
+  conflictFooter: { flexDirection: 'row', gap: 10 },
+  conflictBtn: { flex: 1 },
+  undoText: { color: colors.accent, fontSize: 12, fontWeight: '600' },
 });

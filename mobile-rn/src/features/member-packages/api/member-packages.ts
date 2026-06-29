@@ -6,6 +6,14 @@ import { memberPackageFromApi, type MemberPackage, type PackageSlot } from '../.
 /** Form'dan gelen slot — kalıcı id olmadan (yeni slot). */
 export type SlotInput = Pick<PackageSlot, 'dayOfWeek' | 'startTime' | 'staffId'>;
 
+/** Belirli bir tarih için seans oluşturmayı atla veya saat/personeli değiştir. */
+export interface SlotOverride {
+  date: string;          // YYYY-MM-DD
+  skip?: boolean;        // true → o tarih atlanır, seans sonraki uygun tarihe kayar
+  startTime?: string;    // override edilecek saat (ör. "10:00")
+  staffId?: number;      // override edilecek personel
+}
+
 export interface MemberPackageInput {
   memberId: number;
   packageId: number;
@@ -52,6 +60,7 @@ export async function updateMemberPackage(
     packageId: number;
     slots: SlotInput[];
     effectiveDate: string;
+    slotOverrides: SlotOverride[];
   }>,
 ): Promise<MemberPackage> {
   const payload: Record<string, unknown> = {};
@@ -62,6 +71,14 @@ export async function updateMemberPackage(
   if (body.packageId !== undefined) payload.package_id = body.packageId;
   if (body.effectiveDate !== undefined) payload.effective_date = body.effectiveDate;
   if (body.slots !== undefined) payload.slots = slotsToApi(body.slots);
+  if (body.slotOverrides !== undefined) {
+    payload.slot_overrides = body.slotOverrides.map((o) => ({
+      date: o.date,
+      ...(o.skip ? { skip: true } : {}),
+      ...(o.startTime != null ? { start_time: o.startTime } : {}),
+      ...(o.staffId != null ? { staff_id: o.staffId } : {}),
+    }));
+  }
   const { data } = await apiClient.put(`/member-packages/${id}`, payload);
   return memberPackageFromApi(data);
 }
@@ -114,9 +131,11 @@ export async function getMemberPackageSessions(id: number): Promise<MemberPackag
 export interface AvailabilityConflict {
   date?: string;
   day_name?: string;
+  day_of_week?: number;
   start_time?: string;
   staff_id?: number;
   staff_name?: string;
+  reason_code?: 'capacity_full' | 'outside_working_hours';
   reason?: string;
   reason_label?: string;
   message?: string;

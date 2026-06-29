@@ -10781,6 +10781,164 @@ function showMemberPackageAvailabilityConflicts(errorMessage, conflicts) {
   }
 }
 
+// ── F2/F3: Çakışma Modal (Düzenle / Atla) ────────────────────────────────────
+var _mpConflictState = null;
+
+function _mpDayNameToNum(n) {
+  return { "Pazar": 0, "Pzt": 1, "Pazartesi": 1, "Sal": 2, "Salı": 2, "Çar": 3, "Çarşamba": 3, "Per": 4, "Perşembe": 4, "Cum": 5, "Cuma": 5, "Cmt": 6, "Cumartesi": 6 }[n] ?? 0;
+}
+
+function _createMpConflictModalIfNeeded() {
+  if (document.getElementById("mpConflictModal")) return;
+  var el = document.createElement("div");
+  el.id = "mpConflictModal";
+  el.className = "modal-overlay hidden";
+  el.innerHTML =
+    '<div class="modal" style="max-width:680px;width:96%;max-height:90vh;overflow-y:auto">' +
+      '<div class="modal-header"><h2 class="modal-title" style="font-size:16px">⚠️ Randevu Çakışmaları</h2></div>' +
+      '<div class="modal-body">' +
+        '<p style="margin-bottom:14px;color:#94a3b8;font-size:14px">Tümü çözülmeden dağılım kaydedilemez.</p>' +
+        '<div id="mpConflictList"></div>' +
+        '<p id="mpConflictCount" style="margin-top:14px;font-size:13px;font-weight:600"></p>' +
+      '</div>' +
+      '<div class="modal-footer">' +
+        '<button class="btn btn--secondary" onclick="window._closeMpConflictModal()">Vazgeç</button>' +
+        '<button id="mpConflictSaveBtn" class="btn btn--primary" disabled onclick="window._saveMpConflictOverrides()">Kaydet</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(el);
+}
+
+function _renderMpConflictRows() {
+  if (!_mpConflictState) return;
+  var conflicts = _mpConflictState.conflicts;
+  var overrides = _mpConflictState.overrides;
+  var listEl = document.getElementById("mpConflictList");
+  var countEl = document.getElementById("mpConflictCount");
+  var saveBtn = document.getElementById("mpConflictSaveBtn");
+  if (!listEl) return;
+
+  var unresolved = 0;
+  var html = '<div style="display:flex;flex-direction:column;gap:8px">';
+  for (var i = 0; i < conflicts.length; i++) {
+    var c = conflicts[i];
+    var key = c.date;
+    var res = overrides[key];
+    var dateFmt = c.date ? c.date.split("-").reverse().join(".") : "";
+    var dayName = c.day_name || "";
+    if (!res) unresolved++;
+    var borderColor = res ? (res.skip ? "#64748b" : "#22c55e") : "#ef4444";
+    var rowBg = res ? "rgba(0,0,0,0.2)" : "rgba(239,68,68,0.08)";
+    var staffOptions = (state.staff || []).map(function(s) { return '<option value="' + s.id + '">' + getStaffFullName(s) + '</option>'; }).join("");
+    var dayNum = c.day_of_week != null ? Number(c.day_of_week) : _mpDayNameToNum(dayName);
+    var hourOpts = buildHourOptions(c.start_time, dayNum);
+
+    html += '<div style="border-left:3px solid ' + borderColor + ';padding:10px 14px;border-radius:4px;background:' + rowBg + '">';
+    if (res && res.skip) {
+      html += '<div style="display:flex;justify-content:space-between;align-items:center">';
+      html += '<span style="font-size:14px"><strong>' + dateFmt + " " + dayName + '</strong> · ' + (c.start_time || "") + ' · ' + (c.staff_name || "") + '</span>';
+      html += '<span style="color:#94a3b8;font-size:12px">↓ Atlandı — seans sonraki uygun tarihe kayacak</span></div>';
+    } else if (res && !res.skip) {
+      html += '<div style="display:flex;justify-content:space-between;align-items:center">';
+      html += '<span style="font-size:14px"><strong>' + dateFmt + " " + dayName + '</strong> · ' + (res.start_time || c.start_time || "") + ' · ' + (res.staff_name || c.staff_name || "") + '</span>';
+      html += '<span style="color:#22c55e;font-size:12px">✓ Düzenlendi</span></div>';
+    } else {
+      html += '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">';
+      html += '<div><div style="font-size:14px;font-weight:600">' + dateFmt + " " + dayName + '</div>';
+      html += '<div style="font-size:12px;color:#94a3b8;margin-top:2px">' + (c.start_time || "") + ' · ' + (c.staff_name || "") + ' · ' + (c.reason || "") + '</div></div>';
+      html += '<div style="display:flex;gap:6px;flex-shrink:0">';
+      html += '<button class="btn btn--small btn--secondary" onclick="window._mpConflictEdit(\'' + key + '\')">Düzenle</button>';
+      html += '<button class="btn btn--small" style="background:#374151;color:#fff;border:none" onclick="window._mpConflictSkip(\'' + key + '\')">Atla</button>';
+      html += '</div></div>';
+      html += '<div id="mpCEF_' + key + '" style="display:none;margin-top:10px;padding-top:10px;border-top:1px solid #374151">';
+      html += '<div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:13px">';
+      html += '<label>Saat: <select id="mpCT_' + key + '" class="input" style="font-size:13px;padding:4px 8px">' + hourOpts + '</select></label>';
+      html += '<label>Personel: <select id="mpCS_' + key + '" class="input" style="font-size:13px;padding:4px 8px"><option value="">Seçiniz</option>' + staffOptions + '</select></label>';
+      html += '<button class="btn btn--small btn--primary" onclick="window._mpConflictApply(\'' + key + '\')">Uygula</button>';
+      html += '<button class="btn btn--small btn--secondary" onclick="window._mpConflictCancelEdit(\'' + key + '\')">İptal</button>';
+      html += '</div></div>';
+    }
+    html += '</div>';
+  }
+  html += '</div>';
+  listEl.innerHTML = html;
+
+  if (countEl) {
+    countEl.textContent = unresolved > 0 ? ("Çözülmemiş: " + unresolved + " çakışma") : "✓ Tüm çakışmalar çözüldü. Kaydet'e basarak dağılımı uygulayabilirsiniz.";
+    countEl.style.color = unresolved > 0 ? "#ef4444" : "#22c55e";
+  }
+  if (saveBtn) saveBtn.disabled = unresolved > 0;
+}
+
+window._mpConflictEdit = function(date) {
+  var f = document.getElementById("mpCEF_" + date); if (f) f.style.display = "";
+};
+window._mpConflictCancelEdit = function(date) {
+  var f = document.getElementById("mpCEF_" + date); if (f) f.style.display = "none";
+};
+window._mpConflictSkip = function(date) {
+  if (!_mpConflictState) return;
+  _mpConflictState.overrides[date] = { skip: true };
+  _renderMpConflictRows();
+};
+window._mpConflictApply = function(date) {
+  if (!_mpConflictState) return;
+  var tEl = document.getElementById("mpCT_" + date);
+  var sEl = document.getElementById("mpCS_" + date);
+  if (!tEl || !sEl || !sEl.value) return;
+  var staffId = parseInt(sEl.value, 10);
+  var staffObj = (state.staff || []).find(function(s) { return s.id === staffId; });
+  _mpConflictState.overrides[date] = {
+    skip: false,
+    start_time: tEl.value,
+    staff_id: staffId,
+    staff_name: staffObj ? getStaffFullName(staffObj) : "",
+  };
+  _renderMpConflictRows();
+};
+window._closeMpConflictModal = function() {
+  var el = document.getElementById("mpConflictModal"); if (el) el.classList.add("hidden");
+  _mpConflictState = null;
+};
+window._saveMpConflictOverrides = async function() {
+  if (!_mpConflictState) return;
+  var editingId = _mpConflictState.editingId;
+  var updatePayload = _mpConflictState.updatePayload;
+  var overrides = _mpConflictState.overrides;
+  var slotOverrides = Object.keys(overrides).map(function(date) {
+    var o = overrides[date];
+    return o.skip ? { date: date, skip: true } : { date: date, start_time: o.start_time, staff_id: o.staff_id };
+  });
+  var newPayload = Object.assign({}, updatePayload, { slotOverrides: slotOverrides });
+  var saveBtn = document.getElementById("mpConflictSaveBtn");
+  try {
+    if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = "Kaydediliyor..."; }
+    var result = await window.API.updateMemberPackage(editingId, newPayload);
+    var idx = (state.memberPackages || []).findIndex(function(x) { return x.id === editingId; });
+    if (idx !== -1) state.memberPackages[idx] = result;
+    window._closeMpConflictModal();
+    closeMemberPackageModal();
+    render();
+    if (window.API && window.API.getSessions && updatePayload.startDate) {
+      await fetchAndMergeSessions(updatePayload.startDate, updatePayload.endDate || updatePayload.startDate);
+    }
+  } catch (e) {
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = "Kaydet"; }
+    if (e.status === 409 && e.data && Array.isArray(e.data.conflicts) && e.data.conflicts.length > 0) {
+      _mpConflictState.conflicts = e.data.conflicts;
+      _mpConflictState.overrides = {};
+      _renderMpConflictRows();
+    }
+  }
+};
+
+function showMpConflictModal(editingId, updatePayload, conflicts) {
+  _createMpConflictModalIfNeeded();
+  _mpConflictState = { editingId: editingId, updatePayload: updatePayload, conflicts: conflicts, overrides: {} };
+  var el = document.getElementById("mpConflictModal"); if (el) el.classList.remove("hidden");
+  _renderMpConflictRows();
+}
+
 async function doActualMemberPackageSave(endAfterSaveWithLastSessionDate) {
   const pending = window._pendingMemberPackageSave;
   const payload = pending ? pending.payload : null;
@@ -10803,26 +10961,10 @@ async function doActualMemberPackageSave(endAfterSaveWithLastSessionDate) {
         createdOrUpdated = await window.API.updateMemberPackage(editingId, updatePayload);
         const idx = (state.memberPackages || []).findIndex((x) => x.id === editingId);
         if (idx !== -1) state.memberPackages[idx] = createdOrUpdated;
-        if (
-          !updatePayload.skipDayDistribution &&
-          Array.isArray(updatePayload.slots) &&
-          updatePayload.slots.length > 0 &&
-          createdOrUpdated.sessionsCreated === 0
-        ) {
-          await showAppAlert("Paket güncellendi ancak hiç seans oluşturulamadı. Çalışma saatlerini, personel müsaitliğini ve oda kapasitesini kontrol edin.");
-        }
       } else {
         createdOrUpdated = await window.API.createMemberPackage(payload);
         state.memberPackages = state.memberPackages || [];
         state.memberPackages.push(createdOrUpdated);
-        if (
-          !payload.skipDayDistribution &&
-          Array.isArray(payload.slots) &&
-          payload.slots.length > 0 &&
-          createdOrUpdated.sessionsCreated === 0
-        ) {
-          await showAppAlert("Paket kaydedildi ancak hiç seans oluşturulamadı. Çalışma saatlerini, personel müsaitliğini ve oda kapasitesini kontrol edin.");
-        }
       }
       if (window.API.getSessions && payload.startDate && payload.endDate) {
         await fetchAndMergeSessions(payload.startDate, payload.endDate);
@@ -10841,7 +10983,13 @@ async function doActualMemberPackageSave(endAfterSaveWithLastSessionDate) {
       }
     } catch (e) {
       if (e.status === 409 && e.data && Array.isArray(e.data.conflicts) && e.data.conflicts.length > 0) {
-        showMemberPackageAvailabilityConflicts(e.data.error, e.data.conflicts);
+        const eid = editingId || null;
+        const upd = updatePayload || payload || null;
+        if (eid && upd) {
+          showMpConflictModal(eid, upd, e.data.conflicts);
+        } else {
+          showMemberPackageAvailabilityConflicts(e.data.error, e.data.conflicts);
+        }
       } else if (els.mpFormError) {
         els.mpFormError.textContent = (e.data && (e.data.error || (e.data.errors && e.data.errors[0] && e.data.errors[0].msg))) || e.message || "Kayıt başarısız.";
         els.mpFormError.classList.remove("hidden");

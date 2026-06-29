@@ -772,6 +772,7 @@
     if (body.slots !== undefined) payload.slots = body.slots.map(function (s) {
       return { day_of_week: s.dayOfWeek, start_time: s.startTime, staff_id: s.staffId };
     });
+    if (body.slotOverrides !== undefined) payload.slot_overrides = body.slotOverrides;
     const row = await apiFetch('/member-packages/' + id, { method: 'PUT', body: JSON.stringify(payload) });
     invalidateStaticCache();
     return memberPackageFromApi(row);

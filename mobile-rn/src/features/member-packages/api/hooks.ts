@@ -8,6 +8,7 @@ import {
   updateMemberPackage,
   type MemberPackageInput,
   type SlotInput,
+  type SlotOverride,
 } from './member-packages';
 
 export const memberPackageKeys = {
@@ -61,6 +62,7 @@ export function useUpdateMemberPackage() {
         packageId: number;
         slots: SlotInput[];
         effectiveDate: string;
+        slotOverrides: SlotOverride[];
       }>;
     }) => updateMemberPackage(vars.id, vars.body),
     onSuccess: invalidate,

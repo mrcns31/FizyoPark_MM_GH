@@ -41,7 +41,7 @@ async function roomHasOtherStaff(db, roomId, staffId, startTs, endTs, excludeSes
  * i. personel i. odaya eşlenir.
  * @returns {{ feasible: boolean, assignments?: Array<{ staffId: number, roomId: number, demand: number }> }}
  */
-function matchStaffToRooms(demandByStaff, rooms) {
+export function matchStaffToRooms(demandByStaff, rooms) {
   const staffEntries = Object.entries(demandByStaff)
     .map(([staffId, demand]) => ({ staffId: Number(staffId), demand }))
     .sort((a, b) => b.demand - a.demand);
@@ -66,15 +66,19 @@ function matchStaffToRooms(demandByStaff, rooms) {
 /**
  * [startTs, endTs) anındaki silinmemiş seansları staff_id'ye göre gruplar,
  * her personelin talebini (seans sayısı) döner.
+ * excludeMemberPackageId: bu pakete ait seansları saymaz (pre-validation'da gerekli).
  * @returns {Promise<Record<number, number>>}
  */
-async function getDemandByStaff(db, startTs, endTs) {
-  const r = await db.query(
-    `SELECT staff_id, COUNT(*)::int AS cnt FROM sessions
-     WHERE start_ts < $2 AND end_ts > $1 AND staff_id IS NOT NULL AND deleted_at IS NULL
-     GROUP BY staff_id`,
-    [startTs, endTs]
-  );
+export async function getDemandByStaff(db, startTs, endTs, excludeMemberPackageId = null) {
+  const params = [startTs, endTs];
+  let sql = `SELECT staff_id, COUNT(*)::int AS cnt FROM sessions
+     WHERE start_ts < $2 AND end_ts > $1 AND staff_id IS NOT NULL AND deleted_at IS NULL`;
+  if (excludeMemberPackageId != null) {
+    params.push(excludeMemberPackageId);
+    sql += ` AND (member_package_id IS NULL OR member_package_id != $${params.length})`;
+  }
+  sql += ' GROUP BY staff_id';
+  const r = await db.query(sql, params);
   const demand = {};
   for (const row of r.rows) {
     demand[row.staff_id] = row.cnt;
