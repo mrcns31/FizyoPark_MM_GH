@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 
 import { AlphaFilter, nameStartsWithLetter } from '../../../components/alpha-filter';
-import { FormField } from '../../../components/form';
+import { SearchField } from '../../../components/search-field';
 import { Card, Muted } from '../../../components/ui';
 import { ScreenHeader } from '../../../components/screen-header';
 import { useIncremental } from '../../../lib/use-incremental';
@@ -101,7 +101,7 @@ export function ExpiredMembershipsScreen() {
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <ScreenHeader title="Paketi Bitmiş Üyeler" />
       <View style={[styles.filters, wide]}>
-        <FormField label="" value={search} onChangeText={setSearch} placeholder="Ad, telefon, üye no ara" />
+        <SearchField value={search} onChangeText={setSearch} placeholder="Ad, telefon, üye no ara" />
         <AlphaFilter value={letter} onChange={setLetter} />
       </View>
       <FlatList

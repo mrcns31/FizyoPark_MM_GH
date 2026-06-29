@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SearchField } from '../../../components/search-field';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -192,10 +193,8 @@ export function AdminMembersScreen() {
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
       <ScreenHeader title="Üyeler" />
       <View style={[styles.searchWrap, wide]}>
-        <TextInput
-          style={styles.search}
+        <SearchField
           placeholder="Üye ara (isim, telefon, no)"
-          placeholderTextColor={colors.textMuted}
           value={q}
           onChangeText={setQ}
         />

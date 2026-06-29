@@ -169,8 +169,7 @@ export function MemberPackageScreen() {
     setPackageId(mp.packageId);
     setStartDate(mp.startDate.slice(0, 10));
     setEndDate(mp.endDate.slice(0, 10));
-    const hasSlots = (mp.slots ?? []).length > 0;
-    setSkipDist(!hasSlots);
+    setSkipDist(!!mp.skipDayDistribution);
     const next: Record<number, DayRow> = {};
     for (const s of mp.slots ?? []) {
       next[s.dayOfWeek] = { checked: true, startTime: s.startTime.slice(0, 5), staffId: s.staffId };
@@ -378,21 +377,23 @@ export function MemberPackageScreen() {
               const hr = dayHourRange(d);
               return (
                 <View key={d} style={[styles.dayCard, checked && styles.dayCardOn]}>
-                  <Pressable style={styles.dayHead} onPress={() => toggleDay(d)} hitSlop={6}>
+                  <Pressable style={styles.dayToggle} onPress={() => toggleDay(d)} hitSlop={6}>
                     <View style={[styles.check, checked && styles.checkOn]}>
                       {checked ? <Ionicons name="checkmark" size={15} color="#fff" /> : null}
                     </View>
                     <Text style={styles.dayName}>{DAY_NAMES[d]}</Text>
                   </Pressable>
                   {checked ? (
-                    <View style={styles.dayInputs}>
-                      <TimeField
-                        value={row.startTime}
-                        hourOnly
-                        minHour={hr.min}
-                        maxHour={hr.max}
-                        onChange={(v) => setDay(d, { startTime: v })}
-                      />
+                    <>
+                      <View style={styles.dayTime}>
+                        <TimeField
+                          value={row.startTime}
+                          hourOnly
+                          minHour={hr.min}
+                          maxHour={hr.max}
+                          onChange={(v) => setDay(d, { startTime: v })}
+                        />
+                      </View>
                       <View style={styles.dayStaff}>
                         <SelectField
                           label=""
@@ -402,7 +403,7 @@ export function MemberPackageScreen() {
                           options={(staff ?? []).map((st) => ({ label: st.fullName, value: st.id }))}
                         />
                       </View>
-                    </View>
+                    </>
                   ) : null}
                 </View>
               );
@@ -567,18 +568,21 @@ const styles = StyleSheet.create({
   skipText: { flex: 1, color: colors.text, fontSize: 13 },
   slots: { gap: 8 },
   dayCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: 12,
     backgroundColor: 'rgba(255,255,255,0.02)',
-    padding: 10,
-    gap: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
   },
   dayCardOn: { borderColor: 'rgba(124,92,255,0.4)', backgroundColor: 'rgba(124,92,255,0.06)' },
-  dayHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  dayName: { color: colors.text, fontSize: 15, fontWeight: '600' },
-  dayInputs: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  dayStaff: { flex: 1 },
+  dayToggle: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
+  dayName: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  dayTime: { width: 80 },
+  dayStaff: { flex: 1.4 },
 
   // Conflict UI
   conflictSection: { gap: 10, marginTop: 4 },

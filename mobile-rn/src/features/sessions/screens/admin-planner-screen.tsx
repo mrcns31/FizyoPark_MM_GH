@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { SearchField } from '../../../components/search-field';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useQueryClient } from '@tanstack/react-query';
@@ -263,13 +264,20 @@ export function AdminPlannerScreen() {
             <Ionicons name="chevron-forward" size={20} color={colors.text} />
           </Pressable>
           {/* Arama */}
-          <TextInput
-            style={styles.searchInline}
-            placeholder="Üye Ara (Ad Soyad)"
-            placeholderTextColor={colors.textMuted}
-            value={search}
-            onChangeText={setSearch}
-          />
+          <View style={styles.searchInlineWrap}>
+            <TextInput
+              style={styles.searchInline}
+              placeholder="Üye Ara (Ad Soyad)"
+              placeholderTextColor={colors.textMuted}
+              value={search}
+              onChangeText={setSearch}
+            />
+            {search ? (
+              <Pressable onPress={() => setSearch('')} hitSlop={8} style={styles.searchInlineClear}>
+                <Ionicons name="close-circle" size={15} color={colors.muted} />
+              </Pressable>
+            ) : null}
+          </View>
           {/* Personel dot'ları — topbarda her zaman görünür */}
           {(staff ?? []).map((s, idx) => {
             const c = staffColor(idx, s.id);
@@ -340,10 +348,8 @@ export function AdminPlannerScreen() {
       {/* Filtre paneli — sadece telefonda */}
       {!isTablet && filtersOpen ? (
         <View style={[styles.filterPanel, wide]}>
-          <TextInput
-            style={styles.search}
+          <SearchField
             placeholder="Üye adı, soyadı ara"
-            placeholderTextColor={colors.textMuted}
             value={search}
             onChangeText={setSearch}
           />
@@ -533,15 +539,21 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     backgroundColor: 'rgba(255,255,255,0.04)',
   },
-  searchInline: {
-    height: 36, width: 200,
+  searchInlineWrap: {
+    flexDirection: 'row', alignItems: 'center',
+    width: 200, height: 36,
     backgroundColor: 'rgba(255,255,255,0.05)',
     borderRadius: 7, borderWidth: 1,
     borderColor: colors.border,
-    paddingHorizontal: 8,
-    color: colors.text, fontSize: 12,
     marginHorizontal: 4,
+    paddingHorizontal: 6,
   },
+  searchInline: {
+    flex: 1, height: 36,
+    color: colors.text, fontSize: 12,
+    paddingHorizontal: 2,
+  },
+  searchInlineClear: { paddingLeft: 2 },
   staffDot: {
     width: 24, height: 24,
     borderRadius: 12,

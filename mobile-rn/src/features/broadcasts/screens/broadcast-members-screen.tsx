@@ -3,6 +3,7 @@ import {
   ActivityIndicator, Alert, Animated, Dimensions, FlatList, Keyboard, Modal, Platform, Pressable,
   ScrollView, StyleSheet, Text, TextInput, View,
 } from 'react-native';
+import { SearchField } from '../../../components/search-field';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
@@ -267,10 +268,8 @@ export function BroadcastMembersScreen() {
         </View>
 
         {/* Arama */}
-        <TextInput
-          style={styles.search}
+        <SearchField
           placeholder="Üye ara (isim, telefon, no)"
-          placeholderTextColor={colors.muted}
           value={q}
           onChangeText={setQ}
         />

@@ -174,9 +174,18 @@ export function FormerMembersScreen() {
       {/* Arama formu */}
       <View style={[styles.searchBox, wide]}>
         <View style={styles.inputRow}>
-          <TextInput style={[styles.input, styles.inputFlex]} placeholder="Ad" placeholderTextColor={colors.textMuted} value={firstName} onChangeText={setFirstName} autoCapitalize="words" returnKeyType="next" onSubmitEditing={() => lastNameRef.current?.focus()} blurOnSubmit={false} />
-          <TextInput ref={lastNameRef} style={[styles.input, styles.inputFlex]} placeholder="Soyad" placeholderTextColor={colors.textMuted} value={lastName} onChangeText={setLastName} autoCapitalize="words" returnKeyType="next" onSubmitEditing={() => phoneRef.current?.focus()} blurOnSubmit={false} />
-          <TextInput ref={phoneRef} style={[styles.input, styles.inputFlex]} placeholder="Telefon" placeholderTextColor={colors.textMuted} value={phone} onChangeText={setPhone} keyboardType="phone-pad" returnKeyType="search" onSubmitEditing={onSearch} />
+          <View style={[styles.inputFlex, styles.inputWrap]}>
+            <TextInput style={styles.input} placeholder="Ad" placeholderTextColor={colors.textMuted} value={firstName} onChangeText={setFirstName} autoCapitalize="words" returnKeyType="next" onSubmitEditing={() => lastNameRef.current?.focus()} blurOnSubmit={false} />
+            {firstName ? <Pressable onPress={() => setFirstName('')} hitSlop={8}><Ionicons name="close-circle" size={16} color={colors.muted} /></Pressable> : null}
+          </View>
+          <View style={[styles.inputFlex, styles.inputWrap]}>
+            <TextInput ref={lastNameRef} style={styles.input} placeholder="Soyad" placeholderTextColor={colors.textMuted} value={lastName} onChangeText={setLastName} autoCapitalize="words" returnKeyType="next" onSubmitEditing={() => phoneRef.current?.focus()} blurOnSubmit={false} />
+            {lastName ? <Pressable onPress={() => setLastName('')} hitSlop={8}><Ionicons name="close-circle" size={16} color={colors.muted} /></Pressable> : null}
+          </View>
+          <View style={[styles.inputFlex, styles.inputWrap]}>
+            <TextInput ref={phoneRef} style={styles.input} placeholder="Telefon" placeholderTextColor={colors.textMuted} value={phone} onChangeText={setPhone} keyboardType="phone-pad" returnKeyType="search" onSubmitEditing={onSearch} />
+            {phone ? <Pressable onPress={() => setPhone('')} hitSlop={8}><Ionicons name="close-circle" size={16} color={colors.muted} /></Pressable> : null}
+          </View>
           <Pressable style={[styles.getirBtn, loading && styles.getirBtnLoading]} onPress={onSearch} disabled={loading}>
             <Text style={styles.getirText}>{loading ? '…' : 'GETİR'}</Text>
           </Pressable>
@@ -215,11 +224,11 @@ const styles = StyleSheet.create({
   searchBox: { paddingTop: 12, paddingBottom: 8, gap: 6 },
   inputRow: { flexDirection: 'row', gap: 6, alignItems: 'center' },
   input: {
-    height: 42, borderWidth: 1, borderColor: colors.border,
-    borderRadius: 10, paddingHorizontal: 10,
-    backgroundColor: 'rgba(255,255,255,0.03)', color: colors.text, fontSize: 14,
+    flex: 1, height: 42, paddingHorizontal: 10,
+    color: colors.text, fontSize: 14,
   },
   inputFlex: { flex: 1 },
+  inputWrap: { flexDirection: 'row', alignItems: 'center', paddingRight: 8 },
   getirBtn: {
     height: 42, paddingHorizontal: 16, borderRadius: 10,
     backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center',
