@@ -616,6 +616,12 @@ router.post('/check-availability', [
           const startTs = new Date(`${istDateStr}T${hStr}:${mStr}:00+03:00`).getTime();
           const endTs = startTs + SLOT_DURATION_MS;
 
+          // Geçmiş slot'ları atla — şu andan önce başlayan randevulara müdahale edilmez
+          if (startTs < Date.now()) {
+            d.setDate(d.getDate() + 1);
+            continue;
+          }
+
           // 1) Çalışma saati + tekil oda kontrolü
           const validation = await validateAndPickRoom(db, { staffId: staff_id, startTs, endTs });
           if (!validation.ok) {
