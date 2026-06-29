@@ -12,7 +12,6 @@ import { ApiError } from '../../../lib/api-client';
 import { colors } from '../../../theme/colors';
 import type { MemberPackage } from '../../../types/api';
 import {
-  checkMemberPackageAvailability,
   type AvailabilityConflict,
   type SlotInput,
   type SlotOverride,
@@ -81,7 +80,6 @@ export function MemberPackageScreen() {
   const endPkg = useEndMemberPackage();
 
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [checking, setChecking] = useState(false);
 
   const hasActive = useMemo(
     () => (memberPackages ?? []).some((mp) => mp.status === 'active'),
@@ -203,28 +201,7 @@ export function MemberPackageScreen() {
       slots = checkedDays.map((d) => ({ dayOfWeek: d, startTime: days[d].startTime, staffId: days[d].staffId }));
     }
 
-    // Ön çakışma kontrolü (checkMemberPackageAvailability)
-    if (!skipDist) {
-      try {
-        setChecking(true);
-        const res = await checkMemberPackageAvailability({
-          memberId, packageId, startDate, endDate, skipDayDistribution: skipDist, slots,
-          excludeMemberPackageId: editingId ?? undefined,
-        });
-        if (!res.ok && res.conflicts.length) {
-          setConflicts(res.conflicts);
-          setOverrides({});
-          setEditingConflict(null);
-          return; // Conflict UI açılır, kayıt engellenir
-        }
-      } catch {
-        // pre-check hata verirse devam et; PUT backend'de tekrar doğrular
-      } finally {
-        setChecking(false);
-      }
-    }
-
-    // Çakışma yoksa direkt kaydet
+    // Web ile aynı akış: direkt kaydet, 409 gelirse conflict modal açılır
     await doSave(slots, []);
   }
 
@@ -536,7 +513,7 @@ export function MemberPackageScreen() {
           title={editingId ? 'Paketi Güncelle' : 'Paketi Tanımla'}
           variant="primary"
           onPress={onSave}
-          loading={create.isPending || update.isPending || checking}
+          loading={create.isPending || update.isPending}
           disabled={(!editingId && hasActive) || conflicts.length > 0}
         />
       </Card> : null}
