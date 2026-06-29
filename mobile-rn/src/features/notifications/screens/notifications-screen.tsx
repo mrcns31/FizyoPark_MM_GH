@@ -176,7 +176,7 @@ function StaffNotifications({ wide }: { wide: object }) {
     return { since: sod, until: sod + 86400000 - 1 };
   }, [dayTs]);
 
-  const { data, isLoading } = useNotifications(since, until, page, PER_PAGE);
+  const { data, isLoading } = useNotifications(since, until, page, PER_PAGE, 'member_cancel');
   const items = data?.items ?? [];
 
   return (
