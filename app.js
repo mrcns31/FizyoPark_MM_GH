@@ -517,6 +517,16 @@ function getStaffById(staffId) {
   return state.staff.find((s) => s.id === id || s.id === staffId) || null;
 }
 
+/** Seans/grup için personel çözümle: aktif personel listesinde varsa onu, silinmiş
+ *  (soft-delete'li) personelse seansın kendi taşıdığı staffName'den sentetik bir
+ *  nesne döndürür — böylece geçmiş randevular "Atanmamış" görünmez. */
+function resolveSessionStaff(staffId, fallbackName) {
+  const staff = getStaffById(staffId);
+  if (staff) return staff;
+  if (staffId != null && fallbackName) return { id: staffId, name: fallbackName };
+  return null;
+}
+
 function getStaffFullName(staff) {
   if (!staff) return "Personel";
   if (staff.name) return staff.name; // Eski format desteği
@@ -715,7 +725,7 @@ function sessionMatchesPlannerFilter(s) {
   if (member && memberMatchesListFilter(member, q)) return true;
   const memberName = getSessionMemberDisplayName(s);
   if (memberName && memberName !== "Üye" && personNameStringMatchesFilter(memberName, q)) return true;
-  const staff = getStaffById(s.staffId);
+  const staff = resolveSessionStaff(s.staffId, s.staffName);
   if (staffMatchesFilter(staff, q)) return true;
   const staffName = staff ? getStaffFullName(staff) : "";
   return staffName && personNameStringMatchesFilter(staffName, q);
@@ -1859,7 +1869,7 @@ function buildDayStaffSummaryHtml(dayDate) {
   const countsMap = new Map();
   for (const s of daySessions) {
     if (!countsMap.has(s.staffId)) {
-      const staff = getStaffById(s.staffId);
+      const staff = resolveSessionStaff(s.staffId, s.staffName);
       const name = staff ? getStaffFirstName(staff) : '?';
       const color = staffColor(s.staffId);
       countsMap.set(s.staffId, { name, count: 0, color });
@@ -3009,8 +3019,8 @@ function buildAdminPlannerStaffGroups(sessions) {
     g.endTs = Math.max(g.endTs, s.endTs);
   });
   return Array.from(byStaff.values()).sort(function (a, b) {
-    const na = (getStaffFullName(getStaffById(a.staffId)) || "").toLowerCase();
-    const nb = (getStaffFullName(getStaffById(b.staffId)) || "").toLowerCase();
+    const na = (getStaffFullName(resolveSessionStaff(a.staffId, a.sessions[0] && a.sessions[0].staffName)) || "").toLowerCase();
+    const nb = (getStaffFullName(resolveSessionStaff(b.staffId, b.sessions[0] && b.sessions[0].staffName)) || "").toLowerCase();
     return na.localeCompare(nb, "tr");
   });
 }
@@ -3112,7 +3122,7 @@ function fmtStaffLabelWithRoomRemaining(staff, roomId, startTs, endTs, opts) {
 }
 
 function renderAdminStaffSlotCardHtml(group, entryIdx) {
-  const staff = getStaffById(group.staffId);
+  const staff = resolveSessionStaff(group.staffId, group.sessions[0] && group.sessions[0].staffName);
   const color = staffColor(group.staffId);
   const memberLines = group.sessions
     .map(function (sess) {
@@ -3172,7 +3182,7 @@ function renderAdminPlannerListCardHtml(entry, entryIdx) {
   if (entry.kind === "group") {
     const group = entry.group;
     const start = new Date(group.startTs);
-    const staff = getStaffById(group.staffId);
+    const staff = resolveSessionStaff(group.staffId, group.sessions[0] && group.sessions[0].staffName);
     const memberLines = group.sessions
       .map(function (sess) {
         return '<div class="event__member-name">' + getSessionMemberNameHtmlForCalendar(sess) + '</div>';
@@ -3198,7 +3208,7 @@ function renderAdminPlannerListCardHtml(entry, entryIdx) {
 
   const s = entry.session;
   const start = new Date(s.startTs);
-  const staff = getStaffById(s.staffId);
+  const staff = resolveSessionStaff(s.staffId, s.staffName);
   const note = (s.note || "").trim();
   return (
     '<article class="planner-session-card planner-session-card--admin" tabindex="0" data-entry-idx="' +
@@ -3272,7 +3282,7 @@ function renderSessionsListCards(sessions, options) {
     }
     group.sessions.forEach(function (s) {
       const start = new Date(s.startTs);
-      const staff = getStaffById(s.staffId);
+      const staff = resolveSessionStaff(s.staffId, s.staffName);
       const room = getRoomById(s.roomId);
       const title = memberPkgList
         ? escapeHtml(getStaffFullName(staff))
@@ -3373,7 +3383,7 @@ function renderSessionsListView() {
   if (memberPkgList) {
     const rows = sessions.map(function (s, i) {
       const start = new Date(s.startTs);
-      const staff = getStaffById(s.staffId);
+      const staff = resolveSessionStaff(s.staffId, s.staffName);
       const st = memberSessionStatusLabel(s);
       var actionCell = "";
       if (memberCanCancelSession(s)) {
@@ -3408,7 +3418,7 @@ function renderSessionsListView() {
   const rows = sessions.map(function (s) {
     const start = new Date(s.startTs);
     const timeStr = fmtSessionListTime(start);
-    const staff = getStaffById(s.staffId);
+    const staff = resolveSessionStaff(s.staffId, s.staffName);
     const dateCell = showDateCol
       ? `<td data-label="Tarih">${escapeHtml(fmtSessionListDate(start))}</td>`
       : "";
@@ -3497,7 +3507,7 @@ function renderMonthView() {
     monthSessions.forEach(function (s) {
       const key = s.staffId != null ? s.staffId : "__unassigned__";
       if (!staffCounts.has(key)) {
-        const staffObj = s.staffId != null ? getStaffById(s.staffId) : null;
+        const staffObj = s.staffId != null ? resolveSessionStaff(s.staffId, s.staffName) : null;
         const name = staffObj ? getStaffFullName(staffObj) : "Atanmamış";
         staffCounts.set(key, { name: name, count: 0, staffId: s.staffId });
       }
@@ -3974,7 +3984,7 @@ function renderEvents({ startMin, slotMin, slotsCount }) {
     ev.dataset.cols = String(cols);
     if (isCompact) ev.classList.add("event--compact");
 
-    const staff = getStaffById(group.staffId);
+    const staff = resolveSessionStaff(group.staffId, group.sessions[0] && group.sessions[0].staffName);
     const color = staffColor(group.staffId);
     const memberNamesHtml = group.sessions.map((sess) => `<div class="event__member-name">${getSessionMemberNameHtmlForCalendar(sess)}</div>`).join("");
 
@@ -4127,7 +4137,7 @@ function renderEvents({ startMin, slotMin, slotsCount }) {
     if (isCompact) ev.classList.add("event--compact");
 
     const member = getMemberById(getSessionMemberId(s));
-    const staff = getStaffById(s.staffId);
+    const staff = resolveSessionStaff(s.staffId, s.staffName);
     const color = staffColor(s.staffId);
 
     const startTime = minutesToTime(startMinOfDay);
@@ -4888,7 +4898,7 @@ async function confirmAndDeleteStaffSessionGroup(group) {
     const _mn = getSessionMemberDisplayName(sess);
     confirmMsg = _d+" "+_t+" - "+_mn+" randevusunu iptal etmek istediğinize emin misiniz?";
   } else {
-    const staff = getStaffById(group.staffId);
+    const staff = resolveSessionStaff(group.staffId, sessions[0] && sessions[0].staffName);
     confirmMsg = getStaffFullName(staff)+" personelinin bu saatteki "+sessionCount+" seansını iptal etmek istediğinize emin misiniz?";
   }
   if (!(await showAppConfirm(confirmMsg))) {
@@ -7653,6 +7663,13 @@ function updateAdminMainViewUI() {
   if (els.openNotificationsBtn) els.openNotificationsBtn.classList.toggle("sidebar-nav__btn--active", view === "notifications");
   if (els.openReportsBtn) els.openReportsBtn.classList.toggle("sidebar-nav__btn--active", view === "reports");
   if (els.openBroadcastMembersBtn) els.openBroadcastMembersBtn.classList.toggle("sidebar-nav__btn--active", view === "broadcast");
+  // Takvim'in tarih/görünüm gezinme çubuğu (prev/next, Haftalık/Aylık, filtre) yalnızca
+  // takvim ve giriş listesi görünümlerine ait; diğer panellerde (Raporlar, Üye listeleri vb.)
+  // tıklanırsa goToPrevPeriod/goToNextPeriod kullanıcıyı istemeden Takvim'e geri döndürüyordu.
+  var topbarCenterEl = document.querySelector(".topbar__center");
+  if (topbarCenterEl) {
+    topbarCenterEl.classList.toggle("hidden", view !== "calendar" && view !== "entry-list");
+  }
   updateTopbarFilterPlaceholder();
   refreshAdminListPanels();
 }
@@ -12200,7 +12217,7 @@ async function exportSessionsExcel() {
     const d = new Date(Number(s.startTs));
     const dateStr = `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()}`;
     const timeStr = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-    const staff = getStaffById(s.staffId);
+    const staff = resolveSessionStaff(s.staffId, s.staffName);
     const room = getRoomById(s.roomId);
     const memberName = getSessionMemberDisplayName(s);
     const staffName = staff ? getStaffFullName(staff) : "–";
@@ -12253,7 +12270,7 @@ async function exportSessionsPdf() {
     const d = new Date(Number(s.startTs));
     const dateStr = `${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()}`;
     const timeStr = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-    const staff = getStaffById(s.staffId);
+    const staff = resolveSessionStaff(s.staffId, s.staffName);
     const room = getRoomById(s.roomId);
     const memberName = getSessionMemberDisplayName(s);
     const staffName = staff ? getStaffFullName(staff) : "–";
@@ -13409,7 +13426,7 @@ function printWeeklySchedule() {
     const startTime = `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
     const endTime = `${pad2(new Date(s.endTs).getHours())}:${pad2(new Date(s.endTs).getMinutes())}`;
     const duration = Math.round((s.endTs - s.startTs) / 60000);
-    const staff = getStaffById(s.staffId);
+    const staff = resolveSessionStaff(s.staffId, s.staffName);
     const room = getRoomById(s.roomId);
 
     html += `

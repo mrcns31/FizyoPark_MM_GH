@@ -137,6 +137,7 @@
     return {
       id: row.id,
       staffId: row.staff_id,
+      staffName: row.staff_name || '',
       memberId: row.member_id,
       memberName: memberName,
       roomId: row.room_id || null,
