@@ -557,6 +557,14 @@ router.delete('/:id', [
       'UPDATE members SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *',
       [id]
     );
+    if (memberUserId) {
+      // Giriş hesabını kapat: aktif oturum bir sonraki istekte 401 alır (verifyToken),
+      // üye yeniden aktif edilmediği müddetçe login de engellenir.
+      await db.query(
+        'UPDATE users SET is_active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+        [memberUserId]
+      );
+    }
     await activityLog(req, { action: 'member.delete', entityType: 'member', entityId: id, details: { softDelete: true } }).catch(() => {});
     res.json({ message: 'Üye silindi (sistemde görünmeyecek)' });
   } catch (error) {

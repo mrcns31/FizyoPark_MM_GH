@@ -45,19 +45,43 @@ const generateToken = (userId, role, rememberMe) => {
 };
 
 // Token doğrula (middleware için)
-export const verifyToken = (req, res, next) => {
+export const verifyToken = async (req, res, next) => {
   const token = req.headers.authorization?.split(' ')[1]; // Bearer token
 
   if (!token) {
     return res.status(401).json({ error: 'Token bulunamadı' });
   }
 
+  let decoded;
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    decoded = jwt.verify(token, process.env.JWT_SECRET);
+  } catch (error) {
+    return res.status(401).json({ error: 'Geçersiz token' });
+  }
+
+  // Token imzası geçerli olsa da hesap deaktif edilmiş veya üyelik silinmişse
+  // (admin tarafından) erişimi anında kes — token süresini doldurmasını bekleme.
+  try {
+    const result = await db.query(
+      `SELECT u.is_active, m.deleted_at AS member_deleted_at
+       FROM users u
+       LEFT JOIN members m ON m.user_id = u.id
+       WHERE u.id = $1`,
+      [decoded.userId]
+    );
+
+    if (result.rows.length === 0 || !result.rows[0].is_active) {
+      return res.status(401).json({ error: 'Hesabınız devre dışı bırakılmış. Lütfen yönetici ile iletişime geçin.' });
+    }
+    if (decoded.role === 'member' && result.rows[0].member_deleted_at) {
+      return res.status(401).json({ error: 'Üyeliğiniz sonlandırılmış. Lütfen yönetici ile iletişime geçin.' });
+    }
+
     req.user = decoded;
     next();
   } catch (error) {
-    res.status(401).json({ error: 'Geçersiz token' });
+    console.error('Token doğrulama hatası:', error);
+    res.status(500).json({ error: 'Oturum doğrulanırken hata oluştu' });
   }
 };
 
