@@ -669,6 +669,14 @@
     invalidateRareCache();
   }
 
+  /** Personelin verilen tarihten (dahil) itibaren üyeli randevu sayısı — silme öncesi uyarı için. */
+  async function getStaffFutureMemberSessionCount(id, fromDateStr) {
+    const rows = await apiFetch(
+      '/sessions?staffId=' + encodeURIComponent(id) + '&startDate=' + encodeURIComponent(fromDateStr) + '&_=' + Date.now()
+    );
+    return (rows || []).filter(function (r) { return r.member_id != null; }).length;
+  }
+
   async function resetStaffPassword(id) {
     return apiFetch('/staff/' + id + '/reset-password', { method: 'POST', body: JSON.stringify({}) });
   }
@@ -1086,6 +1094,7 @@
     getAllStaffIncludingDeleted,
     resetStaffPassword,
     reactivateStaff,
+    getStaffFutureMemberSessionCount,
     createRoom,
     updateRoom,
     deleteRoom,

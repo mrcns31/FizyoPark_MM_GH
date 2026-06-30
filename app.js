@@ -7666,12 +7666,13 @@ function updateAdminMainViewUI() {
   if (els.openNotificationsBtn) els.openNotificationsBtn.classList.toggle("sidebar-nav__btn--active", view === "notifications");
   if (els.openReportsBtn) els.openReportsBtn.classList.toggle("sidebar-nav__btn--active", view === "reports");
   if (els.openBroadcastMembersBtn) els.openBroadcastMembersBtn.classList.toggle("sidebar-nav__btn--active", view === "broadcast");
-  // Takvim'in tarih/görünüm gezinme çubuğu (prev/next, Haftalık/Aylık, filtre) yalnızca
+  // Takvim'in tarih/görünüm gezinme çubuğu (prev/next, Haftalık/Aylık, Bugün) yalnızca
   // takvim ve giriş listesi görünümlerine ait; diğer panellerde (Raporlar, Üye listeleri vb.)
   // tıklanırsa goToPrevPeriod/goToNextPeriod kullanıcıyı istemeden Takvim'e geri döndürüyordu.
-  var topbarCenterEl = document.querySelector(".topbar__center");
-  if (topbarCenterEl) {
-    topbarCenterEl.classList.toggle("hidden", view !== "calendar" && view !== "entry-list");
+  // Filtrele/arama kutusu ise tüm panellerde üye aramak için kullanılabilir kalmalı.
+  var topbarNavRowEl = document.querySelector(".topbar__navRow");
+  if (topbarNavRowEl) {
+    topbarNavRowEl.classList.toggle("hidden", view !== "calendar" && view !== "entry-list");
   }
   updateTopbarFilterPlaceholder();
   refreshAdminListPanels();
@@ -9804,10 +9805,34 @@ function saveStaffHours(staffId) {
 
 function deleteStaff(staffId) {
   if (window.API && window.API.getToken()) {
-    openDeleteStaffModal(staffId);
+    confirmStaffDeleteWithFutureCheck(staffId);
   } else {
     _deleteStaffLocal(staffId);
   }
+}
+
+/** Admin şifresi istemeden önce: personelin bugünden itibaren üyeli randevusu varsa uyar. */
+async function confirmStaffDeleteWithFutureCheck(staffId) {
+  const staff = getStaffById(staffId);
+  if (!staff) return;
+  if (window.API && window.API.getStaffFutureMemberSessionCount) {
+    try {
+      const todayStr = dateToInputValue(new Date());
+      const futureCount = await window.API.getStaffFutureMemberSessionCount(staffId, todayStr);
+      if (futureCount > 0) {
+        const proceed = await showAppConfirm(
+          getStaffFullName(staff) + " personelinin bugünden itibaren " + futureCount + " üyeli randevusu var.\n\n" +
+          "Personel silinirse bu randevular takvimden silinmez, kendi adıyla görünmeye devam eder ama personele yeniden atanamaz.\n\n" +
+          "Yine de silme işlemine devam etmek istiyor musunuz?",
+          { title: "Gelecek Randevu Uyarısı", okLabel: "Devam Et", okClass: "btn--danger" }
+        );
+        if (!proceed) return;
+      }
+    } catch (e) {
+      // Kontrol başarısız olursa sessizce normal silme akışına devam et.
+    }
+  }
+  openDeleteStaffModal(staffId);
 }
 
 async function _deleteStaffLocal(staffId) {
