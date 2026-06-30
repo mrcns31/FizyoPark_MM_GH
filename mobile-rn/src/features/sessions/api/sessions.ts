@@ -54,7 +54,7 @@ export async function getSessions(q: SessionQuery = {}): Promise<PlannerSession[
 export type AttendanceAction = 'present' | 'no_show';
 
 export async function confirmAttendance(sessionId: number, action: AttendanceAction): Promise<unknown> {
-  const { data } = await apiClient.post(`/session-attendance/${sessionId}`, { action });
+  const { data } = await apiClient.post(`/sessions/attendance/${sessionId}`, { action });
   return data;
 }
 
