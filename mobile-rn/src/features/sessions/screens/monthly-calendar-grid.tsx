@@ -30,8 +30,7 @@ export function MonthlyCalendarGrid({
   onPressDay: (ts: number) => void;
 }) {
   const monthStart = startOfMonthTs(anchor);
-  const monthDate = new Date(monthStart);
-  const currentMonth = monthDate.getMonth();
+  const monthKey = toDateStr(monthStart).slice(0, 7); // "YYYY-MM" (Istanbul)
   const gridStart = startOfWeekTs(monthStart);
   const todayStr = toDateStr(Date.now());
 
@@ -51,9 +50,8 @@ export function MonthlyCalendarGrid({
     const result: { ts: number; dateStr: string; inMonth: boolean; dayNum: number; staffStats: StaffStat[] }[] = [];
     for (let i = 0; i < 42; i++) {
       const ts = gridStart + i * DAY_MS;
-      const d = new Date(ts);
-      const inMonth = d.getMonth() === currentMonth;
       const dateStr = toDateStr(ts);
+      const inMonth = dateStr.slice(0, 7) === monthKey;
       const daySessions = sessionsByDay.get(dateStr) ?? [];
       // Her gün için personel → randevu sayısı
       const countMap = new Map<number | string, StaffStat>();
@@ -66,10 +64,11 @@ export function MonthlyCalendarGrid({
         countMap.get(key)!.count++;
       }
       const staffStats = [...countMap.values()].sort((a, b) => a.name.localeCompare(b.name, 'tr'));
-      result.push({ ts, dateStr, inMonth, dayNum: d.getDate(), staffStats });
+      const dayNum = Number(dateStr.slice(8, 10));
+      result.push({ ts, dateStr, inMonth, dayNum, staffStats });
     }
     return result;
-  }, [gridStart, currentMonth, sessionsByDay, staff]);
+  }, [gridStart, monthKey, sessionsByDay, staff]);
 
   // Son satır tamamen bir sonraki aya aitse gizle (5 satır yeterli)
   const rowCount = useMemo(() => {

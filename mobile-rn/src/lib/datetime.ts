@@ -66,32 +66,38 @@ export function weekdayLong(dow: number): string {
 }
 
 const DAY_MS = 24 * 3600 * 1000;
+const TZ_OFFSET_MS = 3 * 3600 * 1000; // Europe/Istanbul = UTC+3, DST yok (2016'dan beri sabit)
 
-/** Yerel günün başlangıcı (00:00). İstanbul cihaz için yeterli. */
+/** ts'in Istanbul takvimindeki yıl/ay/gün'ü (cihazın saat dilimine bakmaz). */
+function istanbulParts(ts: number): { y: number; m: number; d: number } {
+  const [y, m, d] = toDateStr(ts).split('-').map(Number);
+  return { y, m, d };
+}
+
+/** Istanbul yerel gününün başlangıcı (00:00 Istanbul, UTC ms). Cihazın saat dilimine bakmaz. */
 function startOfLocalDay(ts: number): number {
-  const d = new Date(ts);
-  d.setHours(0, 0, 0, 0);
-  return d.getTime();
+  const { y, m, d } = istanbulParts(ts);
+  return Date.UTC(y, m - 1, d, 0, 0, 0, 0) - TZ_OFFSET_MS;
 }
 
-/** ts'i içeren haftanın Pazartesi 00:00'ı. */
+/** ts'i içeren haftanın (Istanbul'a göre) Pazartesi 00:00'ı. */
 export function startOfWeekTs(ts: number): number {
-  const d = new Date(startOfLocalDay(ts));
-  const dow = d.getDay(); // 0=Paz
+  const { y, m, d } = istanbulParts(ts);
+  const dow = new Date(Date.UTC(y, m - 1, d)).getUTCDay(); // 0=Paz, cihaz tz'sinden bağımsız
   const diff = (dow + 6) % 7; // Pazartesi'ye kaç gün geri
-  return d.getTime() - diff * DAY_MS;
+  return startOfLocalDay(ts) - diff * DAY_MS;
 }
 
-/** ts'i içeren ayın 1'i 00:00. */
+/** ts'i içeren ayın (Istanbul'a göre) 1'i 00:00. */
 export function startOfMonthTs(ts: number): number {
-  const d = new Date(ts);
-  return new Date(d.getFullYear(), d.getMonth(), 1, 0, 0, 0, 0).getTime();
+  const { y, m } = istanbulParts(ts);
+  return Date.UTC(y, m - 1, 1, 0, 0, 0, 0) - TZ_OFFSET_MS;
 }
 
-/** ts'i içeren ayın son günü 00:00. */
+/** ts'i içeren ayın (Istanbul'a göre) son günü 00:00. */
 export function endOfMonthTs(ts: number): number {
-  const d = new Date(ts);
-  return new Date(d.getFullYear(), d.getMonth() + 1, 0, 0, 0, 0, 0).getTime();
+  const { y, m } = istanbulParts(ts);
+  return Date.UTC(y, m, 0, 0, 0, 0, 0) - TZ_OFFSET_MS; // sonraki ayın 0. günü = bu ayın son günü
 }
 
 /** [startTs, endTs] aralığındaki her gün için öğlen ts'i (DST güvenli). */
