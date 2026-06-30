@@ -118,15 +118,19 @@ router.get('/', [
     let paramIndex = 1;
 
     // Filtreleme
+    // startDate/endDate "YYYY-MM-DD" Istanbul takvim günü olarak gelir. Saat dilimi
+    // belirtilmeden new Date(...) ile parse edilirse UTC gece yarısı olarak yorumlanır
+    // (Istanbul 00:00 değil, Istanbul 03:00) — bu da gün sınırındaki seansları dışarıda
+    // bırakabiliyordu. Istanbul sabit +03:00 olduğundan (DST yok) ofseti açıkça veriyoruz.
     if (startDate) {
-      const startTs = new Date(startDate).getTime();
+      const startTs = new Date(startDate + 'T00:00:00.000+03:00').getTime();
       query += ` AND s.start_ts >= $${paramIndex++}`;
       params.push(startTs);
     }
     if (endDate) {
-      // Günün sonuna kadar (23:59:59 UTC) olacak şekilde start_ts filtrele;
+      // Günün sonuna kadar (23:59:59 Istanbul) olacak şekilde start_ts filtrele;
       // s.end_ts ile karşılaştırmak son günkü seansları dışarıda bırakıyordu.
-      const endTs = new Date(endDate + 'T23:59:59.999Z').getTime();
+      const endTs = new Date(endDate + 'T23:59:59.999+03:00').getTime();
       query += ` AND s.start_ts <= $${paramIndex++}`;
       params.push(endTs);
     }

@@ -522,7 +522,10 @@ router.post('/refresh', verifyToken, (req, res) => {
 });
 
 // Çıkış yap (client-side token silinir)
-router.post('/logout', verifyToken, (req, res) => {
+router.post('/logout', verifyToken, async (req, res) => {
+  // Push token bu kullanıcıya bağlı kalmasın: cihazda kim login olursa push-token
+  // endpoint'i tekrar register eder; aksi halde bir önceki kullanıcı bildirim almaya devam eder
+  await db.query('DELETE FROM push_tokens WHERE user_id = $1', [req.user.userId]).catch(() => {});
   res.json({ message: 'Başarıyla çıkış yapıldı' });
 });
 

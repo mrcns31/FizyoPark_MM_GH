@@ -314,4 +314,63 @@ router.delete('/:id', [
   }
 });
 
+// Eski (soft-silinmiş) personeli tekrar aktif et: eski şifre geçersiz olur,
+// telefon son 4 hane geçici şifre olarak atanır ve ilk girişte değiştirme zorunlu kılınır
+// (üye reaktivasyonundaki davranışla aynı).
+router.post('/:id/reactivate', checkAdmin, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const staffRes = await db.query(
+      `SELECT s.*, u.id AS user_id, u.username, u.email
+       FROM staff s
+       LEFT JOIN users u ON u.id = s.user_id
+       WHERE s.id = $1 AND s.deleted_at IS NOT NULL`,
+      [id]
+    );
+    if (staffRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Eski personel kaydı bulunamadı veya zaten aktif.' });
+    }
+    const staff = staffRes.rows[0];
+
+    await db.query('UPDATE staff SET deleted_at = NULL WHERE id = $1', [id]);
+
+    let tempPasswordInfo = {};
+    if (staff.user_id) {
+      const initialPassword = phoneLast4(staff.phone);
+      if (initialPassword) {
+        const passwordHash = await bcrypt.hash(initialPassword, 10);
+        await db.query(
+          `UPDATE users SET password_hash = $1, must_change_password = true, is_active = true, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
+          [passwordHash, staff.user_id]
+        );
+        tempPasswordInfo = { loginUsername: staff.email || staff.username, temporaryPassword: initialPassword };
+      } else {
+        await db.query(
+          `UPDATE users SET is_active = true, must_change_password = true, updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
+          [staff.user_id]
+        );
+      }
+    }
+
+    const refreshed = await db.query(
+      `SELECT s.*, u.username AS login_username, u.email AS user_email
+       FROM staff s LEFT JOIN users u ON u.id = s.user_id WHERE s.id = $1`,
+      [id]
+    );
+    const row = refreshed.rows[0];
+
+    await activityLog(req, {
+      action: 'staff.reactivate',
+      entityType: 'staff',
+      entityId: id,
+      details: { name: `${staff.first_name} ${staff.last_name}`, login_username: staff.username },
+    }).catch(() => {});
+
+    res.json({ ...row, ...tempPasswordInfo });
+  } catch (error) {
+    console.error('Staff reactivate error:', error);
+    res.status(500).json({ error: 'Personel tekrar aktif edilirken hata oluştu' });
+  }
+});
+
 export default router;

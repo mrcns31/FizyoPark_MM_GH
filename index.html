@@ -1191,6 +1191,7 @@
               <section class="admin-hub-panel hidden" data-admin-hub-panel="staff-list" data-admin-hub-admin-only="1">
                 <div class="admin-hub-panel__head">
                   <h2 class="member-profile-panel__title">Personel Listesi</h2>
+                  <button id="openFormerStaffBtn" class="btn btn--ghost" type="button">Eski Personeller</button>
                   <button id="openStaffAddBtn" class="btn btn--primary" type="button">Yeni Personel Ekle</button>
                 </div>
                 <div id="staffList" class="admin-hub-staff-grid"></div>
@@ -1876,6 +1877,21 @@
           <div class="spacer"></div>
           <button class="btn btn--ghost" type="button" data-close="staffAddModal">Vazgeç</button>
           <button id="addStaffBtn" class="btn btn--primary" type="button">Personel Ekle</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal: Eski Personeller -->
+    <div class="modal hidden" id="formerStaffModal" role="dialog" aria-modal="true">
+      <div class="modal__backdrop" data-close="formerStaffModal"></div>
+      <div class="modal__card former-staff-modal__card">
+        <div class="modal__title">Eski Personeller</div>
+        <div class="modal__body">
+          <div id="formerStaffContent"></div>
+        </div>
+        <div class="modal__footer">
+          <div class="spacer"></div>
+          <button class="btn btn--ghost" type="button" data-close="formerStaffModal">Kapat</button>
         </div>
       </div>
     </div>

@@ -23,6 +23,7 @@ export async function run24hReminders(now = Date.now()) {
        JOIN users u ON u.id = m.user_id
        LEFT JOIN session_reminders sr ON sr.session_id = s.id AND sr.reminder_type = '24h'
        WHERE s.deleted_at IS NULL
+         AND m.deleted_at IS NULL
          AND s.member_id IS NOT NULL
          AND s.start_ts >= $1 AND s.start_ts <= $2
          AND sr.id IS NULL`,

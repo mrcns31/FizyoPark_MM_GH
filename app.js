@@ -1478,6 +1478,9 @@ function cacheEls() {
     "adminHubNav",
     "openStaffAddBtn",
     "staffAddModal",
+    "openFormerStaffBtn",
+    "formerStaffModal",
+    "formerStaffContent",
     "adminHubTitle",
     "adminHubDevResetNav",
     "closurePeriodStart",
@@ -9022,6 +9025,14 @@ function bindAdminProfileActions() {
       if (e.target && e.target.dataset && e.target.dataset.close === "staffAddModal") closeStaffAddModal();
     });
   }
+  if (els.openFormerStaffBtn) {
+    els.openFormerStaffBtn.addEventListener("click", openFormerStaffModal);
+  }
+  if (els.formerStaffModal) {
+    els.formerStaffModal.addEventListener("click", function (e) {
+      if (e.target && e.target.dataset && e.target.dataset.close === "formerStaffModal") closeFormerStaffModal();
+    });
+  }
   if (els.adminProfileUpdateBtn) {
     els.adminProfileUpdateBtn.addEventListener("click", openAdminAccountScreen);
   }
@@ -9409,6 +9420,111 @@ function openStaffAddModal() {
 
 function closeStaffAddModal() {
   if (els.staffAddModal) els.staffAddModal.classList.add("hidden");
+}
+
+/** Eski (soft-silinmiş) personeller — null: henüz yüklenmedi. */
+var formerStaffBaseList = null;
+
+async function openFormerStaffModal() {
+  if (!els.formerStaffModal) return;
+  els.formerStaffModal.classList.remove("hidden");
+  await loadFormerStaffList();
+}
+
+function closeFormerStaffModal() {
+  if (els.formerStaffModal) els.formerStaffModal.classList.add("hidden");
+}
+
+async function loadFormerStaffList() {
+  if (!els.formerStaffContent) return;
+  if (!window.API || !window.API.getAllStaffIncludingDeleted) {
+    els.formerStaffContent.innerHTML = '<div class="admin-panel-empty admin-panel-empty--compact"><p>Bu özellik yalnızca backend bağlantısı ile çalışır.</p></div>';
+    return;
+  }
+  els.formerStaffContent.innerHTML = '<div class="admin-panel-empty admin-panel-empty--compact"><p>Yükleniyor…</p></div>';
+  try {
+    const all = await window.API.getAllStaffIncludingDeleted();
+    formerStaffBaseList = all.filter(function (s) { return !!s.deletedAt; });
+    renderFormerStaffTable();
+  } catch (e) {
+    els.formerStaffContent.innerHTML = '<div class="error">' + escapeHtml((e.data && e.data.error) || e.message || "Eski personeller yüklenemedi.") + '</div>';
+  }
+}
+
+function renderFormerStaffTable() {
+  const content = els.formerStaffContent;
+  if (!content) return;
+  if (formerStaffBaseList === null) return;
+  if (!formerStaffBaseList.length) {
+    content.innerHTML = '<div class="admin-panel-empty admin-panel-empty--compact"><p>Eski personel yok.</p></div>';
+    return;
+  }
+  const wrap = document.createElement("div");
+  wrap.className = "expired-memberships-table-wrap former-staff-table-wrap";
+  const table = document.createElement("table");
+  table.className = "expired-memberships-table former-staff-table";
+  table.innerHTML =
+    "<thead><tr><th>Ad Soyad</th><th>Telefon</th><th>Silinme Tarihi</th><th></th></tr></thead><tbody></tbody>";
+  const tbody = table.querySelector("tbody");
+  formerStaffBaseList.forEach(function (s) {
+    const row = document.createElement("tr");
+    row.className = "expired-memberships-table__row former-staff-table__row";
+    row.innerHTML =
+      '<td class="expired-memberships-table__name">' + escapeHtml(getStaffFullName(s)) + "</td>" +
+      "<td>" + escapeHtml(displayPhone(s.phone) || "–") + "</td>" +
+      "<td>" + escapeHtml(formatDateTR(String(s.deletedAt || "").slice(0, 10)) || "–") + "</td>" +
+      '<td><span class="expired-memberships-table__actions">' +
+      '<button type="button" class="btn btn--xs btn--primary btn--icon-action" data-former-staff-reactivate="' + s.id + '" title="Tekrar Aktif Et" aria-label="Tekrar Aktif Et">↺</button>' +
+      "</span></td>";
+    const reactivateBtn = row.querySelector("[data-former-staff-reactivate]");
+    if (reactivateBtn) {
+      reactivateBtn.addEventListener("click", function () {
+        reactivateFormerStaffById(parseInt(reactivateBtn.getAttribute("data-former-staff-reactivate"), 10));
+      });
+    }
+    tbody.appendChild(row);
+  });
+  content.innerHTML = "";
+  wrap.appendChild(table);
+  content.appendChild(wrap);
+}
+
+async function reactivateFormerStaffById(staffId) {
+  if (!staffId || !window.API || !window.API.reactivateStaff) return null;
+  const s = (formerStaffBaseList || []).find(function (x) { return Number(x.id) === Number(staffId); });
+  const label = s ? getStaffFullName(s) : ("Personel #" + staffId);
+  if (!(await showAppConfirm(
+    label + " tekrar aktif edilsin mi?\n\n" +
+    "Eski şifresi geçersiz olur; telefon son 4 hane geçici şifre olarak atanır, " +
+    "personel ilk girişte yeni şifre belirlemek zorunda kalır."
+  ))) {
+    return null;
+  }
+  try {
+    const result = await window.API.reactivateStaff(staffId);
+    const fetchRange = getPlannerFetchRange();
+    const loaded = await window.API.loadFullState(fetchRange);
+    applyStateFromApi(loaded, fetchRange);
+    updateStaffSummary();
+    renderStaff();
+    render();
+    if (formerStaffBaseList) {
+      formerStaffBaseList = formerStaffBaseList.filter(function (x) { return Number(x.id) !== Number(staffId); });
+    }
+    renderFormerStaffTable();
+    const loginUser = result.loginUsername || result.login_username || "";
+    const tempPw = result.temporaryPassword || "";
+    await showAppAlert(
+      label + " tekrar aktif edildi.\n\n" +
+      "E-posta: " + loginUser + "\n" +
+      "Geçici şifre: " + tempPw + "\n\n" +
+      "Personeli bu bilgilerle giriş yapmaya yönlendirin."
+    );
+    return result;
+  } catch (e) {
+    await showAppAlert((e.data && e.data.error) || e.message || "Tekrar aktif edilemedi.");
+    return null;
+  }
 }
 
 function openStaffModal() {
@@ -14321,6 +14437,7 @@ function bindEvents() {
   window.addEventListener("keydown", (e) => {
     if (e.key === "Escape") {
       if (els.staffAddModal && !els.staffAddModal.classList.contains("hidden")) closeStaffAddModal();
+      if (els.formerStaffModal && !els.formerStaffModal.classList.contains("hidden")) closeFormerStaffModal();
       if (els.adminHubModal && !els.adminHubModal.classList.contains("hidden")) closeAdminHubModal();
       if (els.packageSessionsModal && !els.packageSessionsModal.classList.contains("hidden")) closePackageSessionsModal();
       if (els.staffEditModal && !els.staffEditModal.classList.contains("hidden")) closeStaffEditModal();

@@ -79,6 +79,16 @@ export function MonthlyCalendarGrid({
 
   const visibleCells = cells.slice(0, rowCount * 7);
 
+  // Yüzde genişlik + flexWrap ile tek düz liste halinde dizmek piksel yuvarlamasında
+  // 7. hücrenin (Pazar) bir sonraki satıra kaymasına yol açabiliyordu (cihaza göre
+  // değişen genişliklerde). Her haftayı kendi satırında, flex:1 hücrelerle çizmek
+  // bu kaymayı engelliyor.
+  const weekRows = useMemo(() => {
+    const rows: typeof visibleCells[] = [];
+    for (let i = 0; i < visibleCells.length; i += 7) rows.push(visibleCells.slice(i, i + 7));
+    return rows;
+  }, [visibleCells]);
+
   const staffSummary = useMemo(() => {
     const map = new Map<number | string, { name: string; count: number; idx: number; staffId: number | null }>();
     for (const s of sessions) {
@@ -105,36 +115,40 @@ export function MonthlyCalendarGrid({
         ))}
       </View>
 
-      {/* Takvim grid */}
+      {/* Takvim grid — her hafta kendi satırında (flexWrap kayması olmasın diye) */}
       <View style={styles.grid}>
-        {visibleCells.map((cell) => (
-          <Pressable
-            key={cell.dateStr}
-            style={[
-              styles.dayCell,
-              !cell.inMonth && styles.dayCellMuted,
-              cell.dateStr === todayStr && styles.dayCellToday,
-            ]}
-            onPress={() => onPressDay(cell.ts)}
-          >
-            <Text
-              style={[
-                styles.dayNum,
-                !cell.inMonth && styles.dayNumMuted,
-                cell.dateStr === todayStr && styles.dayNumToday,
-              ]}
-            >
-              {cell.dayNum}
-            </Text>
-            {cell.staffStats.map(({ name, count, idx, staffId }) => {
-              const c = staffColor(idx, staffId);
-              return (
-                <Text key={String(staffId ?? 'none')} style={[styles.staffLine, { color: c.border }]} numberOfLines={1} ellipsizeMode="tail">
-                  {abbrevName(name)}: <Text style={styles.staffCount}>{count}</Text>
+        {weekRows.map((row, ri) => (
+          <View key={ri} style={styles.weekGridRow}>
+            {row.map((cell) => (
+              <Pressable
+                key={cell.dateStr}
+                style={[
+                  styles.dayCell,
+                  !cell.inMonth && styles.dayCellMuted,
+                  cell.dateStr === todayStr && styles.dayCellToday,
+                ]}
+                onPress={() => onPressDay(cell.ts)}
+              >
+                <Text
+                  style={[
+                    styles.dayNum,
+                    !cell.inMonth && styles.dayNumMuted,
+                    cell.dateStr === todayStr && styles.dayNumToday,
+                  ]}
+                >
+                  {cell.dayNum}
                 </Text>
-              );
-            })}
-          </Pressable>
+                {cell.staffStats.map(({ name, count, idx, staffId }) => {
+                  const c = staffColor(idx, staffId);
+                  return (
+                    <Text key={String(staffId ?? 'none')} style={[styles.staffLine, { color: c.border }]} numberOfLines={1} ellipsizeMode="tail">
+                      {abbrevName(name)}: <Text style={styles.staffCount}>{count}</Text>
+                    </Text>
+                  );
+                })}
+              </Pressable>
+            ))}
+          </View>
         ))}
       </View>
 
@@ -169,8 +183,6 @@ export function MonthlyCalendarGrid({
   );
 }
 
-const CELL_W = `${100 / 7}%` as const;
-
 const styles = StyleSheet.create({
   container: { paddingBottom: 32 },
 
@@ -189,13 +201,14 @@ const styles = StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(255,255,255,0.1)',
   },
-  headCell: { width: CELL_W, alignItems: 'center', paddingVertical: 6 },
+  headCell: { flex: 1, alignItems: 'center', paddingVertical: 6 },
   headText: { color: colors.muted, fontSize: 12, fontWeight: '700' },
 
-  grid: { flexDirection: 'row', flexWrap: 'wrap' },
+  grid: {},
+  weekGridRow: { flexDirection: 'row' },
 
   dayCell: {
-    width: CELL_W,
+    flex: 1,
     minHeight: 90,
     padding: 5,
     borderRightWidth: StyleSheet.hairlineWidth,

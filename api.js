@@ -111,6 +111,7 @@
       workingHours: wh,
       loginUsername: row.login_username || null,
       cardNo: row.card_no || null,
+      deletedAt: row.deleted_at || null,
     };
   }
   function roomFromApi(row) {
@@ -672,6 +673,12 @@
     return apiFetch('/staff/' + id + '/reset-password', { method: 'POST', body: JSON.stringify({}) });
   }
 
+  async function reactivateStaff(id) {
+    const row = await apiFetch('/staff/' + id + '/reactivate', { method: 'POST', body: JSON.stringify({}) });
+    invalidateRareCache();
+    return row;
+  }
+
   async function createRoom(body) {
     const row = await apiFetch('/rooms', { method: 'POST', body: JSON.stringify({ name: body.name, devices: body.devices || 1 }) });
     invalidateRareCache();
@@ -1078,6 +1085,7 @@
     deleteStaff,
     getAllStaffIncludingDeleted,
     resetStaffPassword,
+    reactivateStaff,
     createRoom,
     updateRoom,
     deleteRoom,

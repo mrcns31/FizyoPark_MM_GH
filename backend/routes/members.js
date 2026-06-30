@@ -553,6 +553,12 @@ router.delete('/:id', [
 
     // Soft delete: listede görünmez, kart numaraları çakışmasın diye temizlenir
     await db.query('DELETE FROM member_cards WHERE member_id = $1', [id]);
+    // Gelecek randevular da silinir: aksi halde hatırlatma cron'u ve personel takvimi
+    // silinmiş üyenin randevusunu görmeye devam eder
+    await db.query(
+      'UPDATE sessions SET deleted_at = CURRENT_TIMESTAMP WHERE member_id = $1 AND deleted_at IS NULL AND start_ts > $2',
+      [id, Date.now()]
+    );
     await db.query(
       'UPDATE members SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *',
       [id]
@@ -609,6 +615,10 @@ router.post('/:id/approve-deletion-request', async (req, res) => {
       }
 
       await client.query('DELETE FROM member_cards WHERE member_id = $1', [id]);
+      await client.query(
+        'UPDATE sessions SET deleted_at = CURRENT_TIMESTAMP WHERE member_id = $1 AND deleted_at IS NULL AND start_ts > $2',
+        [id, Date.now()]
+      );
       await client.query(
         `UPDATE members
          SET deleted_at = CURRENT_TIMESTAMP, deletion_requested_at = NULL

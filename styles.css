@@ -2712,6 +2712,14 @@ body.body--sidebar-open{
 .staff-edit-modal__card{
   width:min(520px, calc(100vw - 32px));
 }
+.former-staff-modal__card{
+  width:min(640px, calc(100vw - 32px));
+  max-height:min(80dvh, 640px);
+}
+.former-staff-modal__card .former-staff-table{
+  min-width:0;
+  width:100%;
+}
 .staff-form-hint{
   font-size:0.85em;
 }
