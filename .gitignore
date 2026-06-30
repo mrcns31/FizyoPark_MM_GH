@@ -33,3 +33,6 @@ mobile/.expo/
 # Temporary files
 *.tmp
 *.temp
+
+# Local markdown notes (not pushed to git)
+/md/
