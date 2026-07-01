@@ -25,7 +25,8 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.fizyopark.mobilern",
       "infoPlist": {
-        "NSLocalNetworkUsageDescription": "Klinik yönetim sistemiyle yerel ağ üzerinden iletişim kurmak için kullanılır."
+        "NSLocalNetworkUsageDescription": "Klinik yönetim sistemiyle yerel ağ üzerinden iletişim kurmak için kullanılır.",
+        "ITSAppUsesNonExemptEncryption": false
       },
       "privacyManifests": {
         "NSPrivacyTracking": false,
@@ -51,7 +52,7 @@
     },
     "android": {
       "package": "com.fizyopark.mobilern",
-      "googleServicesFile": "./google-services.json",
+      "googleServicesFile": "$GOOGLE_SERVICES_JSON",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
         "foregroundImage": "./assets/android-icon-foreground.png",
