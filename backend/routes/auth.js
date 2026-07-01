@@ -2,6 +2,7 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 import { body, validationResult } from 'express-validator';
+import rateLimit from 'express-rate-limit';
 import db from '../config/database.js';
 import { log as activityLog } from '../utils/activityLogger.js';
 import { getInstitutionWhatsApp, setInstitutionWhatsApp } from '../utils/appSettings.js';
@@ -50,7 +51,7 @@ const generateToken = (userId, role, rememberMe) => {
   return jwt.sign(
     { userId, role },
     process.env.JWT_SECRET,
-    { expiresIn: rememberMe ? (process.env.JWT_REMEMBER_EXPIRES_IN || '30d') : (process.env.JWT_EXPIRES_IN || '24h') }
+    { expiresIn: rememberMe ? (process.env.JWT_REMEMBER_EXPIRES_IN || '7d') : (process.env.JWT_EXPIRES_IN || '4h') }
   );
 };
 
@@ -95,8 +96,18 @@ export const verifyToken = async (req, res, next) => {
   }
 };
 
+// Login endpoint için sıkı rate limiter — global RATE_LIMIT_DISABLED'dan bağımsız çalışır
+const loginRateLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Çok fazla giriş denemesi. 15 dakika sonra tekrar deneyin.' },
+  skip: () => process.env.NODE_ENV === 'development',
+});
+
 // Giriş yap
-router.post('/login', [
+router.post('/login', loginRateLimiter, [
   body('email').trim().notEmpty().withMessage('E-posta gerekli'),
   body('password').notEmpty().withMessage('Şifre gerekli')
 ], async (req, res) => {

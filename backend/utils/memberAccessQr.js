@@ -4,7 +4,9 @@ import crypto from 'crypto';
 export const MEMBER_QR_WINDOW_SEC = 45;
 
 function getSecret() {
-  return process.env.MEMBER_QR_SECRET || process.env.JWT_SECRET || 'fp-mm-member-qr-dev-secret';
+  const secret = process.env.MEMBER_QR_SECRET || process.env.JWT_SECRET;
+  if (!secret) throw new Error('MEMBER_QR_SECRET veya JWT_SECRET tanımlı değil. .env dosyasını kontrol edin.');
+  return secret;
 }
 
 /** Üyeye özel, zaman pencereli erişim jetonu (HMAC). */

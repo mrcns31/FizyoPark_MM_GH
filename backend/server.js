@@ -47,13 +47,14 @@ app.use(helmet()); // Güvenlik başlıkları
 const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:5173')
   .split(',')
   .map((o) => o.trim());
+const isProduction = process.env.NODE_ENV === 'production';
 const localNetworkOriginRegex = /^https?:\/\/(localhost|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})(:\d+)?$/;
 
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
     if (allowedOrigins.includes(origin)) return callback(null, true);
-    if (localNetworkOriginRegex.test(origin)) return callback(null, true);
+    if (!isProduction && localNetworkOriginRegex.test(origin)) return callback(null, true);
     return callback(new Error(`CORS engellendi: ${origin}`));
   },
   credentials: true
@@ -93,7 +94,9 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/packages', packagesRoutes);
 app.use('/api/member-packages', memberPackagesRoutes);
 app.use('/api/activity-logs', activityLogsRoutes);
-app.use('/api/dev-reset', devResetRoutes);
+if (process.env.NODE_ENV !== 'production' || process.env.ALLOW_DEV_RESET === '1') {
+  app.use('/api/dev-reset', devResetRoutes);
+}
 app.use('/api/member-portal', memberPortalRoutes);
 app.use('/api/sessions/attendance', sessionAttendanceRoutes);
 app.use('/api/bootstrap', bootstrapRoutes);
