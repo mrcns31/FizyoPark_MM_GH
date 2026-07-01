@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
+import { Ionicons } from '@expo/vector-icons';
 
 import { FadeIn } from '../../../components/fade-in';
 import { ScreenContainer } from '../../../components/screen-container';
@@ -9,17 +10,28 @@ import { ApiError } from '../../../lib/api-client';
 import { colors } from '../../../theme/colors';
 import { authKeys, useSetPassword } from '../api/hooks';
 
+function validatePassword(pw: string): string | null {
+  if (pw.length < 6 || pw.length > 20) return 'Şifre en az 6, en fazla 20 karakter olmalıdır';
+  const hasLetter = /[a-zA-ZğüşıöçĞÜŞİÖÇ]/.test(pw);
+  const hasDigit = /\d/.test(pw);
+  if (!hasLetter || !hasDigit) return 'Şifre hem harf hem rakam içermelidir';
+  return null;
+}
+
 /** İlk giriş — zorunlu şifre belirleme (mustChangePassword). */
 export function SetPasswordScreen() {
   const qc = useQueryClient();
   const setPw = useSetPassword();
   const [pw, setPw1] = useState('');
   const [pw2, setPw2] = useState('');
+  const [showPw, setShowPw] = useState(false);
+  const [showPw2, setShowPw2] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function onSubmit() {
     setError(null);
-    if (pw.length < 6) return setError('Şifre en az 6 karakter olmalı');
+    const pwErr = validatePassword(pw);
+    if (pwErr) return setError(pwErr);
     if (pw !== pw2) return setError('Şifreler eşleşmiyor');
     try {
       await setPw.mutateAsync({ newPassword: pw, confirmPassword: pw2 });
@@ -35,25 +47,47 @@ export function SetPasswordScreen() {
         <Text style={styles.title}>Şifre Belirle</Text>
         <Muted>Devam etmek için yeni bir şifre oluşturun.</Muted>
 
-        <View style={styles.formRow}>
-          <Text style={styles.label}>Yeni şifre</Text>
-          <TextInput
-            style={styles.input}
-            placeholderTextColor={colors.textMuted}
-            secureTextEntry
-            value={pw}
-            onChangeText={setPw1}
-          />
+        <View style={styles.fieldWrap}>
+          <Text style={styles.label}>Yeni Şifre</Text>
+          <View style={styles.inputWrap}>
+            <TextInput
+              style={styles.input}
+              placeholder="Şifrenizi girin"
+              placeholderTextColor={colors.muted}
+              secureTextEntry={!showPw}
+              value={pw}
+              onChangeText={setPw1}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <Pressable style={styles.eye} onPress={() => setShowPw((v) => !v)} hitSlop={8}>
+              <Ionicons name={showPw ? 'eye-off' : 'eye'} size={18} color={colors.muted} />
+            </Pressable>
+          </View>
         </View>
-        <View style={styles.formRow}>
-          <Text style={styles.label}>Yeni şifre (tekrar)</Text>
-          <TextInput
-            style={styles.input}
-            placeholderTextColor={colors.textMuted}
-            secureTextEntry
-            value={pw2}
-            onChangeText={setPw2}
-          />
+
+        <View style={styles.hintBox}>
+          <Text style={styles.hintText}>- En az 6, en fazla 20 karakter</Text>
+          <Text style={styles.hintText}>- Hem harf hem rakam içermelidir</Text>
+        </View>
+
+        <View style={styles.fieldWrap}>
+          <Text style={styles.label}>Yeni Şifre (Tekrar)</Text>
+          <View style={styles.inputWrap}>
+            <TextInput
+              style={styles.input}
+              placeholder="Şifrenizi tekrar girin"
+              placeholderTextColor={colors.muted}
+              secureTextEntry={!showPw2}
+              value={pw2}
+              onChangeText={setPw2}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <Pressable style={styles.eye} onPress={() => setShowPw2((v) => !v)} hitSlop={8}>
+              <Ionicons name={showPw2 ? 'eye-off' : 'eye'} size={18} color={colors.muted} />
+            </Pressable>
+          </View>
         </View>
 
         {error ? <ErrorBox>{error}</ErrorBox> : null}
@@ -74,20 +108,48 @@ const styles = StyleSheet.create({
     borderRadius: colors.radius,
     paddingHorizontal: 20,
     paddingVertical: 24,
-    gap: 6,
+    gap: 12,
   },
   title: { fontSize: 20, fontWeight: '800', color: colors.text, marginBottom: 2 },
-  formRow: { marginTop: 10 },
-  label: { color: colors.muted, fontSize: 12, marginBottom: 6 },
+  fieldWrap: { gap: 6 },
+  label: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  inputWrap: {
+    position: 'relative',
+    justifyContent: 'center',
+  },
   input: {
-    backgroundColor: 'rgba(255,255,255,0.03)',
+    backgroundColor: 'rgba(255,255,255,0.07)',
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 10,
-    paddingVertical: 11,
+    borderColor: 'rgba(255,255,255,0.18)',
+    paddingHorizontal: 12,
+    paddingVertical: 13,
+    paddingRight: 44,
     color: colors.text,
     fontSize: 16,
   },
-  submit: { marginTop: 14 },
+  eye: {
+    position: 'absolute',
+    right: 12,
+    padding: 4,
+  },
+  hintBox: {
+    backgroundColor: 'rgba(124,92,255,0.10)',
+    borderWidth: 1,
+    borderColor: 'rgba(124,92,255,0.25)',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 3,
+  },
+  hintText: {
+    color: colors.muted,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  submit: { marginTop: 4 },
 });

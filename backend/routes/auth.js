@@ -11,6 +11,16 @@ import { sendExpoPushBulk } from '../utils/pushNotifications.js';
 
 const router = express.Router();
 
+function validatePasswordStrength(password) {
+  if (!password || password.length < 6 || password.length > 20) {
+    return 'Şifre en az 6, en fazla 20 karakter olmalıdır';
+  }
+  const hasLetter = /[a-zA-ZğüşıöçĞÜŞİÖÇ]/.test(password);
+  const hasDigit = /\d/.test(password);
+  if (!hasLetter || !hasDigit) return 'Şifre hem harf hem rakam içermelidir';
+  return null;
+}
+
 function buildUserProfile(row) {
   let fullName = row.username;
   if (row.display_name && String(row.display_name).trim()) {
@@ -214,7 +224,11 @@ router.get('/legal-links', async (req, res) => {
 
 // İlk girişte şifre belirleme (must_change_password=true iken)
 router.post('/set-password', verifyToken, [
-  body('newPassword').isLength({ min: 4 }).withMessage('Şifre en az 4 karakter olmalı'),
+  body('newPassword').custom((value) => {
+    const err = validatePasswordStrength(value);
+    if (err) throw new Error(err);
+    return true;
+  }),
   body('confirmPassword').custom((value, { req }) => {
     if (value !== req.body.newPassword) throw new Error('Şifreler eşleşmiyor');
     return true;
@@ -260,7 +274,11 @@ router.post('/set-password', verifyToken, [
 // Giriş yapmış kullanıcı şifre değiştirme (admin profil vb.)
 router.post('/change-password', verifyToken, [
   body('currentPassword').notEmpty().withMessage('Mevcut şifre gerekli'),
-  body('newPassword').isLength({ min: 4 }).withMessage('Yeni şifre en az 4 karakter olmalı'),
+  body('newPassword').custom((value) => {
+    const err = validatePasswordStrength(value);
+    if (err) throw new Error(err);
+    return true;
+  }),
   body('confirmPassword').custom((value, { req }) => {
     if (value !== req.body.newPassword) throw new Error('Şifreler eşleşmiyor');
     return true;
@@ -286,6 +304,11 @@ router.post('/change-password', verifyToken, [
     const valid = await bcrypt.compare(currentPassword, user.password_hash);
     if (!valid) {
       return res.status(401).json({ error: 'Mevcut şifre hatalı' });
+    }
+
+    const sameAsOld = await bcrypt.compare(newPassword, user.password_hash);
+    if (sameAsOld) {
+      return res.status(400).json({ error: 'Yeni şifreniz eski şifrenizden farklı olmalıdır' });
     }
 
     const passwordHash = await bcrypt.hash(newPassword, 10);
@@ -317,7 +340,12 @@ router.put('/account', verifyToken, [
   body('whatsapp').optional({ nullable: true }).isString(),
   body('legalLinks').optional().isObject(),
   body('currentPassword').optional().isString(),
-  body('newPassword').optional().isLength({ min: 4 }).withMessage('Yeni şifre en az 4 karakter olmalı'),
+  body('newPassword').optional().custom((value) => {
+    if (!value) return true;
+    const err = validatePasswordStrength(value);
+    if (err) throw new Error(err);
+    return true;
+  }),
   body('confirmPassword').optional().isString(),
 ], async (req, res) => {
   try {
