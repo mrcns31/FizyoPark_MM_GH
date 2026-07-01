@@ -12,6 +12,7 @@ export interface StaffMember {
   email: string;
   cardNo: string | null;
   workingHours: WorkingHours;
+  deletedAt: string | null;
 }
 
 /** Backend working_hours (jsonb obje veya string) → WorkingHours. */
@@ -51,6 +52,7 @@ function fromApi(row: any): StaffMember {
     email: row.user_email || row.email || '',
     cardNo: row.card_no || row.cardNo || null,
     workingHours: parseWorkingHours(row.working_hours ?? row.workingHours),
+    deletedAt: row.deleted_at || row.deletedAt || null,
   };
 }
 
@@ -68,6 +70,18 @@ export async function getStaff(): Promise<StaffMember[]> {
   return (Array.isArray(data) ? data : []).map(fromApi);
 }
 
+/** Soft-silinmiş (eski) personeller dahil tüm personel listesi. */
+async function getAllStaffIncludingDeleted(): Promise<StaffMember[]> {
+  const { data } = await apiClient.get('/staff', { params: { includeDeleted: 'true' } });
+  return (Array.isArray(data) ? data : []).map(fromApi);
+}
+
+/** Soft-silinmiş (eski) personeller — admin'in tekrar aktif edebilmesi için. */
+export async function getFormerStaff(): Promise<StaffMember[]> {
+  const all = await getAllStaffIncludingDeleted();
+  return all.filter((s) => !!s.deletedAt);
+}
+
 export async function createStaff(input: StaffInput): Promise<StaffMember> {
   const { data } = await apiClient.post('/staff', input);
   return fromApi(data);
@@ -80,6 +94,15 @@ export async function updateStaff(id: number, input: StaffInput): Promise<StaffM
 
 export async function deleteStaff(id: number, adminPassword: string): Promise<void> {
   await apiClient.delete(`/staff/${id}`, { data: { adminPassword } });
+}
+
+/** Eski personeli tekrar aktif eder; eski şifre geçersiz olur, telefon son 4 hane geçici şifre olur. */
+export async function reactivateStaff(id: number): Promise<{ loginUsername?: string; temporaryPassword?: string }> {
+  const { data } = await apiClient.post(`/staff/${id}/reactivate`, {});
+  return {
+    loginUsername: data?.loginUsername ?? data?.login_username ?? undefined,
+    temporaryPassword: data?.temporaryPassword ?? undefined,
+  };
 }
 
 /** Personelin giriş şifresini sıfırlar; backend geçici şifre döndürebilir. */

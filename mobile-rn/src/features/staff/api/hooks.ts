@@ -1,11 +1,36 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { checkStaffShiftReminder, createStaff, deleteStaff, getStaff, resetStaffPassword, updateStaff, type StaffInput } from './staff';
+import {
+  checkStaffShiftReminder,
+  createStaff,
+  deleteStaff,
+  getFormerStaff,
+  getStaff,
+  reactivateStaff,
+  resetStaffPassword,
+  updateStaff,
+  type StaffInput,
+} from './staff';
 
-export const staffKeys = { all: ['staff'] as const };
+export const staffKeys = { all: ['staff'] as const, former: ['staff', 'former'] as const };
 
 export function useStaff() {
-  return useQuery({ queryKey: staffKeys.all, queryFn: getStaff });
+  return useQuery({ queryKey: staffKeys.all, queryFn: () => getStaff() });
+}
+
+export function useFormerStaff() {
+  return useQuery({ queryKey: staffKeys.former, queryFn: getFormerStaff });
+}
+
+export function useReactivateStaff() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => reactivateStaff(id),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: staffKeys.all });
+      qc.invalidateQueries({ queryKey: staffKeys.former });
+    },
+  });
 }
 
 export function useCreateStaff() {

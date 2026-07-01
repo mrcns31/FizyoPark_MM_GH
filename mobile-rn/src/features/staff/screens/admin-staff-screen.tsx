@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -10,6 +10,8 @@ import { Fab } from '../../../components/fab';
 import { ScreenHeader } from '../../../components/screen-header';
 import { useResponsive } from '../../../lib/responsive';
 import { colors } from '../../../theme/colors';
+import { toDateStr } from '../../../lib/datetime';
+import { getSessions } from '../../sessions/api/sessions';
 import { useDeleteStaff, useStaff } from '../api/hooks';
 import type { StaffMember } from '../api/staff';
 
@@ -64,7 +66,7 @@ export function AdminStaffScreen() {
   const del = useDeleteStaff();
   const { contentMaxWidth, gutter } = useResponsive();
 
-  function onDelete(id: number, name: string) {
+  function promptDeletePassword(id: number, name: string) {
     Alert.prompt(
       'Personeli sil',
       `${name} silinecek. Admin şifresini girin:`,
@@ -81,11 +83,42 @@ export function AdminStaffScreen() {
     );
   }
 
+  async function onDelete(id: number, name: string) {
+    try {
+      const future = await getSessions({ staffId: id, startDate: toDateStr() });
+      const futureCount = future.filter((s) => s.memberId != null).length;
+      if (futureCount > 0) {
+        Alert.alert(
+          'Gelecek Randevu Uyarısı',
+          `${name} personelinin bugünden itibaren ${futureCount} üyeli randevusu var.\n\nPersonel silinirse bu randevular takvimden silinmez, kendi adıyla görünmeye devam eder ama personele yeniden atanamaz.\n\nYine de silme işlemine devam etmek istiyor musunuz?`,
+          [
+            { text: 'Vazgeç', style: 'cancel' },
+            { text: 'Devam Et', style: 'destructive', onPress: () => promptDeletePassword(id, name) },
+          ],
+        );
+        return;
+      }
+    } catch {
+      // Kontrol başarısız olursa sessizce normal silme akışına devam et.
+    }
+    promptDeletePassword(id, name);
+  }
+
   const wide = { maxWidth: contentMaxWidth, alignSelf: 'center' as const, width: '100%' as const, paddingHorizontal: gutter };
+
+  const formerStaffBtn = (
+    <Pressable
+      onPress={() => router.push('/(admin)/more/staff-former')}
+      hitSlop={10}
+      style={styles.formerBtn}
+    >
+      <Ionicons name="people-outline" size={20} color={colors.muted} />
+    </Pressable>
+  );
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <ScreenHeader title="Personel" onBack={() => router.push('/(admin)/more/settings')} />
+      <ScreenHeader title="Personel" onBack={() => router.push('/(admin)/more/settings')} right={formerStaffBtn} />
       <FlatList
         data={data ?? []}
         keyExtractor={(s) => String(s.id)}
@@ -107,6 +140,7 @@ export function AdminStaffScreen() {
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.bg },
+  formerBtn: { padding: 6 },
   list: { paddingTop: 16, paddingBottom: 96, gap: 10, flexGrow: 1 },
   card: {
     padding: 12,
