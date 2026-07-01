@@ -11,6 +11,7 @@ import { ScreenHeader } from '../../../components/screen-header';
 import { useResponsive } from '../../../lib/responsive';
 import { colors } from '../../../theme/colors';
 import { toDateStr } from '../../../lib/datetime';
+import { promptAdminPassword } from '../../../lib/admin-password';
 import { getSessions } from '../../sessions/api/sessions';
 import { useDeleteStaff, useStaff } from '../api/hooks';
 import type { StaffMember } from '../api/staff';
@@ -66,21 +67,10 @@ export function AdminStaffScreen() {
   const del = useDeleteStaff();
   const { contentMaxWidth, gutter } = useResponsive();
 
-  function promptDeletePassword(id: number, name: string) {
-    Alert.prompt(
-      'Personeli sil',
-      `${name} silinecek. Admin şifresini girin:`,
-      [
-        { text: 'Vazgeç', style: 'cancel' },
-        {
-          text: 'Sil',
-          style: 'destructive',
-          onPress: (pw?: string) =>
-            del.mutate({ id, adminPassword: pw ?? '' }, { onError: (e) => Alert.alert('Hata', (e as Error).message) }),
-        },
-      ],
-      'secure-text'
-    );
+  async function promptDeletePassword(id: number, name: string) {
+    const pw = await promptAdminPassword(`${name} silinecek. Admin şifresini girin:`);
+    if (pw === null) return;
+    del.mutate({ id, adminPassword: pw }, { onError: (e) => Alert.alert('Hata', (e as Error).message) });
   }
 
   async function onDelete(id: number, name: string) {
