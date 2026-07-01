@@ -45,7 +45,9 @@ export function SetPasswordScreen() {
     <ScreenContainer scroll center>
       <FadeIn style={styles.card}>
         <Text style={styles.title}>Şifre Belirle</Text>
-        <Muted>Devam etmek için yeni bir şifre oluşturun.</Muted>
+        <Muted>
+          Hesabınıza geçici şifre ile giriş yaptınız. Devam edebilmek için kalıcı bir şifre belirlemeniz gerekmektedir.
+        </Muted>
 
         <View style={styles.fieldWrap}>
           <Text style={styles.label}>Yeni Şifre</Text>
