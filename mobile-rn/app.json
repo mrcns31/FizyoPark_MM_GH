@@ -2,7 +2,7 @@
   "expo": {
     "name": "FizyoPark",
     "slug": "mobile-rn",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "runtimeVersion": {
       "policy": "nativeVersion"
     },
@@ -24,6 +24,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.fizyopark.mobilern",
+
       "infoPlist": {
         "NSLocalNetworkUsageDescription": "Klinik yönetim sistemiyle yerel ağ üzerinden iletişim kurmak için kullanılır.",
         "ITSAppUsesNonExemptEncryption": false
