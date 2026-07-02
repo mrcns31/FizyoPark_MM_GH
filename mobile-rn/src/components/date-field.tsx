@@ -19,13 +19,17 @@ function dateToStr(d: Date): string {
     d.getDate(),
   ).padStart(2, '0')}`;
 }
-/** DD.MM.YYYY Çarşamba */
+/** 2 Temmuz 2026 Perşembe */
 function labelTR(v: string): string {
   if (!v) return '';
   const [y, m, d] = v.split('-');
   const date = new Date(Number(y), Number(m) - 1, Number(d));
-  const dayName = new Intl.DateTimeFormat('tr-TR', { weekday: 'short' }).format(date);
-  return `${d}.${m}.${y} ${dayName}`;
+  return new Intl.DateTimeFormat('tr-TR', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    weekday: 'long',
+  }).format(date);
 }
 
 /**

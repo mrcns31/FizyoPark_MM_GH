@@ -221,32 +221,28 @@ export function SessionFormScreen() {
         <SelectField label="Personel" required value={staffId} onChange={setStaffId} options={staffOptions} />
 
         <View style={styles.dtRow}>
-          <View style={styles.dtDate}>
-            <Text style={styles.label}>Tarih</Text>
-            <View style={styles.arrowRow}>
-              <Pressable
-                hitSlop={8}
-                style={styles.arrowBtn}
-                onPress={() => setStart((d) => { const n = new Date(d); n.setDate(n.getDate() - 1); return n; })}
-              >
-                <Ionicons name="chevron-back" size={22} color={colors.text} />
-              </Pressable>
-              <View style={styles.arrowField}>
-                <DateField value={dateToStr(start)} onChange={(v) => setStart(mergeDate(start, v))} />
-              </View>
-              <Pressable
-                hitSlop={8}
-                style={styles.arrowBtn}
-                onPress={() => setStart((d) => { const n = new Date(d); n.setDate(n.getDate() + 1); return n; })}
-              >
-                <Ionicons name="chevron-forward" size={22} color={colors.text} />
-              </Pressable>
+          <Text style={styles.label}>Tarih</Text>
+          <View style={styles.arrowRow}>
+            <Pressable
+              hitSlop={8}
+              style={styles.arrowBtn}
+              onPress={() => setStart((d) => { const n = new Date(d); n.setDate(n.getDate() - 1); return n; })}
+            >
+              <Ionicons name="chevron-back" size={22} color={colors.text} />
+            </Pressable>
+            <View style={styles.arrowField}>
+              <DateField value={dateToStr(start)} onChange={(v) => setStart(mergeDate(start, v))} />
             </View>
+            <Pressable
+              hitSlop={8}
+              style={styles.arrowBtn}
+              onPress={() => setStart((d) => { const n = new Date(d); n.setDate(n.getDate() + 1); return n; })}
+            >
+              <Ionicons name="chevron-forward" size={22} color={colors.text} />
+            </Pressable>
           </View>
-          <View style={styles.dtMiddle} />
-          <View>
-            <Text style={styles.label}>Saat</Text>
-            <View style={styles.arrowRow}>
+          <Text style={[styles.label, { marginTop: 10 }]}>Saat</Text>
+          <View style={styles.arrowRow}>
               <Pressable
                 hitSlop={8}
                 style={styles.arrowBtn}
@@ -277,7 +273,6 @@ export function SessionFormScreen() {
                 <Ionicons name="chevron-forward" size={22} color={colors.text} />
               </Pressable>
             </View>
-          </View>
         </View>
 
         <View>
@@ -315,8 +310,7 @@ export function SessionFormScreen() {
 const styles = StyleSheet.create({
   card: { gap: 14, marginTop: 8 },
   label: { color: colors.muted, fontSize: 12, marginBottom: 6 },
-  dtRow: { flexDirection: 'row', gap: 0, alignItems: 'flex-start' },
-  dtDate: { flex: 1 },
+  dtRow: { flexDirection: 'column', gap: 0 },
   arrowRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   arrowBtn: {
     width: 34, height: 34,
@@ -326,7 +320,6 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   arrowField: { flex: 1 },
-  dtMiddle: { flex: 1 },
   memberRow: {
     flexDirection: 'row',
     alignItems: 'center',
