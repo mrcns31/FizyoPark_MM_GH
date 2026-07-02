@@ -87,12 +87,16 @@ export async function deleteSession(id: number, adminPassword?: string): Promise
   await apiClient.delete(`/sessions/${id}`, { data: adminPassword ? { adminPassword } : {} });
 }
 
+const PHYSICAL_CHECK_IN_METHODS = ['qr', 'phone', 'card'];
+
 /**
- * Web isSessionAttendanceConfirmed paritesi: seans GEÇMİŞTE (startTs ≤ now) ve
- * check-in / yoklama onay damgası varsa, üzerinde değişiklik admin şifresi gerektirir.
+ * Web isSessionAttendanceConfirmed paritesi: seans üzerinde değişiklik admin şifresi gerektirir.
+ * Fiziksel giriş (QR/Telefon/Kart) varsa seans henüz başlamamış olsa bile kilitlidir —
+ * bu sayede giriş yapılmış ama ileri saatli randevu yanlışlıkla silinemiyor.
  */
 export function isAttendanceConfirmed(s: PlannerSession, now = Date.now()): boolean {
   if (!s) return false;
+  if (s.checkedInAt && s.checkInMethod && PHYSICAL_CHECK_IN_METHODS.includes(s.checkInMethod)) return true;
   if (s.startTs > now) return false;
   return !!(s.checkedInAt || s.attendanceConfirmedAt);
 }

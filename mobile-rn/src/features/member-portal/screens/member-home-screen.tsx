@@ -80,6 +80,7 @@ export function MemberHomeScreen() {
   async function confirmCancel() {
     const s = cancelTarget;
     if (!s) return;
+    if (s.checkedIn) return;
     setCancelError(null);
     try {
       const result = await cancelMutation.mutateAsync({
@@ -187,7 +188,7 @@ export function MemberHomeScreen() {
                       <Text style={styles.dayName}>{dayName}</Text>
                     </View>
                   </View>
-                  {s.canCancel ? (
+                  {s.canCancel && !s.checkedIn ? (
                     <Pressable onPress={() => openCancel(s)} style={styles.cancelBtn}>
                       <Text style={styles.cancelBtnText}>İptal</Text>
                     </Pressable>
@@ -197,8 +198,8 @@ export function MemberHomeScreen() {
                     </View>
                   ) : null}
                 </View>
-                {/* Satır 2: Durum (sadece tamamlanmış/iptal/otomatik düşen için) */}
-                {(isPast || s.isCancelled) ? (
+                {/* Satır 2: Durum (tamamlanmış/iptal/otomatik düşen ve giriş yapılmış gelecek seans) */}
+                {(isPast || s.isCancelled || s.checkedIn) ? (
                   <View style={styles.badgeRow}>
                     <Badge label={lbl} tone={tone} />
                   </View>
