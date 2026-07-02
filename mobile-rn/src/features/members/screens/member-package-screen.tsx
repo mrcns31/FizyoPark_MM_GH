@@ -311,7 +311,7 @@ export function MemberPackageScreen() {
                 onPress={() =>
                   router.push({
                     pathname: '/(admin)/members/package-sessions',
-                    params: { memberPackageId: String(mp.id), packageName: mp.packageName },
+                    params: { memberPackageId: String(mp.id), packageName: mp.packageName, memberId: memberId != null ? String(memberId) : undefined },
                   })
                 }
               >

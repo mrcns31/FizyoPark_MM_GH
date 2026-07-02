@@ -87,6 +87,16 @@ export async function deleteSession(id: number, adminPassword?: string): Promise
   await apiClient.delete(`/sessions/${id}`, { data: adminPassword ? { adminPassword } : {} });
 }
 
+export async function moveSessionToPackage(
+  sessionId: number,
+  targetMpId: number,
+  adminPassword?: string,
+): Promise<void> {
+  const body: Record<string, unknown> = { memberPackageId: targetMpId, skipTrim: true };
+  if (adminPassword) body.adminPassword = adminPassword;
+  await apiClient.put(`/sessions/${sessionId}`, body);
+}
+
 const PHYSICAL_CHECK_IN_METHODS = ['qr', 'phone', 'card'];
 
 /**

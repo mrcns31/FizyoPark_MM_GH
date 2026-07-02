@@ -50,7 +50,7 @@ function PackagesSheet({ memberId, memberName, onClose }: { memberId: number | n
             {data.map((pkg: FormerMemberPackage) => (
               <Pressable key={pkg.id} style={sheetStyles.pkgRow} onPress={() => {
                 onClose();
-                router.push({ pathname: '/(admin)/members/package-sessions', params: { memberPackageId: String(pkg.id), packageName: pkg.packageName, startDate: pkg.startDate, endDate: pkg.endDate, packageStatus: pkg.status } });
+                router.push({ pathname: '/(admin)/members/package-sessions', params: { memberPackageId: String(pkg.id), packageName: pkg.packageName, startDate: pkg.startDate, endDate: pkg.endDate, packageStatus: pkg.status, memberId: memberId != null ? String(memberId) : undefined } });
               }}>
                 <View style={sheetStyles.pkgLeft}>
                   <Text style={sheetStyles.pkgName}>{pkg.packageName}</Text>

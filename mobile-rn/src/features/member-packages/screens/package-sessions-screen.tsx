@@ -1,5 +1,5 @@
-import { useCallback, useRef, useMemo } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useCallback, useRef, useMemo, useState } from 'react';
+import { ActivityIndicator, Alert, FlatList, Pressable, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,13 +7,15 @@ import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from 'expo-rou
 import { useQueryClient } from '@tanstack/react-query';
 
 import { Badge, Card, Muted } from '../../../components/ui';
+import { BottomSheet } from '../../../components/bottom-sheet';
 import { formatTime } from '../../../lib/datetime';
 import { colors } from '../../../theme/colors';
-import { useMemberPackageSessions } from '../api/hooks';
+import { useMemberPackageSessions, useMemberPackages } from '../api/hooks';
 import type { MemberPackageSession } from '../api/member-packages';
-import { useDeleteSession } from '../../sessions/api/hooks';
+import { useDeleteSession, useMoveSession } from '../../sessions/api/hooks';
 import { isAttendanceConfirmed } from '../../sessions/api/sessions';
 import { promptAdminPassword } from '../../../lib/admin-password';
+import type { MemberPackage } from '../../../types/api';
 
 function fmtDate(v: string): string {
   if (!v) return '';
@@ -21,11 +23,6 @@ function fmtDate(v: string): string {
   return `${d}-${m}-${y}`;
 }
 
-
-/**
- * Web buildPackageSessionApprovalInfo mantığıyla birebir eşleşen badge.
- * approvalLabel backend'den geliyorsa direkt kullanılır.
- */
 function badgeFor(s: {
   isCancelled: boolean;
   approvalLabel: string | null;
@@ -38,16 +35,12 @@ function badgeFor(s: {
   const lbl = s.approvalLabel;
   const kind = s.approvalKind;
 
-  if (!lbl || !kind) {
-    // Fallback: approvalLabel gelmemişse basit durum
-    return { label: 'Planlandı', tone: 'accent' };
-  }
+  if (!lbl || !kind) return { label: 'Planlandı', tone: 'accent' };
 
   switch (kind) {
     case 'phone':
     case 'card':
     case 'qr': {
-      // "Kart - Geldi" → "Kart - 07:59" şeklinde gerçek saati göster
       const time = s.checkedInAt ? formatTime(new Date(s.checkedInAt).getTime()) : null;
       const displayLabel = time ? `${lbl.replace(' - Geldi', '')} - ${time}` : lbl;
       return { label: displayLabel, tone: 'green' };
@@ -59,17 +52,15 @@ function badgeFor(s: {
     case 'no_show':
       return { label: lbl, tone: 'red' };
     case 'burned':
-      return { label: lbl, tone: 'red' }; // "Otomatik Düşen Seans"
+      return { label: lbl, tone: 'red' };
     case 'pending':
-      return { label: lbl, tone: 'orange' }; // "Onaylanmadı"
+      return { label: lbl, tone: 'orange' };
     case 'scheduled':
-      return { label: lbl, tone: 'accent' }; // "Planlandı"
+      return { label: lbl, tone: 'accent' };
     default:
       return { label: lbl, tone: 'neutral' };
   }
 }
-
-const PHYSICAL = ['qr', 'phone', 'card'];
 
 const sessionDateFmt = new Intl.DateTimeFormat('tr-TR', {
   timeZone: 'Europe/Istanbul',
@@ -97,11 +88,13 @@ function SessionCard({
   idx,
   onEdit,
   onDelete,
+  onMove,
 }: {
   s: MemberPackageSession;
   idx: number;
   onEdit: () => void;
   onDelete: () => void;
+  onMove: () => void;
 }) {
   const swipeRef = useRef<Swipeable>(null);
   const b = badgeFor({ ...s });
@@ -116,12 +109,20 @@ function SessionCard({
   );
 
   const leftActions = () => (
-    <TouchableOpacity
-      style={styles.swipeEdit}
-      onPress={() => { swipeRef.current?.close(); onEdit(); }}
-    >
-      <Ionicons name="create-outline" size={22} color="#fff" />
-    </TouchableOpacity>
+    <View style={styles.swipeLeftGroup}>
+      <TouchableOpacity
+        style={styles.swipeEdit}
+        onPress={() => { swipeRef.current?.close(); onEdit(); }}
+      >
+        <Ionicons name="create-outline" size={22} color="#fff" />
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={styles.swipeMove}
+        onPress={() => { swipeRef.current?.close(); onMove(); }}
+      >
+        <Ionicons name="swap-horizontal-outline" size={20} color="#fff" />
+      </TouchableOpacity>
+    </View>
   );
 
   return (
@@ -148,20 +149,27 @@ function SessionCard({
 }
 
 export function PackageSessionsScreen() {
-  const { memberPackageId, packageName, startDate, endDate, packageStatus } = useLocalSearchParams<{
+  const { memberPackageId, packageName, startDate, endDate, packageStatus, memberId: memberIdParam } = useLocalSearchParams<{
     memberPackageId?: string;
     packageName?: string;
     startDate?: string;
     endDate?: string;
     packageStatus?: string;
+    memberId?: string;
   }>();
   const id = memberPackageId ? Number(memberPackageId) : undefined;
+  const memberId = memberIdParam ? Number(memberIdParam) : undefined;
+
   const { data, isLoading } = useMemberPackageSessions(id);
+  const { data: allPackages } = useMemberPackages(memberId);
   const router = useRouter();
   const del = useDeleteSession();
+  const move = useMoveSession();
   const qc = useQueryClient();
 
-  // Form'dan geri dönüşte seansları yenile
+  const [cancelledOpen, setCancelledOpen] = useState(false);
+  const [moveTarget, setMoveTarget] = useState<MemberPackageSession | null>(null);
+
   useFocusEffect(
     useCallback(() => {
       if (id != null) {
@@ -174,7 +182,32 @@ export function PackageSessionsScreen() {
   const active = sessions.filter((s) => !s.isCancelled);
   const cancelled = sessions.filter((s) => s.isCancelled);
 
+  // Diğer paketler: mevcut paketin dışındakiler (active/completed)
+  const otherPackages = useMemo(
+    () => (allPackages ?? []).filter((p) => p.id !== id && p.status !== 'cancelled'),
+    [allPackages, id],
+  );
+
   const statusStr = packageStatus === 'active' ? 'Aktif' : packageStatus === 'completed' ? 'Tamamlandı' : packageStatus === 'cancelled' ? 'İptal' : null;
+
+  async function onShare() {
+    const header = [
+      packageName || 'Paket Seansları',
+      startDate && endDate ? `${fmtDate(startDate)} – ${fmtDate(endDate)}` : '',
+      `${active.length} randevu`,
+      '',
+    ].filter(Boolean).join('\n');
+
+    const rows = active.map((s, i) => {
+      const staff = s.staffName ? ` | ${s.staffName}` : '';
+      const approval = s.approvalLabel || 'Planlandı';
+      return `${i + 1}. ${fmtSessionDate(s.startTs)}${staff} | ${approval}`;
+    }).join('\n');
+
+    try {
+      await Share.share({ message: `${header}\n${rows}`, title: packageName || 'Paket Seansları' });
+    } catch (_) {}
+  }
 
   function goEdit(s: MemberPackageSession) {
     router.push({
@@ -192,8 +225,7 @@ export function PackageSessionsScreen() {
         onPress: async () => {
           try {
             let adminPassword: string | undefined;
-            // Giriş yapılmış / onaylanmış seanslar için admin şifresi
-            const fakeSession = { startTs: s.startTs, checkedInAt: s.checkedInAt, attendanceConfirmedAt: null, staffId: null, memberId: null, endTs: 0, memberName: '', staffName: '', roomId: null, roomName: '', note: '', attendanceOutcome: null, isGroup: false } as any;
+            const fakeSession = { startTs: s.startTs, checkedInAt: s.checkedInAt, checkInMethod: s.checkInMethod, attendanceConfirmedAt: null, staffId: null, memberId: null, endTs: 0, memberName: '', staffName: '', roomId: null, roomName: '', note: '', attendanceOutcome: null } as any;
             if (isAttendanceConfirmed(fakeSession)) {
               const pwd = await promptAdminPassword('Girişi onaylanmış seansı silmek için admin şifrenizi girin.');
               if (pwd == null) return;
@@ -210,6 +242,27 @@ export function PackageSessionsScreen() {
     ]);
   }
 
+  async function onMoveConfirm(targetPkg: MemberPackage) {
+    const s = moveTarget;
+    if (!s) return;
+    setMoveTarget(null);
+    try {
+      let adminPassword: string | undefined;
+      const fakeSession = { startTs: s.startTs, checkedInAt: s.checkedInAt, checkInMethod: s.checkInMethod, attendanceConfirmedAt: null, staffId: null, memberId: null, endTs: 0, memberName: '', staffName: '', roomId: null, roomName: '', note: '', attendanceOutcome: null } as any;
+      if (isAttendanceConfirmed(fakeSession)) {
+        const pwd = await promptAdminPassword('Girişi onaylanmış seansı taşımak için admin şifrenizi girin.');
+        if (pwd == null) return;
+        adminPassword = pwd;
+      }
+      move.mutate(
+        { id: s.id, targetMpId: targetPkg.id, adminPassword },
+        { onError: (e) => Alert.alert('Hata', (e as Error).message) },
+      );
+    } catch (e) {
+      Alert.alert('Hata', (e as Error).message);
+    }
+  }
+
   type ListItem =
     | { type: 'header' }
     | { type: 'active'; s: MemberPackageSession; idx: number }
@@ -220,12 +273,21 @@ export function PackageSessionsScreen() {
     { type: 'header' },
     ...active.map((s, idx) => ({ type: 'active' as const, s, idx })),
     ...(cancelled.length > 0 ? [{ type: 'cancelledHeader' as const }] : []),
-    ...cancelled.map((s) => ({ type: 'cancelled' as const, s })),
+    ...(cancelledOpen ? cancelled.map((s) => ({ type: 'cancelled' as const, s })) : []),
   ];
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <Stack.Screen options={{ title: packageName || 'Paket Seansları' }} />
+      <Stack.Screen
+        options={{
+          title: packageName || 'Paket Seansları',
+          headerRight: () => (
+            <Pressable onPress={onShare} hitSlop={8} style={{ marginRight: 4 }}>
+              <Ionicons name="share-outline" size={24} color={colors.text} />
+            </Pressable>
+          ),
+        }}
+      />
       {isLoading ? (
         <ActivityIndicator color={colors.accent} style={{ marginTop: 40 }} />
       ) : (
@@ -257,11 +319,21 @@ export function PackageSessionsScreen() {
                   idx={item.idx}
                   onEdit={() => goEdit(item.s)}
                   onDelete={() => onDelete(item.s)}
+                  onMove={() => setMoveTarget(item.s)}
                 />
               );
             }
             if (item.type === 'cancelledHeader') {
-              return <Text style={styles.section}>İptal edilen seanslar ({cancelled.length})</Text>;
+              return (
+                <Pressable style={styles.cancelledHeader} onPress={() => setCancelledOpen((v) => !v)}>
+                  <Text style={styles.section}>İptal edilen seanslar ({cancelled.length})</Text>
+                  <Ionicons
+                    name={cancelledOpen ? 'chevron-up' : 'chevron-down'}
+                    size={16}
+                    color={colors.muted}
+                  />
+                </Pressable>
+              );
             }
             if (item.type === 'cancelled') {
               const b = badgeFor({ ...item.s });
@@ -282,6 +354,39 @@ export function PackageSessionsScreen() {
           ListEmptyComponent={<Card><Muted>Bu pakete ait seans yok.</Muted></Card>}
         />
       )}
+
+      {/* PAKETE TAŞI SHEET */}
+      <BottomSheet
+        visible={!!moveTarget}
+        onClose={() => setMoveTarget(null)}
+        title="Pakete taşı"
+      >
+        {moveTarget ? (
+          <View style={styles.moveSheet}>
+            <Text style={styles.moveSessionDate}>{fmtSessionDate(moveTarget.startTs)}</Text>
+            {otherPackages.length === 0 ? (
+              <Muted>Bu üyenin başka paketi yok.</Muted>
+            ) : (
+              otherPackages.map((pkg) => (
+                <Pressable
+                  key={pkg.id}
+                  style={styles.pkgRow}
+                  onPress={() => onMoveConfirm(pkg)}
+                >
+                  <View style={styles.pkgInfo}>
+                    <Text style={styles.pkgName}>{pkg.packageName}</Text>
+                    <Text style={styles.pkgMeta}>{fmtDate(pkg.startDate)} – {fmtDate(pkg.endDate)}</Text>
+                  </View>
+                  <Badge
+                    label={pkg.status === 'active' ? 'Aktif' : pkg.status === 'completed' ? 'Tamamlandı' : pkg.status}
+                    tone={pkg.status === 'active' ? 'green' : 'neutral'}
+                  />
+                </Pressable>
+              ))
+            )}
+          </View>
+        ) : null}
+      </BottomSheet>
     </SafeAreaView>
   );
 }
@@ -291,6 +396,7 @@ const styles = StyleSheet.create({
   listContent: { padding: 12, gap: 8, paddingBottom: 40 },
   subtitle: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
   subtitleText: { color: colors.muted, fontSize: 13 },
+
   card: {
     padding: 12,
     borderWidth: 1,
@@ -304,14 +410,31 @@ const styles = StyleSheet.create({
   info: { flex: 1, gap: 2 },
   date: { color: colors.text, fontSize: 14, fontWeight: '700' },
   sub: { color: colors.muted, fontSize: 12 },
-  section: { color: colors.muted, fontSize: 12, fontWeight: '700', marginTop: 12, marginBottom: 2, letterSpacing: 0.5 },
+
+  cancelledHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    marginBottom: 2,
+    paddingVertical: 4,
+  },
+  section: { color: colors.muted, fontSize: 12, fontWeight: '700', letterSpacing: 0.5 },
+
+  swipeLeftGroup: { flexDirection: 'row', gap: 4, marginRight: 4 },
   swipeEdit: {
     backgroundColor: colors.accent,
     justifyContent: 'center',
     alignItems: 'center',
-    width: 64,
+    width: 60,
     borderRadius: 12,
-    marginRight: 4,
+  },
+  swipeMove: {
+    backgroundColor: colors.fpOrange,
+    justifyContent: 'center',
+    alignItems: 'center',
+    width: 60,
+    borderRadius: 12,
   },
   swipeDelete: {
     backgroundColor: colors.danger,
@@ -321,4 +444,21 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginLeft: 4,
   },
+
+  moveSheet: { gap: 10 },
+  moveSessionDate: { color: colors.text, fontWeight: '700', fontSize: 15, marginBottom: 4 },
+  pkgRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.panel,
+    gap: 10,
+  },
+  pkgInfo: { flex: 1, gap: 2 },
+  pkgName: { color: colors.text, fontSize: 14, fontWeight: '600' },
+  pkgMeta: { color: colors.muted, fontSize: 12 },
 });

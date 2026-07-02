@@ -99,7 +99,7 @@ export function AdminMembersScreen() {
     if (active) {
       router.push({
         pathname: '/(admin)/members/package-sessions',
-        params: { memberPackageId: String(active.id), packageName: active.packageName, startDate: active.startDate, endDate: active.endDate, packageStatus: 'active' },
+        params: { memberPackageId: String(active.id), packageName: active.packageName, startDate: active.startDate, endDate: active.endDate, packageStatus: 'active', memberId: String(memberId) },
       });
     } else {
       router.push({ pathname: '/(admin)/members/member-packages', params: { memberId: String(memberId) } });
