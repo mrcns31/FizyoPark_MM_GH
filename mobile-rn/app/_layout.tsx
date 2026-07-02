@@ -1,3 +1,4 @@
+import '../src/lib/push-notifications'; // setNotificationHandler en erken çağrılmalı
 import { useEffect } from 'react';
 import { ActivityIndicator, View } from 'react-native';
 import { Stack, useRouter, useSegments } from 'expo-router';
