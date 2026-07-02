@@ -185,7 +185,7 @@ async function sendEntryPush(memberName, method, startTs, sessionId, memberId) {
     const seen = new Set();
     const entryMessages = [...adminRows, ...staffRows]
       .filter((r) => { if (seen.has(r.token)) return false; seen.add(r.token); return true; })
-      .map((r) => ({ to: r.token, title: 'Kapı Girişi', body: entryBody, sound: 'default', priority: 'high', channelId: 'fizyopark' }));
+      .map((r) => ({ to: r.token, title: 'Kapı Girişi', body: entryBody, sound: 'natification.caf', priority: 'high', channelId: 'fizyopark', interruptionLevel: 'active' }));
 
     if (!entryMessages.length) {
       console.warn(`[sendEntryPush] token bulunamadı — üye: ${memberName}, method: ${method}`);
@@ -213,7 +213,7 @@ async function sendEntryPush(memberName, method, startTs, sessionId, memberId) {
           const stats = await getActivePackageStats(db, memberId, sessionId);
           if (stats) memberBody = `${pkgRows[0].name} paketinizden kalan seans: ${stats.remainingSessions}`;
         }
-        memberMessages = mRows.map((r) => ({ to: r.token, title: `Merhaba ${memberName}`, body: memberBody, sound: 'default' }));
+        memberMessages = mRows.map((r) => ({ to: r.token, title: `Merhaba ${memberName}`, body: memberBody, sound: 'natification.caf', priority: 'high', interruptionLevel: 'active' }));
       }
     }
 
