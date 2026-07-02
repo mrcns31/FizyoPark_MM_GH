@@ -110,6 +110,7 @@ export function EntryListScreen() {
   const [statusF, setStatusF] = useState<StatusFilter>('all');
   const [walkF, setWalkF] = useState<WalkInFilter>('all');
   const [search, setSearch] = useState('');
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   const { start, end, label } = getDateRange(anchor, mode);
 
@@ -254,6 +255,8 @@ export function EntryListScreen() {
           ) : (
             entries.map((s) => {
               const isEditable = !!s.canAdminEdit;
+              const isExpanded = editingId === s.id;
+              const showActions = s.canAdminApprove || (isEditable && isExpanded);
               const row = (
                 <View key={s.id} style={[styles.row, isEditable && styles.rowEditable]}>
                   <View style={styles.rowLeft}>
@@ -275,15 +278,18 @@ export function EntryListScreen() {
                   </View>
                   <View style={styles.rowRight}>
                     <Badge label={s.attendanceLabel} tone={statusTone(s.statusKind)} />
-                    {s.canAdminApprove ? (
+                    {showActions ? (
                       <View style={styles.actions}>
                         <Pressable
                           style={[styles.actBtn, styles.actPresent]}
                           hitSlop={6}
-                          onPress={() => confirm.mutate(
-                            { id: s.id, action: 'present' },
-                            { onError: (e: any) => Alert.alert('Hata', e?.message ?? 'İşlem başarısız') },
-                          )}
+                          onPress={() => {
+                            setEditingId(null);
+                            confirm.mutate(
+                              { id: s.id, action: 'present' },
+                              { onError: (e: any) => Alert.alert('Hata', e?.message ?? 'İşlem başarısız') },
+                            );
+                          }}
                         >
                           <Ionicons name="checkmark" size={16} color={colors.ok} />
                         </Pressable>
@@ -291,17 +297,20 @@ export function EntryListScreen() {
                           <Pressable
                             style={[styles.actBtn, styles.actNoShow]}
                             hitSlop={6}
-                            onPress={() => confirm.mutate(
-                              { id: s.id, action: 'no_show' },
-                              { onError: (e: any) => Alert.alert('Hata', e?.message ?? 'İşlem başarısız') },
-                            )}
+                            onPress={() => {
+                              setEditingId(null);
+                              confirm.mutate(
+                                { id: s.id, action: 'no_show' },
+                                { onError: (e: any) => Alert.alert('Hata', e?.message ?? 'İşlem başarısız') },
+                              );
+                            }}
                           >
                             <Ionicons name="close" size={16} color={colors.danger} />
                           </Pressable>
                         ) : null}
                       </View>
                     ) : null}
-                    {isEditable ? (
+                    {isEditable && !isExpanded ? (
                       <Ionicons name="chevron-forward" size={14} color={colors.muted} />
                     ) : null}
                   </View>
@@ -311,32 +320,7 @@ export function EntryListScreen() {
               return isEditable ? (
                 <Pressable
                   key={s.id}
-                  onPress={() =>
-                    Alert.alert(
-                      s.memberName,
-                      `${formatTime(s.startTs)} — Yoklama durumunu değiştir`,
-                      [
-                        {
-                          text: 'Geldi ✓',
-                          onPress: () =>
-                            confirm.mutate(
-                              { id: s.id, action: 'present' },
-                              { onError: (e: any) => Alert.alert('Hata', e?.message ?? 'İşlem başarısız') },
-                            ),
-                        },
-                        {
-                          text: 'Gelmedi ✕',
-                          style: 'destructive',
-                          onPress: () =>
-                            confirm.mutate(
-                              { id: s.id, action: 'no_show' },
-                              { onError: (e: any) => Alert.alert('Hata', e?.message ?? 'İşlem başarısız') },
-                            ),
-                        },
-                        { text: 'Vazgeç', style: 'cancel' },
-                      ],
-                    )
-                  }
+                  onPress={() => setEditingId(isExpanded ? null : s.id)}
                 >
                   {row}
                 </Pressable>
