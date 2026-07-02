@@ -12,7 +12,6 @@ import { FormField } from '../../../components/form';
 import { Button, Card } from '../../../components/ui';
 import { ApiError } from '../../../lib/api-client';
 import { getMembers } from '../../members/api/members';
-import { getRooms } from '../../rooms/api/rooms';
 import { getStaff } from '../../staff/api/staff';
 import { colors } from '../../../theme/colors';
 import { sessionKeys, useCreateSession, useDeleteSession, useSessions, useUpdateSession } from '../api/hooks';
@@ -64,14 +63,12 @@ export function SessionFormScreen() {
     return (daySessions ?? []).filter(
       (s) =>
         s.staffId === editing.staffId &&
-        s.startTs === editing.startTs &&
-        (s.roomId ?? null) === (editing.roomId ?? null),
+        s.startTs === editing.startTs,
     );
   }, [editing, daySessions, params.singleEdit]);
 
   const membersQ = useQuery({ queryKey: ['members'], queryFn: getMembers });
   const staffQ = useQuery({ queryKey: ['staff'], queryFn: getStaff });
-  const roomsQ = useQuery({ queryKey: ['rooms'], queryFn: getRooms });
 
   const [staffId, setStaffId] = useState<number | null>(null);
   const [roomId, setRoomId] = useState<number | null>(null);
