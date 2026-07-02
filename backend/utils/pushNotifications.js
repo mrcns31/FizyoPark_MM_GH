@@ -17,6 +17,7 @@ export async function sendExpoPush(db, userId, title, body) {
       sound: 'natification.caf',
       priority: 'high',
       channelId: 'fizyopark',
+      interruptionLevel: 'active',
     }));
     await fetch(EXPO_PUSH_URL, {
       method: 'POST',
@@ -50,7 +51,7 @@ export async function sendExpoPushBulk(db, userIds, title, body) {
   const messages = [];
   for (const [, tokens] of tokensByUser) {
     for (const token of tokens) {
-      messages.push({ to: token, title, body, sound: 'natification.caf', priority: 'high', channelId: 'fizyopark' });
+      messages.push({ to: token, title, body, sound: 'natification.caf', priority: 'high', channelId: 'fizyopark', interruptionLevel: 'active' });
     }
   }
 
