@@ -11,12 +11,13 @@ export interface EntrySession {
   startTs: number;
   endTs: number;
   roomName: string;
-  checkedInAt: number | null;
+  checkedInAt: string | null;
   checkInMethod: string | null;
   attendanceLabel: string;
   statusKind: string; // pending | scheduled | no_show | qr | phone | card | admin_present | staff_present
   isConfirmed: boolean;
   canAdminApprove: boolean;
+  canAdminEdit: boolean;
   canAdminOverride: boolean;
 }
 
@@ -30,13 +31,17 @@ export interface WalkInEntry {
   label: string;
 }
 
-export async function getEntryList(date: string): Promise<EntrySession[]> {
-  const { data } = await apiClient.get('/sessions/attendance/entry-list', { params: { date } });
+export async function getEntryList(startDate: string, endDate: string): Promise<EntrySession[]> {
+  const { data } = await apiClient.get('/sessions/attendance/entry-list', {
+    params: { startDate, endDate },
+  });
   return (data?.sessions ?? []) as EntrySession[];
 }
 
-export async function getWalkInList(date: string): Promise<WalkInEntry[]> {
-  const { data } = await apiClient.get('/sessions/attendance/walk-in-list', { params: { date } });
+export async function getWalkInList(startDate: string, endDate: string): Promise<WalkInEntry[]> {
+  const { data } = await apiClient.get('/sessions/attendance/walk-in-list', {
+    params: { startDate, endDate },
+  });
   return (data?.entries ?? []) as WalkInEntry[];
 }
 
