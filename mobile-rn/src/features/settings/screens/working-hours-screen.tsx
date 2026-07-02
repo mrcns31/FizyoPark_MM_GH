@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 
 import { Button, ErrorBox, Muted } from '../../../components/ui';
 import { ScreenHeader } from '../../../components/screen-header';
@@ -15,6 +16,7 @@ import { useUpdateWorkingHours, useWorkingHours } from '../api/hooks';
  * Her gün için aç/kapa + başlangıç–bitiş saati. Seanslar yalnızca bu saatlerde eklenebilir.
  */
 export function WorkingHoursScreen() {
+  const router = useRouter();
   const { data, isLoading } = useWorkingHours();
   const save = useUpdateWorkingHours();
   const { contentMaxWidth, gutter } = useResponsive();
@@ -48,7 +50,7 @@ export function WorkingHoursScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <ScreenHeader title="Çalışma Saatleri" />
+      <ScreenHeader title="Çalışma Saatleri" onBack={() => router.push('/(admin)/more/settings')} />
       <ScrollView contentContainerStyle={[styles.content, wide]} showsVerticalScrollIndicator={false}>
         <Muted>
           Her gün için çalışma saatlerini belirleyin. Seanslar sadece bu saatlerde eklenebilir.

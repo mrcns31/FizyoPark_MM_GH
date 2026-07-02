@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 
 import { ScreenContainer } from '../../../components/screen-container';
 import { DateField } from '../../../components/date-field';
@@ -42,6 +43,7 @@ function summaryText(s: ClosureSummary): string {
  * Tarih aralığı + açıklama → kapanış kaydı; aralıktaki seanslar ileri alınır, paketler uzatılır.
  */
 export function ClosureDaysScreen() {
+  const router = useRouter();
   const { data: periods } = useClosurePeriods();
   const create = useCreateClosurePeriod();
   const del = useDeleteClosurePeriod();
@@ -118,7 +120,7 @@ export function ClosureDaysScreen() {
   }
 
   return (
-    <ScreenContainer title="Kapalı Günler" scroll>
+    <ScreenContainer title="Kapalı Günler" onBack={() => router.push('/(admin)/more/settings')} scroll>
       <Muted>
         Bayram tatili, resmi tatil veya merkez kaynaklı kapanışlar için tarih aralığı girin. Bu
         aralıktaki seanslar otomatik olarak ileri tarihe alınır ve tüm aktif üyelerin paket süresi

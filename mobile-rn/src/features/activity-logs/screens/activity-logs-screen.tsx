@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
 
 import { Card, Muted } from '../../../components/ui';
 import { ScreenHeader } from '../../../components/screen-header';
@@ -30,6 +31,7 @@ function fmtDateTime(v: string): string {
 
 /** İşlem Logları — sistem aktivite kayıtları (web activity-logs.html). Sayfalı liste. */
 export function ActivityLogsScreen() {
+  const router = useRouter();
   const { contentMaxWidth, gutter } = useResponsive();
   const [page, setPage] = useState(1);
   const [action, setAction] = useState<string | null>(null);
@@ -63,7 +65,7 @@ export function ActivityLogsScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <ScreenHeader title="İşlem Logları" />
+      <ScreenHeader title="İşlem Logları" onBack={() => router.push('/(admin)/more/settings')} />
       <View style={[styles.filters, wide]}>
         <SelectField<string>
           label=""

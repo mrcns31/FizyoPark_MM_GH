@@ -28,7 +28,7 @@ export function AdminRoomsScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <ScreenHeader title="Odalar / Alet" />
+      <ScreenHeader title="Odalar / Alet" onBack={() => router.push('/(admin)/more/settings')} />
       <ScrollView contentContainerStyle={[styles.list, wide]}>
         {(data ?? []).length === 0 ? <Card><Muted>Oda yok.</Muted></Card> : null}
         {(data ?? []).map((r) => {

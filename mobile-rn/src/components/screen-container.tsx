@@ -27,12 +27,14 @@ export function ScreenContainer({
   center,
   scroll,
   title,
+  onBack,
   style,
 }: {
   children: React.ReactNode;
   center?: boolean;
   scroll?: boolean;
   title?: string;
+  onBack?: () => void;
   style?: ViewStyle;
 }) {
   const { contentMaxWidth, gutter } = useResponsive();
@@ -67,7 +69,7 @@ export function ScreenContainer({
 
   return (
     <SafeAreaView style={styles.safe} edges={edges}>
-      {title ? <ScreenHeader title={title} /> : null}
+      {title ? <ScreenHeader title={title} onBack={onBack} /> : null}
       {scroll ? (
         // iOS native inset zaten klavyeyi yönetiyor; KeyboardAvoidingView modal içinde
         // çift padding eklediği için sadece Android'de saralım.
