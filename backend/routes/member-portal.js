@@ -74,7 +74,7 @@ async function sendDeletionRequestPush(memberName, memberId) {
         seenTokens.add(r.token);
         return true;
       })
-      .map((r) => ({ to: r.token, title, body: bodyText, sound: 'default', priority: 'high', channelId: 'fizyopark' }));
+      .map((r) => ({ to: r.token, title, body: bodyText, sound: 'natification.caf', priority: 'high', channelId: 'fizyopark', interruptionLevel: 'active' }));
 
     await expoPush(messages);
   } catch {
@@ -146,7 +146,7 @@ async function sendCancellationPush(memberName, startTs, staffName) {
         seenTokens.add(r.token);
         return true;
       })
-      .map((r) => ({ to: r.token, title, body: bodyText, sound: 'default', priority: 'high', channelId: 'fizyopark' }));
+      .map((r) => ({ to: r.token, title, body: bodyText, sound: 'natification.caf', priority: 'high', channelId: 'fizyopark', interruptionLevel: 'active' }));
 
     await expoPush(messages);
   } catch {
