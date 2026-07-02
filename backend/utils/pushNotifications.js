@@ -19,11 +19,13 @@ export async function sendExpoPush(db, userId, title, body) {
       channelId: 'fizyopark',
       interruptionLevel: 'active',
     }));
-    await fetch(EXPO_PUSH_URL, {
+    const res = await fetch(EXPO_PUSH_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(messages),
     });
+    const json = await res.json();
+    console.log('[push] Expo response:', JSON.stringify(json));
     return true;
   } catch {
     return false;
