@@ -14,7 +14,7 @@ export async function sendExpoPush(db, userId, title, body) {
       to: r.token,
       title,
       body,
-      sound: 'default',
+      sound: 'natification.mp3',
       priority: 'high',
       channelId: 'fizyopark',
     }));
@@ -50,7 +50,7 @@ export async function sendExpoPushBulk(db, userIds, title, body) {
   const messages = [];
   for (const [, tokens] of tokensByUser) {
     for (const token of tokens) {
-      messages.push({ to: token, title, body, sound: 'default', priority: 'high', channelId: 'fizyopark' });
+      messages.push({ to: token, title, body, sound: 'natification.mp3', priority: 'high', channelId: 'fizyopark' });
     }
   }
 
