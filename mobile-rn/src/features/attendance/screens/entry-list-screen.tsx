@@ -2,8 +2,6 @@ import { useMemo, useState } from 'react';
 import { Alert, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter } from 'expo-router';
-
 import { DateField } from '../../../components/date-field';
 import { Badge, Card, Muted } from '../../../components/ui';
 import { ScreenHeader } from '../../../components/screen-header';
@@ -106,8 +104,6 @@ function fmtDateShort(ts: number): string {
 /** Giriş Listesi */
 export function EntryListScreen() {
   const { contentMaxWidth, gutter } = useResponsive();
-  const router = useRouter();
-
   const [anchor, setAnchor] = useState(todayStr());
   const [mode, setMode] = useState<ViewMode>('day');
   const [tab, setTab] = useState<'entry' | 'walkin'>('entry');
@@ -316,14 +312,30 @@ export function EntryListScreen() {
                 <Pressable
                   key={s.id}
                   onPress={() =>
-                    router.push({
-                      pathname: '/(admin)/members/session-form',
-                      params: {
-                        id: String(s.id),
-                        date: tsToDateStr(s.startTs),
-                        singleEdit: '1',
-                      },
-                    })
+                    Alert.alert(
+                      s.memberName,
+                      `${formatTime(s.startTs)} — Yoklama durumunu değiştir`,
+                      [
+                        {
+                          text: 'Geldi ✓',
+                          onPress: () =>
+                            confirm.mutate(
+                              { id: s.id, action: 'present' },
+                              { onError: (e: any) => Alert.alert('Hata', e?.message ?? 'İşlem başarısız') },
+                            ),
+                        },
+                        {
+                          text: 'Gelmedi ✕',
+                          style: 'destructive',
+                          onPress: () =>
+                            confirm.mutate(
+                              { id: s.id, action: 'no_show' },
+                              { onError: (e: any) => Alert.alert('Hata', e?.message ?? 'İşlem başarısız') },
+                            ),
+                        },
+                        { text: 'Vazgeç', style: 'cancel' },
+                      ],
+                    )
                   }
                 >
                   {row}

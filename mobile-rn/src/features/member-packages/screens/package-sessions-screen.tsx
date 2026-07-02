@@ -1,5 +1,7 @@
 import { useCallback, useRef, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 import { Swipeable } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -191,22 +193,49 @@ export function PackageSessionsScreen() {
   const statusStr = packageStatus === 'active' ? 'Aktif' : packageStatus === 'completed' ? 'Tamamlandı' : packageStatus === 'cancelled' ? 'İptal' : null;
 
   async function onShare() {
-    const header = [
-      packageName || 'Paket Seansları',
-      startDate && endDate ? `${fmtDate(startDate)} – ${fmtDate(endDate)}` : '',
-      `${active.length} randevu`,
-      '',
-    ].filter(Boolean).join('\n');
+    const title = packageName || 'Paket Seansları';
+    const period = startDate && endDate ? `${fmtDate(startDate)} – ${fmtDate(endDate)}` : '';
 
     const rows = active.map((s, i) => {
-      const staff = s.staffName ? ` | ${s.staffName}` : '';
-      const approval = s.approvalLabel || 'Planlandı';
-      return `${i + 1}. ${fmtSessionDate(s.startTs)}${staff} | ${approval}`;
-    }).join('\n');
+      const b = badgeFor({ ...s });
+      return `
+        <tr>
+          <td>${i + 1}</td>
+          <td>${fmtSessionDate(s.startTs)}</td>
+          <td>${s.staffName || '—'}</td>
+          <td>${b.label}</td>
+        </tr>`;
+    }).join('');
+
+    const html = `<!DOCTYPE html><html><head><meta charset="utf-8"/>
+<style>
+  body { font-family: Arial, sans-serif; font-size: 12px; padding: 24px; color: #111; }
+  h2 { margin: 0 0 4px; font-size: 16px; }
+  .meta { color: #555; font-size: 12px; margin-bottom: 16px; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #444; color: #fff; text-align: left; padding: 6px 8px; font-size: 11px; }
+  td { padding: 6px 8px; border-bottom: 1px solid #ddd; font-size: 11px; }
+  tr:nth-child(even) td { background: #f5f5f5; }
+</style></head><body>
+<h2>${title}</h2>
+<div class="meta">${period ? period + ' &nbsp;·&nbsp; ' : ''}${active.length} randevu</div>
+<table>
+  <thead><tr><th>#</th><th>Tarih / Saat</th><th>Personel</th><th>Durum</th></tr></thead>
+  <tbody>${rows}</tbody>
+</table>
+</body></html>`;
 
     try {
-      await Share.share({ message: `${header}\n${rows}`, title: packageName || 'Paket Seansları' });
-    } catch (_) {}
+      const { uri } = await Print.printToFileAsync({ html, base64: false });
+      const canShare = await Sharing.isAvailableAsync();
+      if (canShare) {
+        await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: `${title} — PDF` });
+      } else {
+        Alert.alert('Paylaşım desteklenmiyor', 'Bu cihazda PDF paylaşımı kullanılamıyor.');
+      }
+    } catch (e) {
+      Alert.alert('Hata', (e as Error).message || 'PDF oluşturulamadı.');
+    }
   }
 
   function goEdit(s: MemberPackageSession) {
