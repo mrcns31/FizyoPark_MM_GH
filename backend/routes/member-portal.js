@@ -82,7 +82,7 @@ async function sendDeletionRequestPush(memberName, memberId) {
   }
 }
 
-async function sendCancellationPush(memberName, startTs, staffName) {
+async function sendCancellationPush(memberName, startTs, staffName, staffId) {
   try {
     const TZ = 3 * 60 * 60 * 1000;
     const d = new Date(Number(startTs) + TZ);
@@ -822,7 +822,7 @@ router.post('/sessions/:id/cancel', requireMember, async (req, res) => {
     db.query('SELECT name FROM members WHERE id = $1', [memberId])
       .then(({ rows }) => {
         const memberName = rows[0]?.name || 'Üye';
-        sendCancellationPush(memberName, session.start_ts, staffName).catch(() => {});
+        sendCancellationPush(memberName, session.start_ts, staffName, session.staff_id).catch(() => {});
       })
       .catch(() => {});
 
