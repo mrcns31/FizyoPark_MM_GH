@@ -41,6 +41,11 @@ const __dirname = dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// nginx reverse-proxy arkasında çalışıyoruz: X-Forwarded-For'u güvenip gerçek
+// istemci IP'sini kullan, yoksa rate limiter tüm istekleri tek IP sanıp
+// (proxy'nin IP'si) herkesi aynı kotaya sokar.
+app.set('trust proxy', 1);
+
 // Middleware
 app.use(compression());
 app.use(helmet()); // Güvenlik başlıkları
