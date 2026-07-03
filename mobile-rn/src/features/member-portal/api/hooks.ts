@@ -25,16 +25,17 @@ export function useMemberDashboard() {
   });
 }
 
-export function useMemberAccessQr() {
+export function useMemberAccessQr(enabled = true) {
   return useQuery({
     queryKey: memberPortalKeys.accessQr,
     queryFn: getMemberAccessQr,
+    enabled,
     staleTime: 0,
-    refetchInterval: 25_000, // token süreli; periyodik yenile
+    refetchInterval: false, // ekran sınırlı (15sn) açık kaldığı için yenilemeye gerek yok
   });
 }
 
-/** QR ekranı açıkken check-in'i hızlı (2 sn) izler (web memberQrCheckInPoll paritesi). */
+/** QR ekranı odaktayken check-in'i hızlı (2 sn) izler; ekran 15sn'lik sınırlı pencerede açık kalır (web memberQrCheckInPoll paritesi). */
 export function useMemberCheckInPoll(enabled: boolean) {
   return useQuery({
     queryKey: ['member-portal', 'checkin-poll'],

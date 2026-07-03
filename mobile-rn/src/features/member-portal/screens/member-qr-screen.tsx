@@ -1,4 +1,6 @@
-import { useEffect, useRef, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { useRouter } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, StyleSheet, Text, View } from 'react-native';
 
 import { ScreenContainer } from '../../../components/screen-container';
@@ -6,24 +8,48 @@ import { Card, Muted } from '../../../components/ui';
 import { colors } from '../../../theme/colors';
 import { useMemberAccessQr, useMemberCheckInPoll } from '../api/hooks';
 
-/** Tesis giriş QR kodu — token süreli, otomatik yenilenir + check-in canlı izlenir. */
-export function MemberQrScreen() {
-  const { data, isLoading, error, dataUpdatedAt } = useMemberAccessQr();
+/** Ekran odaklandığı andan itibaren en fazla bu kadar açık kalır — okutulsa da okutulmasa da kapanır (web parity). */
+const QR_SCREEN_ACTIVE_MS = 15_000;
 
-  // Geri sayım: QR penceresi (windowSec) her yeni QR ile sıfırlanır.
-  const windowSec = data?.windowSec ?? data?.expiresIn ?? 0;
-  const [remaining, setRemaining] = useState(windowSec);
+/** Tesis giriş QR kodu — ekran odaktayken 15sn boyunca açık kalır, check-in canlı izlenir, süre dolunca kapanır. */
+export function MemberQrScreen() {
+  const router = useRouter();
+  const [active, setActive] = useState(false);
+  const [remaining, setRemaining] = useState(QR_SCREEN_ACTIVE_MS / 1000);
+  const [checkedIn, setCheckedIn] = useState(false);
+  const checkedInRef = useRef(false);
+  const baselineRef = useRef<number | null>(null);
+
+  const { data, isLoading, error } = useMemberAccessQr(active);
+  const poll = useMemberCheckInPoll(active && !checkedIn);
+
+  useFocusEffect(
+    useCallback(() => {
+      checkedInRef.current = false;
+      baselineRef.current = null;
+      setCheckedIn(false);
+      setRemaining(QR_SCREEN_ACTIVE_MS / 1000);
+      setActive(true);
+
+      const closeTimer = setTimeout(() => {
+        setActive(false);
+        if (!checkedInRef.current) router.replace('/(member)');
+      }, QR_SCREEN_ACTIVE_MS);
+
+      return () => {
+        clearTimeout(closeTimer);
+        setActive(false);
+      };
+    }, [router])
+  );
+
   useEffect(() => {
-    if (!windowSec) return;
-    setRemaining(windowSec);
+    if (!active) return;
     const t = setInterval(() => setRemaining((r) => (r > 0 ? r - 1 : 0)), 1000);
     return () => clearInterval(t);
-  }, [windowSec, dataUpdatedAt]);
+  }, [active]);
 
   // Check-in canlı izleme: lastCheckIn.at bir taban değerden artarsa "giriş yapıldı".
-  const poll = useMemberCheckInPoll(true);
-  const baselineRef = useRef<number | null>(null);
-  const [checkedIn, setCheckedIn] = useState(false);
   useEffect(() => {
     const at = poll.data?.lastCheckIn?.at ?? null;
     if (baselineRef.current === null) {
@@ -32,6 +58,7 @@ export function MemberQrScreen() {
     }
     if (at != null && at > baselineRef.current) {
       baselineRef.current = at;
+      checkedInRef.current = true;
       setCheckedIn(true);
     }
   }, [poll.data]);
@@ -58,9 +85,9 @@ export function MemberQrScreen() {
 
       {checkedIn ? (
         <Muted>Hoş geldiniz! Girişiniz kaydedildi.</Muted>
-      ) : windowSec ? (
-        <Muted>Yenilenmesine {remaining} sn · Güvenliğiniz için QR süreli yenilenir.</Muted>
-      ) : null}
+      ) : (
+        <Muted>Kapanmasına {remaining} sn</Muted>
+      )}
     </ScreenContainer>
   );
 }

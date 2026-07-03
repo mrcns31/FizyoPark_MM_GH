@@ -389,10 +389,6 @@
     return apiFetch('/closure-periods/' + id, { method: 'DELETE' });
   }
 
-  async function getMemberAccessQr() {
-    return apiFetch('/member-portal/access-qr');
-  }
-
   async function verifyMemberAccess(token) {
     return apiFetch('/member-portal/verify-access', {
       method: 'POST',
@@ -1071,7 +1067,6 @@
     getClosurePeriods,
     createClosurePeriod,
     deleteClosurePeriod,
-    getMemberAccessQr,
     verifyMemberAccess,
     verifyMemberPhoneAccess,
     verifyMemberCardAccess,

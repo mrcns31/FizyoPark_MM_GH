@@ -1407,11 +1407,6 @@ function cacheEls() {
     "memberHomePackageName",
     "memberHomePackageRemaining",
     "memberHomePackageEnd",
-    "memberQrFabBtn",
-    "memberQrModal",
-    "memberQrImage",
-    "memberQrCountdown",
-    "memberQrError",
     "sidebarAdminEntryPanel",
     "openEntryListBtn",
     "adminEntryListView",
@@ -5076,7 +5071,7 @@ var STALE_SESSION_MSG = "Bu seans artık geçerli değil (üye iptal etmiş veya
 
 var notificationTimer = null;
 var notificationSince = 0;
-var NOTIFICATION_INTERVAL_MS = 3000;
+var NOTIFICATION_INTERVAL_MS = 8000;
 var NOTIFICATION_LIST_LIMIT = 50;
 var NOTIFICATION_SEEN_KEY = "lastSeenNotificationAt";
 
@@ -7050,7 +7045,6 @@ function renderMemberHome() {
   updateUserBranding();
   var ap = ui.memberPortal && ui.memberPortal.activePackage;
   renderMemberHomePackageInfo(ap);
-  if (els.memberQrFabBtn) els.memberQrFabBtn.classList.toggle("hidden", !ap);
 
   // Birleşik seans listesi: iptal edilmeyenler, tarihe göre artan sıra
   var unifiedList = document.getElementById("memberUnifiedSessionsList");
@@ -7092,92 +7086,6 @@ function renderMemberHome() {
   }
 
   renderMemberNotificationsBanner();
-}
-
-var memberQrRefreshTimer = null;
-var memberQrCountdownTimer = null;
-var memberQrExpiresAt = 0;
-var memberQrCheckInPollTimer = null;
-var memberQrCheckInBaseline = 0;
-var MEMBER_QR_CHECKIN_POLL_MS = 2000;
-
-function stopMemberQrTimers() {
-  if (memberQrRefreshTimer) {
-    clearTimeout(memberQrRefreshTimer);
-    memberQrRefreshTimer = null;
-  }
-  if (memberQrCountdownTimer) {
-    clearInterval(memberQrCountdownTimer);
-    memberQrCountdownTimer = null;
-  }
-}
-
-function stopMemberQrCheckInPoll() {
-  if (memberQrCheckInPollTimer) {
-    clearInterval(memberQrCheckInPollTimer);
-    memberQrCheckInPollTimer = null;
-  }
-}
-
-async function pollMemberQrCheckIn() {
-  if (!window.API || !window.API.getMemberDashboard) return;
-  try {
-    var dashboard = await window.API.getMemberDashboard();
-    var lastCheckIn = dashboard && dashboard.lastCheckIn;
-    if (lastCheckIn && lastCheckIn.at > memberQrCheckInBaseline) {
-      closeMemberQrModal();
-      await refreshMemberPortal();
-    }
-  } catch (_) {}
-}
-
-function updateMemberQrCountdownLabel() {
-  if (!els.memberQrCountdown) return;
-  var left = Math.max(0, Math.ceil((memberQrExpiresAt - Date.now()) / 1000));
-  els.memberQrCountdown.textContent = left > 0 ? "Yenilenmesine " + left + " sn" : "Yenileniyor…";
-}
-
-async function refreshMemberQrCode() {
-  if (!window.API || !window.API.getMemberAccessQr) return;
-  if (els.memberQrError) {
-    els.memberQrError.classList.add("hidden");
-    els.memberQrError.textContent = "";
-  }
-  try {
-    var data = await window.API.getMemberAccessQr();
-    if (els.memberQrImage && data.qrDataUrl) els.memberQrImage.src = data.qrDataUrl;
-    var expiresIn = Math.max(5, Number(data.expiresIn) || 45);
-    memberQrExpiresAt = Date.now() + expiresIn * 1000;
-    updateMemberQrCountdownLabel();
-    stopMemberQrTimers();
-    memberQrCountdownTimer = setInterval(updateMemberQrCountdownLabel, 1000);
-    memberQrRefreshTimer = setTimeout(function () {
-      if (els.memberQrModal && !els.memberQrModal.classList.contains("hidden")) {
-        refreshMemberQrCode();
-      }
-    }, Math.max(5000, (expiresIn - 2) * 1000));
-  } catch (e) {
-    if (els.memberQrError) {
-      els.memberQrError.textContent = (e.data && e.data.error) || e.message || "QR yüklenemedi.";
-      els.memberQrError.classList.remove("hidden");
-    }
-  }
-}
-
-function openMemberQrModal() {
-  if (!els.memberQrModal) return;
-  els.memberQrModal.classList.remove("hidden");
-  var existingCheckIn = ui.memberPortal && ui.memberPortal.lastCheckIn;
-  memberQrCheckInBaseline = existingCheckIn ? existingCheckIn.at : 0;
-  refreshMemberQrCode();
-  stopMemberQrCheckInPoll();
-  memberQrCheckInPollTimer = setInterval(pollMemberQrCheckIn, MEMBER_QR_CHECKIN_POLL_MS);
-}
-
-function closeMemberQrModal() {
-  stopMemberQrTimers();
-  stopMemberQrCheckInPoll();
-  if (els.memberQrModal) els.memberQrModal.classList.add("hidden");
 }
 
 var staffAttendancePollTimer = null;
@@ -8876,14 +8784,6 @@ function bindMemberProfileActions() {
   if (els.memberInlinePackagesBtn) {
     els.memberInlinePackagesBtn.addEventListener("click", function () {
       setMemberTab("packages");
-    });
-  }
-  if (els.memberQrFabBtn) {
-    els.memberQrFabBtn.addEventListener("click", openMemberQrModal);
-  }
-  if (els.memberQrModal) {
-    els.memberQrModal.addEventListener("click", function (e) {
-      if (e.target && e.target.dataset && e.target.dataset.close === "memberQrModal") closeMemberQrModal();
     });
   }
   if (els.openEntryListBtn) {
@@ -14474,7 +14374,6 @@ function bindEvents() {
       if (!els.groupSessionModal.classList.contains("hidden")) closeGroupSessionModal();
       if (els.memberPortalSessionsModal && !els.memberPortalSessionsModal.classList.contains("hidden")) closeMemberPortalSessionsModal();
       if (els.memberSessionCancelModal && !els.memberSessionCancelModal.classList.contains("hidden")) closeMemberSessionCancelModal();
-      if (els.memberQrModal && !els.memberQrModal.classList.contains("hidden")) closeMemberQrModal();
       var adminAccountScreen = document.getElementById("adminAccountScreen");
       if (adminAccountScreen && !adminAccountScreen.classList.contains("hidden")) closeAdminAccountScreen();
       var passwordChangeScreen = document.getElementById("passwordChangeScreen");
