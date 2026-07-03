@@ -41,10 +41,10 @@ const __dirname = dirname(__filename);
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// nginx reverse-proxy arkasında çalışıyoruz: X-Forwarded-For'u güvenip gerçek
-// istemci IP'sini kullan, yoksa rate limiter tüm istekleri tek IP sanıp
-// (proxy'nin IP'si) herkesi aynı kotaya sokar.
-app.set('trust proxy', 1);
+// İki proxy hop'u var: Traefik (edge, TLS/host routing) -> nginx (web) -> burası.
+// X-Forwarded-For'da 2 hop'a güvenmezsek Express, Traefik'in iç IP'sini
+// gerçek istemci sanır ve rate limiter herkesi tek kotaya sokar.
+app.set('trust proxy', 2);
 
 // Middleware
 app.use(compression());
