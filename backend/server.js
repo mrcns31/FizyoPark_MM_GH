@@ -75,7 +75,10 @@ const isLocalhost = (req) => {
 };
 const limiter = rateLimit({
   windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 2000,
+  // Frontend'de bildirim (3sn) ve QR check-in (2sn) polling'i var; aynı public IP'yi
+  // paylaşan birden fazla cihaz (klinikteki kiosk + personel + üyeler) bir araya gelince
+  // 15dk'da kolayca binlerce isteğe çıkıyor — bu yüzden tavan yüksek tutulmalı.
+  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 20000,
   message: 'Çok fazla istek gönderildi, lütfen daha sonra tekrar deneyin.',
   skip: (req) =>
     process.env.RATE_LIMIT_DISABLED === '1' ||
