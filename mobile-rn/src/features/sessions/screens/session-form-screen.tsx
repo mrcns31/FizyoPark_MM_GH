@@ -153,6 +153,24 @@ export function SessionFormScreen() {
     const startTs = start.getTime();
     const endTs = startTs + durationMin * 60000;
 
+    // Personelin o günkü çalışma saati aralığı kontrolü — web paritesi
+    let skipStaffHoursCheck = false;
+    const selectedStaff = (staffQ.data ?? []).find((s) => s.id === staffId);
+    if (selectedStaff) {
+      const staffWh = selectedStaff.workingHours?.[dow];
+      if (staffWh?.enabled) {
+        const parseMin = (t: string) => { const [h, m] = t.split(':').map(Number); return h * 60 + (m || 0); };
+        const startMinDay = start.getHours() * 60 + start.getMinutes();
+        if (startMinDay < parseMin(staffWh.start) || startMinDay + durationMin > parseMin(staffWh.end)) {
+          const pwd = await promptAdminPassword(
+            `${selectedStaff.fullName} bu saat aralığında çalışmıyor (${staffWh.start}–${staffWh.end}).\n\nDevam etmek için admin şifresi gerekiyor.`
+          );
+          if (pwd == null) return;
+          skipStaffHoursCheck = true;
+        }
+      }
+    }
+
     try {
       if (editing) {
         const byMember = new Map(groupSessions.map((s) => [s.memberId, s]));
@@ -183,12 +201,12 @@ export function SessionFormScreen() {
             if (slotChanged(ex)) {
               await update.mutateAsync({
                 id: ex.id,
-                data: { memberId: mid, staffId, roomId: roomId ?? null, startTs, endTs, note: singleEdit ? note : ex.note ?? '' },
+                data: { memberId: mid, staffId, roomId: roomId ?? null, startTs, endTs, note: singleEdit ? note : ex.note ?? '', skipStaffHoursCheck },
                 adminPassword,
               });
             }
           } else {
-            await create.mutateAsync({ memberId: mid, staffId, roomId: roomId ?? null, startTs, endTs, note: '' });
+            await create.mutateAsync({ memberId: mid, staffId, roomId: roomId ?? null, startTs, endTs, note: '', skipStaffHoursCheck });
           }
         }
         // Çıkarılan üyeler → sil
@@ -197,7 +215,7 @@ export function SessionFormScreen() {
         }
       } else {
         for (const mid of memberIds) {
-          await create.mutateAsync({ memberId: mid, staffId, roomId: roomId ?? null, startTs, endTs, note: '' });
+          await create.mutateAsync({ memberId: mid, staffId, roomId: roomId ?? null, startTs, endTs, note: '', skipStaffHoursCheck });
         }
       }
       // Her iki cache'i bekle, sonra geri dön
