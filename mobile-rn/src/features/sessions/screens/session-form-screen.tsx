@@ -272,13 +272,15 @@ export function SessionFormScreen() {
               >
                 <Ionicons name="chevron-back" size={22} color={colors.text} />
               </Pressable>
-              <TimeField
-                value={`${String(start.getHours()).padStart(2, '0')}:00`}
-                hourOnly
-                minHour={minHour}
-                maxHour={maxHour}
-                onChange={(v) => setStart(mergeTime(start, v))}
-              />
+              <View style={styles.arrowField}>
+                <TimeField
+                  value={`${String(start.getHours()).padStart(2, '0')}:00`}
+                  hourOnly
+                  minHour={minHour}
+                  maxHour={maxHour}
+                  onChange={(v) => setStart(mergeTime(start, v))}
+                />
+              </View>
               <Pressable
                 hitSlop={8}
                 style={styles.arrowBtn}
