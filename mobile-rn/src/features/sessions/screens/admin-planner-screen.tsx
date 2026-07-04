@@ -342,6 +342,10 @@ export function AdminPlannerScreen() {
           <Pressable onPress={() => setFiltersOpen((v) => !v)} style={[styles.filterBtn, filterActive && styles.filterBtnActive]}>
             <Ionicons name="filter" size={18} color={filterActive ? colors.text : colors.muted} />
           </Pressable>
+          {/* Kalan seans toggle */}
+          <Pressable onPress={() => setShowRemaining((v) => !v)} style={[styles.filterBtn, showRemaining && styles.filterBtnActive]} hitSlop={8}>
+            <Ionicons name={showRemaining ? 'eye' : 'eye-outline'} size={18} color={showRemaining ? colors.text : colors.muted} />
+          </Pressable>
         </View>
       ) : null}
 
