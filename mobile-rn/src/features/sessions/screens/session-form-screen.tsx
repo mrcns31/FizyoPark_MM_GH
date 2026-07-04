@@ -229,6 +229,15 @@ export function SessionFormScreen() {
     }
   }
 
+  function stepStaff(dir: 1 | -1) {
+    if (staffOptions.length === 0) return;
+    const idx = staffOptions.findIndex((o) => o.value === staffId);
+    if (idx === -1) { setStaffId(staffOptions[0].value); return; }
+    const next = idx + dir;
+    if (next < 0 || next >= staffOptions.length) return;
+    setStaffId(staffOptions[next].value);
+  }
+
   const saving = create.isPending || update.isPending || del.isPending;
   const title = editing ? (groupSessions.length > 1 ? 'Grup seans düzenle' : 'Seans düzenle') : 'Grup seans ekle';
 
@@ -236,10 +245,21 @@ export function SessionFormScreen() {
     <ScreenContainer scroll>
       <Stack.Screen options={{ title }} />
       <Card style={styles.card}>
-        <SelectField label="Personel" required value={staffId} onChange={setStaffId} options={staffOptions} />
-
         <View style={styles.dtRow}>
-          <Text style={styles.label}>Tarih</Text>
+          <Text style={styles.label}>Personel<Text style={styles.req}> *</Text></Text>
+          <View style={styles.arrowRow}>
+            <Pressable hitSlop={8} style={styles.arrowBtn} onPress={() => stepStaff(-1)}>
+              <Ionicons name="chevron-back" size={22} color={colors.text} />
+            </Pressable>
+            <View style={styles.arrowField}>
+              <SelectField label="" value={staffId} onChange={setStaffId} options={staffOptions} />
+            </View>
+            <Pressable hitSlop={8} style={styles.arrowBtn} onPress={() => stepStaff(1)}>
+              <Ionicons name="chevron-forward" size={22} color={colors.text} />
+            </Pressable>
+          </View>
+
+          <Text style={[styles.label, { marginTop: 10 }]}>Tarih</Text>
           <View style={styles.arrowRow}>
             <Pressable
               hitSlop={8}
@@ -330,6 +350,7 @@ export function SessionFormScreen() {
 const styles = StyleSheet.create({
   card: { gap: 14, marginTop: 8 },
   label: { color: colors.muted, fontSize: 12, marginBottom: 6 },
+  req: { color: colors.danger },
   dtRow: { flexDirection: 'column', gap: 0 },
   arrowRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   arrowBtn: {
