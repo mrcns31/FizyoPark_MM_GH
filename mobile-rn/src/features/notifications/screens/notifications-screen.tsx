@@ -50,7 +50,8 @@ const PERIODS: { key: PeriodKey; label: string }[] = [
 ];
 const TYPE_FILTERS = [
   { key: 'all', label: 'Tümü' },
-  { key: 'admin_cancel', label: 'İptaller' },
+  { key: 'member_cancel', label: 'Üye İptali' },
+  { key: 'admin_cancel', label: 'Admin İptali' },
   { key: 'shift_reminder', label: 'Hatırlatmalar' },
 ] as const;
 type TypeFilter = (typeof TYPE_FILTERS)[number]['key'];
@@ -126,9 +127,7 @@ function AdminNotifications({ wide }: { wide: object }) {
   }, [latestData, anchorReady]);
 
   const { since, until } = useMemo(() => anchorRange(period, anchor), [period, anchor]);
-  const types = typeFilter === 'all' ? undefined
-    : typeFilter === 'admin_cancel' ? 'admin_cancel,member_cancel'
-    : typeFilter;
+  const types = typeFilter === 'all' ? undefined : typeFilter;
   const { data, isLoading, isFetching } = useNotifications(since, until, page, PER_PAGE, types);
   const items = data?.items ?? [];
 
@@ -153,7 +152,7 @@ function AdminNotifications({ wide }: { wide: object }) {
         <Pressable onPress={() => nav(1)} style={styles.navBtn} hitSlop={10}><Ionicons name="chevron-forward" size={20} color={colors.text} /></Pressable>
         {isFetching ? <ActivityIndicator color={colors.accent} size="small" style={{ marginLeft: 6 }} /> : null}
       </View>
-      <View style={[styles.row, wide as any, { marginBottom: 2 }]}>
+      <View style={[styles.row, wide as any, { marginBottom: 2, flexWrap: 'wrap' }]}>
         {TYPE_FILTERS.map((f) => (
           <Pressable key={f.key} style={[styles.chip, typeFilter === f.key && styles.chipOn]} onPress={() => changeType(f.key)}>
             <Text style={[styles.chipText, typeFilter === f.key && styles.chipTextOn]}>{f.label}</Text>
