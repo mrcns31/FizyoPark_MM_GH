@@ -1312,6 +1312,7 @@ function cacheEls() {
     "taskDistributionContent",
     "openListMembersBtn",
     "refreshListMembersBtn",
+    "exportActiveMembersBtn",
     "openCalendarBtn",
     "adminMembersListView",
     "listMembersContent",
@@ -13356,6 +13357,158 @@ function closeListMembersModal() {
   showAdminCalendarView();
 }
 
+function exportActiveMembersExcel() {
+  // Mevcut aktif üye listesini hesapla (openListMembersModal ile aynı mantık)
+  const activePackages = (state.memberPackages || []).filter((mp) => isMemberPackageActive(mp));
+  const memberIdsWithActive = new Set(activePackages.map((mp) => normId(mp.memberId)));
+  const membersWithActive = state.members.filter((m) => memberIdsWithActive.has(normId(m.id)));
+
+  if (!membersWithActive.length) {
+    showAppAlert("Aktif paketi olan üye bulunamadı.");
+    return;
+  }
+
+  // Checkbox seçim modalı
+  const OPTIONAL_FIELDS = [
+    { key: "memberNo",      label: "Üye No" },
+    { key: "email",         label: "E-posta" },
+    { key: "birthDate",     label: "Doğum Tarihi" },
+    { key: "profession",    label: "Meslek" },
+    { key: "address",       label: "Adres" },
+    { key: "contactName",   label: "Acil Kişi Adı" },
+    { key: "contactPhone",  label: "Acil Kişi Telefonu" },
+    { key: "packageName",   label: "Aktif Paket" },
+    { key: "packageStart",  label: "Paket Başlangıç" },
+    { key: "packageEnd",    label: "Paket Bitiş" },
+    { key: "remaining",     label: "Kalan Seans" },
+  ];
+
+  const overlay = document.createElement("div");
+  overlay.style.cssText = "position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:9100;display:flex;align-items:center;justify-content:center;";
+
+  const sheet = document.createElement("div");
+  sheet.style.cssText = "background:#1a1a2e;border-radius:12px;padding:24px;width:100%;max-width:420px;display:flex;flex-direction:column;gap:14px;box-shadow:0 8px 32px rgba(0,0,0,.5);";
+
+  const heading = document.createElement("h3");
+  heading.textContent = "Excel'e Aktar – Alan Seç";
+  heading.style.cssText = "margin:0;font-size:1.05rem;color:#e8ecff;font-weight:700;";
+  sheet.appendChild(heading);
+
+  const fixedInfo = document.createElement("p");
+  fixedInfo.textContent = "Ad Soyad ve Telefon her zaman dahil edilir.";
+  fixedInfo.style.cssText = "margin:0;font-size:.82rem;color:#8890a0;";
+  sheet.appendChild(fixedInfo);
+
+  const grid = document.createElement("div");
+  grid.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:8px 16px;";
+
+  const checks = {};
+  OPTIONAL_FIELDS.forEach(function(f) {
+    const label = document.createElement("label");
+    label.style.cssText = "display:flex;align-items:center;gap:8px;cursor:pointer;font-size:.9rem;color:#c0c8e0;user-select:none;";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.style.cssText = "width:16px;height:16px;accent-color:#6c8dfa;cursor:pointer;";
+    checks[f.key] = cb;
+    label.appendChild(cb);
+    label.append(f.label);
+    grid.appendChild(label);
+  });
+  sheet.appendChild(grid);
+
+  const countEl = document.createElement("p");
+  countEl.style.cssText = "margin:0;font-size:.85rem;color:#8890a0;";
+  countEl.textContent = membersWithActive.length + " aktif üye aktarılacak";
+  sheet.appendChild(countEl);
+
+  const btnRow = document.createElement("div");
+  btnRow.style.cssText = "display:flex;gap:10px;justify-content:flex-end;margin-top:4px;";
+
+  const cancelBtn = document.createElement("button");
+  cancelBtn.type = "button";
+  cancelBtn.textContent = "İptal";
+  cancelBtn.style.cssText = "padding:.5rem 1rem;border-radius:6px;border:1px solid #3a4060;background:transparent;color:#8890a0;cursor:pointer;font-size:.9rem;";
+  cancelBtn.onclick = function() { document.body.removeChild(overlay); };
+
+  const exportBtn = document.createElement("button");
+  exportBtn.type = "button";
+  exportBtn.textContent = "↓ Aktar";
+  exportBtn.style.cssText = "padding:.5rem 1.2rem;border-radius:6px;border:none;background:#4f6ef7;color:#fff;cursor:pointer;font-size:.9rem;font-weight:600;";
+  exportBtn.onclick = async function() {
+    document.body.removeChild(overlay);
+
+    // Aktif paket yardımcıları
+    function getMp(m) {
+      return activePackages.find((p) => normId(p.memberId) === normId(m.id));
+    }
+    function getStartStr(m) {
+      const mp = getMp(m);
+      return mp && (mp.startDate || mp.start_date) ? String(mp.startDate || mp.start_date).slice(0, 10) : "";
+    }
+    function getEndStr(m) {
+      const mp = getMp(m);
+      return mp && (mp.endDate || mp.end_date) ? String(mp.endDate || mp.end_date).slice(0, 10) : "";
+    }
+    function getRemaining(m) {
+      const mp = getMp(m);
+      if (!mp) return "";
+      if (mp.remainingSessions != null) return Math.max(0, Number(mp.remainingSessions));
+      return Math.max(0, Number(mp.lessonCount ?? mp.lesson_count ?? 0));
+    }
+
+    const selected = OPTIONAL_FIELDS.filter((f) => checks[f.key].checked);
+
+    const headers = ["Ad Soyad", "Telefon"].concat(selected.map((f) => f.label));
+    const rows = membersWithActive.map(function(m) {
+      const mp = getMp(m);
+      const row = [getMemberDisplayName(m), displayPhone(m.phone) || ""];
+      selected.forEach(function(f) {
+        switch (f.key) {
+          case "memberNo":     row.push(m.memberNo || ""); break;
+          case "email":        row.push(m.email || ""); break;
+          case "birthDate":    row.push(m.birthDate ? String(m.birthDate).slice(0, 10) : ""); break;
+          case "profession":   row.push(m.profession || ""); break;
+          case "address":      row.push(m.address || ""); break;
+          case "contactName":  row.push(m.contactName || ""); break;
+          case "contactPhone": row.push(displayPhone(m.contactPhone) || ""); break;
+          case "packageName":  row.push(mp ? (mp.packageName || "") : ""); break;
+          case "packageStart": row.push(formatDateTR(getStartStr(m)) || ""); break;
+          case "packageEnd":   row.push(formatDateTR(getEndStr(m)) || ""); break;
+          case "remaining":    row.push(getRemaining(m)); break;
+          default: row.push("");
+        }
+      });
+      return row;
+    });
+
+    const filename = "aktif-uyeler-" + dateToInputValue(new Date());
+
+    try { await ensureXlsxLib(); } catch (_) {}
+
+    if (typeof XLSX !== "undefined") {
+      const wb = XLSX.utils.book_new();
+      const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+      XLSX.utils.book_append_sheet(wb, ws, "Aktif Üyeler");
+      XLSX.writeFile(wb, filename + ".xlsx");
+    } else {
+      const csv = [headers, ...rows].map((r) => r.map((c) => '"' + String(c).replace(/"/g, '""') + '"').join(";")).join("\n");
+      const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob);
+      a.download = filename + ".csv";
+      a.click();
+      URL.revokeObjectURL(a.href);
+    }
+  };
+
+  btnRow.appendChild(cancelBtn);
+  btnRow.appendChild(exportBtn);
+  sheet.appendChild(btnRow);
+  overlay.appendChild(sheet);
+  overlay.addEventListener("click", function(e) { if (e.target === overlay) document.body.removeChild(overlay); });
+  document.body.appendChild(overlay);
+}
+
 // ── Toplu Bildirim Modal ──────────────────────────────────────────────────
 
 function openBroadcastModal(memberIds) {
@@ -13761,6 +13914,7 @@ function bindEvents() {
 
   els.addSessionBtn.addEventListener("click", () => openGroupSessionModal(null));
   if (els.openListMembersBtn) els.openListMembersBtn.addEventListener("click", openListMembersModal);
+  if (els.exportActiveMembersBtn) els.exportActiveMembersBtn.addEventListener("click", exportActiveMembersExcel);
   if (els.refreshListMembersBtn) els.refreshListMembersBtn.addEventListener("click", async function () {
     const btn = els.refreshListMembersBtn;
     btn.disabled = true;
