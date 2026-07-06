@@ -425,6 +425,10 @@ export function AdminPlannerScreen() {
                 })}
                 onLongPressGroup={(g) => setSelectedKey({ startTs: g[0].startTs, staffId: g[0].staffId })}
                 onDeleteGroup={onDeleteGroup}
+                onPressEmpty={(ts) => router.push({
+                  pathname: '/(admin)/planner/session-form',
+                  params: { defaultTs: String(ts) },
+                })}
               />
             </View>
           ))}

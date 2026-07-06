@@ -761,6 +761,20 @@ function checkConflicts(candidate, { ignoreSessionId = null, ignoreSessionIds = 
 }
 
 function autoAssignRoom(candidate, opts = {}) {
+  const { staffId, startTs, endTs } = candidate;
+  const ignoreSet = new Set();
+  if (opts.ignoreSessionId != null) ignoreSet.add(normId(opts.ignoreSessionId));
+  if (opts.ignoreSessionIds) opts.ignoreSessionIds.forEach(function(id) { ignoreSet.add(normId(id)); });
+
+  // Personelin bu saatte zaten atandığı odayı bul; yoksa ilk odayı ver
+  const existing = (state.sessions || []).find(function(s) {
+    return normId(s.staffId) === normId(staffId) &&
+      !ignoreSet.has(normId(s.id)) &&
+      s.startTs < endTs &&
+      s.endTs > startTs &&
+      s.roomId;
+  });
+  if (existing) return existing.roomId;
   return state.rooms.length ? state.rooms[0].id : null;
 }
 
@@ -11359,19 +11373,12 @@ function refreshSessionFormOptions({ dateStr = null, timeStr = null } = {}) {
   els.sessionStaff.innerHTML = "";
   let filteredStaff = state.staff;
 
-  if (dateStr && timeStr) {
-    const targetDate = makeLocalDate(dateStr, timeStr);
+  if (dateStr) {
+    const targetDate = makeLocalDate(dateStr, timeStr || "00:00");
     const dayOfWeek = targetDate.getDay();
-    const [hh, mm] = timeStr.split(":").map(Number);
-    const timeMin = hh * 60 + mm;
-
     filteredStaff = state.staff.filter((s) => {
-      // Personelin o gün çalışma saatleri kontrolü
-      const staffWh = getStaffWorkingHoursForDay(s, dayOfWeek);
-      if (!staffWh) return false; // O gün çalışmıyor
-
-      // Seçilen saat personelin çalışma saatleri içinde mi?
-      return timeMin >= staffWh.startMin && timeMin < staffWh.endMin;
+      // Personelin o gün çalışıp çalışmadığına göre filtrele (saat bazlı değil)
+      return !!getStaffWorkingHoursForDay(s, dayOfWeek);
     });
   }
 
@@ -11872,6 +11879,24 @@ async function saveGroupSession() {
           els.groupSessionError.classList.remove("hidden");
           return;
         }
+      }
+
+      // Kapasite ön kontrolü: yeni slotta toplam seans > max oda kapasitesi olursa
+      // API'ye gitmeden önce hepsini reddet; kısmi taşıma yapılmasın.
+      var existingAtNewSlot = state.sessions.filter(function(s) {
+        return normId(s.staffId) === normId(newStaffId) &&
+          s.startTs < newEndTs && s.endTs > newStartTs &&
+          !ignoreGroupIds.has(normId(s.id));
+      });
+      var maxRoomCapacity = state.rooms.reduce(function(max, r) {
+        return Math.max(max, parseInt(r.devices, 10) || 1);
+      }, 1);
+      if (existingAtNewSlot.length + currentGroupSessions.length > maxRoomCapacity) {
+        var targetStaffName = newStaffId ? getStaffFullName(getStaffById(newStaffId)) : "Personel";
+        var available = Math.max(0, maxRoomCapacity - existingAtNewSlot.length);
+        els.groupSessionError.textContent = `Kapasite yetersiz: ${targetStaffName} bu saatte en fazla ${maxRoomCapacity} kişi alabilir (şu an ${existingAtNewSlot.length} randevu var, ${available} yer boş). Hiçbir üye taşınmadı.`;
+        els.groupSessionError.classList.remove("hidden");
+        return;
       }
     } else {
       newStaffId = newStaffId || String(Number(firstSession.staffId));

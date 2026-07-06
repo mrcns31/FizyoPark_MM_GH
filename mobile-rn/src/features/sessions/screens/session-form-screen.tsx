@@ -46,7 +46,9 @@ function mergeTime(base: Date, timeStr: string): Date {
 export function SessionFormScreen() {
   const router = useRouter();
   const qc = useQueryClient();
-  const params = useLocalSearchParams<{ id?: string; date?: string; defaultTs?: string; singleEdit?: string }>();
+  const params = useLocalSearchParams<{ id?: string; date?: string; defaultTs?: string; singleEdit?: string; forceMemberId?: string; forceMemberPackageId?: string }>();
+  const forceMemberId = params.forceMemberId ? Number(params.forceMemberId) : null;
+  const forceMemberPackageId = params.forceMemberPackageId ? Number(params.forceMemberPackageId) : null;
   const create = useCreateSession();
   const update = useUpdateSession();
   const del = useDeleteSession();
@@ -72,7 +74,7 @@ export function SessionFormScreen() {
 
   const [staffId, setStaffId] = useState<number | null>(null);
   const [roomId, setRoomId] = useState<number | null>(null);
-  const [memberIds, setMemberIds] = useState<number[]>([]);
+  const [memberIds, setMemberIds] = useState<number[]>(() => forceMemberId != null ? [forceMemberId] : []);
   const [note, setNote] = useState('');
   const [start, setStart] = useState<Date>(() => {
     const d = new Date(params.defaultTs ? Number(params.defaultTs) : Date.now());
@@ -133,9 +135,9 @@ export function SessionFormScreen() {
   const members = membersQ.data ?? [];
   const memberName = (id: number) => members.find((m) => m.id === id)?.name ?? `#${id}`;
 
-  // Eklenebilir üyeler: aktif paketli & henüz eklenmemiş.
+  // Eklenebilir üyeler: aktif paketli & henüz eklenmemiş. Forced member aktif olmasa da dahil.
   const addableOptions = members
-    .filter((m) => activeMemberIds.has(m.id) && !memberIds.includes(m.id))
+    .filter((m) => (activeMemberIds.has(m.id) || m.id === forceMemberId) && !memberIds.includes(m.id))
     .map((m) => ({ label: m.name, value: m.id }));
 
   // Personeli o günün çalışma gününe göre filtrele (çalışma saati tanımlıysa).
@@ -215,7 +217,12 @@ export function SessionFormScreen() {
         }
       } else {
         for (const mid of memberIds) {
-          await create.mutateAsync({ memberId: mid, staffId, roomId: roomId ?? null, startTs, endTs, note: '', skipStaffHoursCheck });
+          const isForcedMember = forceMemberId != null && mid === forceMemberId;
+          await create.mutateAsync({
+            memberId: mid, staffId, roomId: roomId ?? null, startTs, endTs, note: '',
+            skipStaffHoursCheck,
+            ...(isForcedMember && forceMemberPackageId != null ? { memberPackageId: forceMemberPackageId, skipTrim: true } : {}),
+          });
         }
       }
       // Her iki cache'i bekle, sonra geri dön
@@ -239,7 +246,7 @@ export function SessionFormScreen() {
   }
 
   const saving = create.isPending || update.isPending || del.isPending;
-  const title = editing ? (groupSessions.length > 1 ? 'Grup seans düzenle' : 'Seans düzenle') : 'Grup seans ekle';
+  const title = editing ? (groupSessions.length > 1 ? 'Grup seans düzenle' : 'Seans düzenle') : forceMemberPackageId != null ? 'Pakete seans ekle' : 'Grup seans ekle';
 
   return (
     <ScreenContainer scroll>
@@ -320,13 +327,15 @@ export function SessionFormScreen() {
           {memberIds.map((mid) => (
             <View key={mid} style={styles.memberRow}>
               <Text style={styles.memberName} numberOfLines={1}>{memberName(mid)}</Text>
-              <Pressable
-                hitSlop={8}
-                style={styles.removeBtn}
-                onPress={() => setMemberIds((ids) => ids.filter((x) => x !== mid))}
-              >
-                <Ionicons name="trash-outline" size={18} color={colors.danger} />
-              </Pressable>
+              {(forceMemberId == null || mid !== forceMemberId) && (
+                <Pressable
+                  hitSlop={8}
+                  style={styles.removeBtn}
+                  onPress={() => setMemberIds((ids) => ids.filter((x) => x !== mid))}
+                >
+                  <Ionicons name="trash-outline" size={18} color={colors.danger} />
+                </Pressable>
+              )}
             </View>
           ))}
           <SelectField

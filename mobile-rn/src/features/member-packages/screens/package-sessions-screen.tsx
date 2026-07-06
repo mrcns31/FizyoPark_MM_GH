@@ -311,9 +311,28 @@ export function PackageSessionsScreen() {
         options={{
           title: packageName || 'Paket Seansları',
           headerRight: () => (
-            <Pressable onPress={onShare} hitSlop={8} style={{ marginRight: 4 }}>
-              <Ionicons name="share-outline" size={24} color={colors.text} />
-            </Pressable>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14, marginRight: 4 }}>
+              {memberPackageId && memberIdParam ? (
+                <Pressable
+                  hitSlop={8}
+                  onPress={() =>
+                    router.push({
+                      pathname: '/(admin)/members/session-form',
+                      params: {
+                        forceMemberId: memberIdParam,
+                        forceMemberPackageId: memberPackageId,
+                        defaultTs: String(Date.now()),
+                      },
+                    })
+                  }
+                >
+                  <Ionicons name="add-circle-outline" size={26} color={colors.accent} />
+                </Pressable>
+              ) : null}
+              <Pressable onPress={onShare} hitSlop={8}>
+                <Ionicons name="share-outline" size={24} color={colors.text} />
+              </Pressable>
+            </View>
           ),
         }}
       />

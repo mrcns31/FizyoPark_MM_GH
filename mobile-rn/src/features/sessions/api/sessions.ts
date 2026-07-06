@@ -67,6 +67,7 @@ export interface SessionInput {
   note?: string;
   memberPackageId?: number | null;
   skipStaffHoursCheck?: boolean;
+  skipTrim?: boolean;
 }
 
 export async function createSession(input: SessionInput): Promise<unknown> {

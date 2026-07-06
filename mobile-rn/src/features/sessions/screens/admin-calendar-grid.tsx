@@ -39,6 +39,7 @@ export function AdminCalendarGrid({
   onPressGroup,
   onLongPressGroup,
   onDeleteGroup,
+  onPressEmpty,
   fullRail = true,
   memberPackageMap,
   showRemaining = false,
@@ -48,6 +49,7 @@ export function AdminCalendarGrid({
   onPressGroup?: (group: PlannerSession[]) => void;
   onLongPressGroup?: (group: PlannerSession[]) => void;
   onDeleteGroup?: (group: PlannerSession[]) => void;
+  onPressEmpty?: (ts: number) => void;
   fullRail?: boolean;
   memberPackageMap?: Map<number, MemberPkgInfo>;
   showRemaining?: boolean;
@@ -91,6 +93,16 @@ export function AdminCalendarGrid({
 
           {/* Personel kolonları — eşit genişlik, wrap yok */}
           <View style={styles.cols}>
+            {onPressEmpty ? (
+              <Pressable
+                style={StyleSheet.absoluteFill}
+                onPress={() => {
+                  const base = new Date(dayTs ?? Date.now());
+                  base.setHours(row.hour, 0, 0, 0);
+                  onPressEmpty(base.getTime());
+                }}
+              />
+            ) : null}
             {row.groups.map((g) => {
               const idx = g.staffId != null ? staffIndex.get(g.staffId) ?? -1 : -1;
               const c = staffColor(idx, g.staffId);

@@ -3,7 +3,7 @@ import { body, validationResult, query } from 'express-validator';
 import bcrypt from 'bcrypt';
 import db from '../config/database.js';
 import { verifyToken } from './auth.js';
-import { validateRoomForSession, placeSessionWithRebalance, rebalanceSlotRooms } from '../utils/sessionSlot.js';
+import { placeSessionWithRebalance, rebalanceSlotRooms } from '../utils/sessionSlot.js';
 import { cancelPackageSessionsAtSlot, resolveMemberPackageId } from '../utils/packageSessions.js';
 import { log as activityLog } from '../utils/activityLogger.js';
 import { isSessionAttendanceConfirmed } from '../utils/sessionAttendance.js';
@@ -385,65 +385,37 @@ router.post('/', [
       return res.status(201).json(createdRow);
     }
 
-    // Oda açıkça belirtildi: kapasite + tek personel kuralı. Transaction + oda kilidi ile race condition önlenir.
+    // Oda açıkça belirtildi: tüm odaları kilitle, ekle ve rebalance et.
+    // Validasyon geçse de geçmese de rebalance çalışır; bu sayede personel tek odada kalır.
     let client;
     try {
       client = await db.pool.connect();
       await client.query('BEGIN');
-      const roomRow = await client.query('SELECT id, devices FROM rooms WHERE id = $1 FOR UPDATE', [roomId]);
-      if (roomRow.rows.length === 0) {
-        await client.query('ROLLBACK');
-        return res.status(400).json({ error: 'Oda bulunamadı' });
-      }
+      await client.query('SELECT id FROM rooms ORDER BY id FOR UPDATE');
 
-      const roomValidation = await validateRoomForSession(client, {
-        roomId,
-        staffId,
-        startTs,
-        endTs,
-      });
-      if (!roomValidation.ok) {
-        // Direkt atama uygun değil; seansı ekleyip hedef saat dilimini dengeleyerek tekrar dene.
-        await client.query('SELECT id FROM rooms ORDER BY id FOR UPDATE');
-        const insertResult = await client.query(
-          `INSERT INTO sessions (staff_id, member_id, room_id, start_ts, end_ts, note, member_package_id)
-           VALUES ($1, $2, $3, $4, $5, $6, $7)
-           RETURNING id`,
-          [staffId, memberId, roomId, startTs, endTs, note || null, memberPackageId ?? null]
-        );
-        const sessionId = insertResult.rows[0]?.id;
-
-        const rebalanceResult = await rebalanceSlotRooms(client, { startTs, endTs });
-        if (!rebalanceResult.ok) {
-          await client.query('ROLLBACK');
-          return res.status(409).json({ error: rebalanceResult.error || roomValidation.error || 'Oda ataması geçersiz' });
-        }
-
-        const created = await client.query('SELECT * FROM sessions WHERE id = $1', [sessionId]);
-        await client.query('COMMIT');
-        const createdRow = created.rows[0];
-        if (memberPackageId && !skipTrim) await trimPackageSessionsIfOver(db, memberPackageId, createdRow?.id);
-        if (createdRow) {
-          await activityLog(req, { action: 'session.create', entityType: 'session', entityId: createdRow.id, details: { staffId, memberId, roomId: createdRow.room_id, startTs, endTs } }).catch(() => {});
-          matchWalkInToSession(db, createdRow.id).catch(() => {});
-        }
-        return res.status(201).json(createdRow);
-      }
-
-      const result = await client.query(
+      const insertResult = await client.query(
         `INSERT INTO sessions (staff_id, member_id, room_id, start_ts, end_ts, note, member_package_id)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
-         RETURNING *`,
+         RETURNING id`,
         [staffId, memberId, roomId, startTs, endTs, note || null, memberPackageId ?? null]
       );
-      await client.query('COMMIT');
-      const created = result.rows[0];
-      if (memberPackageId && !skipTrim) await trimPackageSessionsIfOver(db, memberPackageId, created?.id);
-      if (created) {
-        await activityLog(req, { action: 'session.create', entityType: 'session', entityId: created.id, details: { staffId, memberId, roomId, startTs, endTs } }).catch(() => {});
-        matchWalkInToSession(db, created.id).catch(() => {});
+      const sessionId = insertResult.rows[0]?.id;
+
+      const rebalanceResult = await rebalanceSlotRooms(client, { startTs, endTs });
+      if (!rebalanceResult.ok) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: rebalanceResult.error || 'Oda ataması geçersiz' });
       }
-      return res.status(201).json(created);
+
+      const created = await client.query('SELECT * FROM sessions WHERE id = $1', [sessionId]);
+      await client.query('COMMIT');
+      const createdRow = created.rows[0];
+      if (memberPackageId && !skipTrim) await trimPackageSessionsIfOver(db, memberPackageId, createdRow?.id);
+      if (createdRow) {
+        await activityLog(req, { action: 'session.create', entityType: 'session', entityId: createdRow.id, details: { staffId, memberId, roomId: createdRow.room_id, startTs, endTs } }).catch(() => {});
+        matchWalkInToSession(db, createdRow.id).catch(() => {});
+      }
+      return res.status(201).json(createdRow);
     } catch (err) {
       if (client) await client.query('ROLLBACK').catch(() => {});
       throw err;
@@ -545,46 +517,37 @@ router.put('/:id', [
     const finalMpId = updates.memberPackageId !== undefined ? updates.memberPackageId : current.member_package_id;
 
     if (finalRoomId != null && finalStaffId != null) {
-      const roomValidation = await validateRoomForSession(db, {
-        roomId: finalRoomId,
-        staffId: finalStaffId,
-        startTs: finalStartTs,
-        endTs: finalEndTs,
-        excludeSessionId: id,
-      });
-      if (!roomValidation.ok) {
-        // Direkt atama uygun değil; hedef saat dilimini dengeleyerek tekrar dene.
-        const client = await db.pool.connect();
-        try {
-          await client.query('BEGIN');
-          await client.query('SELECT id FROM rooms ORDER BY id FOR UPDATE');
+      // Validasyon geçsin veya geçmesin her durumda rebalance: personelin tek odada kalması garantilenir.
+      const client = await db.pool.connect();
+      try {
+        await client.query('BEGIN');
+        await client.query('SELECT id FROM rooms ORDER BY id FOR UPDATE');
 
-          values.push(id);
-          const query = `UPDATE sessions SET ${updateFields.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
-          await client.query(query, values);
+        values.push(id);
+        const query = `UPDATE sessions SET ${updateFields.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
+        await client.query(query, values);
 
-          const rebalanceResult = await rebalanceSlotRooms(client, { startTs: finalStartTs, endTs: finalEndTs });
-          if (!rebalanceResult.ok) {
-            await client.query('ROLLBACK');
-            return res.status(409).json({ error: rebalanceResult.error || roomValidation.error || 'Oda ataması geçersiz' });
-          }
-
-          const result = await client.query('SELECT * FROM sessions WHERE id = $1', [id]);
-          await client.query('COMMIT');
-
-          if (finalMpId && !skipTrim) await trimPackageSessionsIfOver(db, finalMpId);
-          const updated = result.rows[0];
-          if (updated) {
-            await activityLog(req, { action: 'session.update', entityType: 'session', entityId: id, details: { staffId: updated.staff_id, memberId: updated.member_id } }).catch(() => {});
-            matchWalkInToSession(db, id).catch(() => {});
-          }
-          return res.json({ message: 'Seans güncellendi', session: updated });
-        } catch (err) {
-          await client.query('ROLLBACK').catch(() => {});
-          throw err;
-        } finally {
-          client.release();
+        const rebalanceResult = await rebalanceSlotRooms(client, { startTs: finalStartTs, endTs: finalEndTs });
+        if (!rebalanceResult.ok) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({ error: rebalanceResult.error || 'Oda ataması geçersiz' });
         }
+
+        const result = await client.query('SELECT * FROM sessions WHERE id = $1', [id]);
+        await client.query('COMMIT');
+
+        if (finalMpId && !skipTrim) await trimPackageSessionsIfOver(db, finalMpId);
+        const updated = result.rows[0];
+        if (updated) {
+          await activityLog(req, { action: 'session.update', entityType: 'session', entityId: id, details: { staffId: updated.staff_id, memberId: updated.member_id } }).catch(() => {});
+          matchWalkInToSession(db, id).catch(() => {});
+        }
+        return res.json({ message: 'Seans güncellendi', session: updated });
+      } catch (err) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw err;
+      } finally {
+        client.release();
       }
     }
 
