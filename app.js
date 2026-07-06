@@ -1274,6 +1274,7 @@ function cacheEls() {
     "packageMonthOverrun",
     "packageWeeklyLessonCount",
     "packageType",
+    "packageMemberVisible",
     "packageSaveBtn",
     "packageCancelBtn",
     "packagesFormError",
@@ -4635,9 +4636,10 @@ function renderPackages() {
   els.packagesList.innerHTML = "";
   const list = state.packages || [];
   for (const p of list) {
+    const isHidden = (p.memberVisible ?? p.member_visible) === false;
     const tr = document.createElement("tr");
     tr.innerHTML = `
-      <td class="packagesTable__name">${escapeHtml(p.name)}</td>
+      <td class="packagesTable__name">${escapeHtml(p.name)}${isHidden ? ' <span style="font-size:11px;color:var(--muted,#888);border:1px solid currentColor;border-radius:4px;padding:1px 5px;" title="Üye paket talebi listesinde görünmüyor">Gizli</span>' : ""}</td>
       <td class="packagesTable__stat" data-label="Ders adet">${Number(p.lessonCount ?? p.lesson_count ?? 0)}</td>
       <td class="packagesTable__stat" data-label="Süre (Ay)">${Number(p.monthOverrun ?? p.month_overrun ?? 1)}</td>
       <td class="packagesTable__actions" colspan="2">
@@ -9159,6 +9161,7 @@ function clearPackageForm() {
   els.packageMonthOverrun.value = "1";
   els.packageWeeklyLessonCount.value = "";
   els.packageType.value = "fixed";
+  if (els.packageMemberVisible) els.packageMemberVisible.checked = true;
   editingPackageId = null;
 }
 
@@ -9171,6 +9174,7 @@ function editPackage(id) {
   els.packageMonthOverrun.value = String(p.monthOverrun ?? p.month_overrun ?? 1);
   els.packageWeeklyLessonCount.value = p.weeklyLessonCount ?? p.weekly_lesson_count ?? "";
   els.packageType.value = p.packageType ?? p.package_type ?? "fixed";
+  if (els.packageMemberVisible) els.packageMemberVisible.checked = (p.memberVisible ?? p.member_visible) !== false;
   if (els.packagesFormError) els.packagesFormError.classList.add("hidden");
 }
 
@@ -9181,6 +9185,7 @@ async function savePackageFromForm() {
   const weeklyLessonCountRaw = els.packageWeeklyLessonCount && els.packageWeeklyLessonCount.value;
   const weeklyLessonCount = weeklyLessonCountRaw === "" ? null : (parseInt(weeklyLessonCountRaw, 10) || 0);
   const packageType = (els.packageType && els.packageType.value) || "fixed";
+  const memberVisible = els.packageMemberVisible ? !!els.packageMemberVisible.checked : true;
 
   if (!name) {
     if (els.packagesFormError) {
@@ -9190,7 +9195,7 @@ async function savePackageFromForm() {
     return;
   }
 
-  const payload = { name, lessonCount, monthOverrun, weeklyLessonCount, packageType };
+  const payload = { name, lessonCount, monthOverrun, weeklyLessonCount, packageType, memberVisible };
 
   if (window.API && window.API.getToken()) {
     try {
@@ -9214,7 +9219,7 @@ async function savePackageFromForm() {
     if (editingPackageId) {
       const idx = state.packages.findIndex((x) => x.id === editingPackageId);
       if (idx !== -1) {
-        state.packages[idx] = { ...state.packages[idx], ...payload, lessonCount, monthOverrun, weeklyLessonCount, packageType };
+        state.packages[idx] = { ...state.packages[idx], ...payload, lessonCount, monthOverrun, weeklyLessonCount, packageType, memberVisible };
       }
     } else {
       state.packages = state.packages || [];
@@ -9225,6 +9230,7 @@ async function savePackageFromForm() {
         monthOverrun,
         weeklyLessonCount,
         packageType,
+        memberVisible,
       });
     }
   }

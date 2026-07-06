@@ -35,6 +35,7 @@ router.post('/', checkAdminOrManager, [
   body('month_overrun').optional({ nullable: true }).isInt({ min: 0 }).withMessage('Ay aşım süresi 0 veya pozitif olmalı'),
   body('weekly_lesson_count').optional({ nullable: true }).isInt({ min: 0 }),
   body('package_type').optional({ nullable: true }).isIn(['fixed', 'flexible']),
+  body('member_visible').optional({ nullable: true }).isBoolean(),
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -48,13 +49,14 @@ router.post('/', checkAdminOrManager, [
       month_overrun = 0,
       weekly_lesson_count,
       package_type = 'fixed',
+      member_visible = true,
     } = req.body;
 
     const result = await db.query(
-      `INSERT INTO packages (name, lesson_count, month_overrun, weekly_lesson_count, package_type)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO packages (name, lesson_count, month_overrun, weekly_lesson_count, package_type, member_visible)
+       VALUES ($1, $2, $3, $4, $5, $6)
        RETURNING *`,
-      [name.trim(), lesson_count, month_overrun ?? 0, weekly_lesson_count ?? null, package_type]
+      [name.trim(), lesson_count, month_overrun ?? 0, weekly_lesson_count ?? null, package_type, member_visible ?? true]
     );
     const created = result.rows[0];
     await activityLog(req, { action: 'package.create', entityType: 'package', entityId: created.id, details: { name: created.name, lesson_count: created.lesson_count } }).catch(() => {});
@@ -73,6 +75,7 @@ router.put('/:id', checkAdminOrManager, [
   body('month_overrun').optional({ nullable: true }).isInt({ min: 0 }),
   body('weekly_lesson_count').optional({ nullable: true }).isInt({ min: 0 }),
   body('package_type').optional({ nullable: true }).isIn(['fixed', 'flexible']),
+  body('member_visible').optional({ nullable: true }).isBoolean(),
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -81,7 +84,7 @@ router.put('/:id', checkAdminOrManager, [
     }
 
     const { id } = req.params;
-    const { name, lesson_count, month_overrun, weekly_lesson_count, package_type } = req.body;
+    const { name, lesson_count, month_overrun, weekly_lesson_count, package_type, member_visible } = req.body;
 
     const updateFields = [];
     const values = [];
@@ -106,6 +109,10 @@ router.put('/:id', checkAdminOrManager, [
     if (package_type !== undefined) {
       updateFields.push(`package_type = $${paramIndex++}`);
       values.push(package_type);
+    }
+    if (member_visible !== undefined) {
+      updateFields.push(`member_visible = $${paramIndex++}`);
+      values.push(member_visible);
     }
 
     if (updateFields.length === 0) {

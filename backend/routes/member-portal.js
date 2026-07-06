@@ -680,7 +680,7 @@ router.get('/dashboard', requireMember, async (req, res) => {
     let catalogPackages = [];
     try {
       const catalogRes = await db.query(
-        'SELECT id, name, lesson_count, package_type FROM packages ORDER BY name'
+        'SELECT id, name, lesson_count, package_type FROM packages WHERE deleted_at IS NULL AND member_visible = true ORDER BY name'
       );
       catalogPackages = catalogRes.rows.map((p) => ({
         id: p.id,
@@ -956,7 +956,10 @@ router.post('/package-request', requireMember, [
       return res.status(400).json({ error: 'Aktif paketiniz varken yeni paket talebi gönderemezsiniz.' });
     }
 
-    const pkgRes = await db.query('SELECT id, name FROM packages WHERE id = $1', [packageId]);
+    const pkgRes = await db.query(
+      'SELECT id, name FROM packages WHERE id = $1 AND deleted_at IS NULL AND member_visible = true',
+      [packageId]
+    );
     if (pkgRes.rows.length === 0) {
       return res.status(404).json({ error: 'Paket bulunamadı' });
     }

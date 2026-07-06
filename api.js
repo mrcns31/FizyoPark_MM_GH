@@ -125,6 +125,7 @@
       monthOverrun: row.month_overrun,
       weeklyLessonCount: row.weekly_lesson_count,
       packageType: row.package_type || 'fixed',
+      memberVisible: row.member_visible !== false,
     };
   }
   function sessionFromApi(row) {
@@ -709,6 +710,7 @@
       lesson_count: body.lessonCount ?? body.lesson_count ?? 1,
       month_overrun: body.monthOverrun ?? body.month_overrun ?? 0,
       package_type: body.packageType ?? body.package_type ?? 'fixed',
+      member_visible: body.memberVisible ?? body.member_visible ?? true,
     };
     const wlc = body.weeklyLessonCount ?? body.weekly_lesson_count;
     if (wlc != null && wlc !== '') payload.weekly_lesson_count = Number(wlc);
@@ -723,6 +725,7 @@
     if (body.monthOverrun !== undefined) payload.month_overrun = body.monthOverrun;
     if (body.weeklyLessonCount !== undefined) payload.weekly_lesson_count = body.weeklyLessonCount;
     if (body.packageType !== undefined) payload.package_type = body.packageType;
+    if (body.memberVisible !== undefined) payload.member_visible = body.memberVisible;
     const row = await apiFetch('/packages/' + id, { method: 'PUT', body: JSON.stringify(payload) });
     invalidateRareCache();
     return packageFromApi(row);
