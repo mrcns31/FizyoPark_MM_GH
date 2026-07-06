@@ -1050,6 +1050,18 @@ router.put('/:id', [
       await db.query(`UPDATE member_packages SET ${updateFields.join(', ')} WHERE id = $${pi}`, values);
     }
 
+    // Paket iptal/bitiş durumuna alındıysa gelecekteki seansları iptal et (silinir) —
+    // /:id/end endpoint'iyle aynı davranış, aksi halde takvimde "hayalet" randevu olarak kalıp
+    // yeni randevu oluştururken personeli yanıltıyordu.
+    if (status === 'completed' || status === 'cancelled') {
+      const cutoffDateStr = end_date !== undefined && end_date ? String(end_date).slice(0, 10) : null;
+      const cutoffMs = cutoffDateStr ? new Date(cutoffDateStr + 'T00:00:00').getTime() : nowMs;
+      await db.query(
+        'UPDATE sessions SET deleted_at = CURRENT_TIMESTAMP WHERE member_package_id = $1 AND start_ts >= $2 AND deleted_at IS NULL',
+        [id, cutoffMs]
+      );
+    }
+
     if (slots && Array.isArray(slots)) {
       const willSkip = skip_day_distribution !== undefined ? !!skip_day_distribution : !!mp.skip_day_distribution;
       const validSlotsInput = slots.filter((s) => s.day_of_week != null && s.start_time && s.staff_id != null);

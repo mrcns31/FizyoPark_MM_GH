@@ -63,7 +63,14 @@ export function computePackageSessionCounts(sessions, lessonCount, now = Date.no
 export async function autoCompletePackageIfExhausted(db, memberPackageId = null) {
   let sql = `
     UPDATE member_packages mp
-    SET status = 'completed', updated_at = CURRENT_TIMESTAMP
+    SET status = 'completed',
+        end_date = COALESCE(
+          (SELECT MAX(to_timestamp(s.start_ts / 1000.0)::date)
+           FROM sessions s
+           WHERE s.member_package_id = mp.id AND s.deleted_at IS NULL),
+          mp.end_date
+        ),
+        updated_at = CURRENT_TIMESTAMP
     FROM packages p
     WHERE mp.package_id = p.id
       AND mp.status = 'active'
