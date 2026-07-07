@@ -356,6 +356,17 @@ export async function generateSessionsForMemberPackage(db, mpId, memberId, start
   const nowFilterMs = Date.now();
   let filteredInserts = inserts.filter((row) => Number(row.start_ts) >= nowFilterMs);
 
+  // Geçmişte kalan slotlar varsa (örn. paket bugün oluşturuldu ama bu günün bir saati geçti),
+  // son planlanan seanstan sonra aynı sayıda ek slot üret
+  if (filteredInserts.length < inserts.length && inserts.length > 0) {
+    const skippedCount = inserts.length - filteredInserts.length;
+    const lastPlanned = inserts[inserts.length - 1];
+    const extEnd = computeEndDateForLessonCount(lastPlanned.dateStr, slots, skippedCount + 1);
+    const extra = buildPackageSessionInsertPlan(lastPlanned.dateStr, extEnd, slots, skippedCount + 1, { memberId, mpId, skipDates, dateOverrides });
+    const validExtra = extra.filter((r) => r.start_ts > lastPlanned.start_ts && r.start_ts >= nowFilterMs).slice(0, skippedCount);
+    filteredInserts = [...filteredInserts, ...validExtra];
+  }
+
   // Pakete ait silinmemiş mevcut seanslar varsa aynı timestamp için tekrar seans oluşturma
   if (mpId && filteredInserts.length > 0) {
     const existingTsRes = await db.query(
