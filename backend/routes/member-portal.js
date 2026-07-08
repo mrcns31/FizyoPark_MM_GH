@@ -282,8 +282,16 @@ async function getActivePackageStats(db, memberId, sessionId) {
   }
 }
 
+function requireKioskToken(req, res, next) {
+  const expected = process.env.KIOSK_TOKEN;
+  if (expected && req.headers['x-kiosk-token'] !== expected) {
+    return res.status(403).json({ valid: false, reason: 'unauthorized' });
+  }
+  next();
+}
+
 // Kapı okuyucu doğrulama (auth gerektirmez — mikrodenetleyici kullanacak)
-router.post('/verify-access', async (req, res) => {
+router.post('/verify-access', requireKioskToken, async (req, res) => {
   try {
     const { token } = req.body || {};
     const result = verifyMemberAccessToken(token);
@@ -348,7 +356,7 @@ router.post('/verify-access', async (req, res) => {
 });
 
 // RFID kart numarasıyla kapı erişimi (auth gerektirmez — kiosk kullanacak)
-router.post('/verify-card-access', async (req, res) => {
+router.post('/verify-card-access', requireKioskToken, async (req, res) => {
   try {
     const { card } = req.body || {};
     const normalized = card ? String(card).trim() : null;
@@ -434,7 +442,7 @@ router.post('/verify-card-access', async (req, res) => {
 });
 
 // Telefon numarasıyla kapı erişimi (auth gerektirmez — kiosk kullanacak)
-router.post('/verify-phone-access', async (req, res) => {
+router.post('/verify-phone-access', requireKioskToken, async (req, res) => {
   try {
     const { phone } = req.body || {};
     console.log('[verify-phone-access] gelen:', phone);

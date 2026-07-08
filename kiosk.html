@@ -375,7 +375,7 @@
     </div>
 
     <input class="kiosk__input" id="kioskInput" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" />
-    <script>window.__API_BASE__ = 'https://admin.fizyopark.com/api';</script>
+    <script>window.__API_BASE__ = 'https://admin.fizyopark.com/api'; window.__KIOSK_TOKEN__ = new URLSearchParams(location.search).get('k') || '';</script>
     <script src="./api.js"></script>
     <script src="./kiosk.js"></script>
   </body>

@@ -390,10 +390,16 @@
     return apiFetch('/closure-periods/' + id, { method: 'DELETE' });
   }
 
+  function kioskHeaders() {
+    var t = window.__KIOSK_TOKEN__;
+    return t ? { 'X-Kiosk-Token': t } : {};
+  }
+
   async function verifyMemberAccess(token) {
     return apiFetch('/member-portal/verify-access', {
       method: 'POST',
       body: JSON.stringify({ token }),
+      headers: kioskHeaders(),
     });
   }
 
@@ -401,6 +407,7 @@
     return apiFetch('/member-portal/verify-phone-access', {
       method: 'POST',
       body: JSON.stringify({ phone }),
+      headers: kioskHeaders(),
     });
   }
 
@@ -408,6 +415,7 @@
     return apiFetch('/member-portal/verify-card-access', {
       method: 'POST',
       body: JSON.stringify({ card }),
+      headers: kioskHeaders(),
     });
   }
 
