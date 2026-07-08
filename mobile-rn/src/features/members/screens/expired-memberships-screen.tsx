@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { FlatList, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -40,6 +40,13 @@ export function ExpiredMembershipsScreen() {
 
   const [search, setSearch] = useState('');
   const [letter, setLetter] = useState<string | null>(null);
+  const [sortCol, setSortCol] = useState<'name' | 'start' | 'end'>('end');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+
+  function onSort(col: 'name' | 'start' | 'end') {
+    if (sortCol === col) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+    else { setSortCol(col); setSortDir(col === 'name' ? 'asc' : 'desc'); }
+  }
 
   const rows = useMemo<Row[]>(() => {
     if (!members || !allPackages) return [];
@@ -82,12 +89,21 @@ export function ExpiredMembershipsScreen() {
       );
     }
     if (letter) l = l.filter((r) => nameStartsWithLetter(r.name, letter));
-    return [...l].sort((a, b) => (b.endDate || '').localeCompare(a.endDate || ''));
-  }, [rows, search, letter]);
+
+    const mult = sortDir === 'asc' ? 1 : -1;
+    return [...l].sort((a, b) => {
+      switch (sortCol) {
+        case 'name':  return mult * a.name.localeCompare(b.name, 'tr');
+        case 'start': return mult * (a.startDate || '').localeCompare(b.startDate || '');
+        case 'end':   return mult * (a.endDate || '').localeCompare(b.endDate || '');
+        default:      return 0;
+      }
+    });
+  }, [rows, search, letter, sortCol, sortDir]);
 
   const { visible, hasMore, loadMore } = useIncremental(filtered, {
     step: 25,
-    resetKey: `${search}|${letter ?? ''}`,
+    resetKey: `${search}|${letter ?? ''}|${sortCol}|${sortDir}`,
   });
 
   const wide = {
@@ -103,6 +119,23 @@ export function ExpiredMembershipsScreen() {
       <View style={[styles.filters, wide]}>
         <SearchField value={search} onChangeText={setSearch} placeholder="Ad, telefon, üye no ara" />
         <AlphaFilter value={letter} onChange={setLetter} />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sortRow}>
+          {([
+            { col: 'name',  label: 'Ad/Soyad' },
+            { col: 'start', label: 'Başlangıç' },
+            { col: 'end',   label: 'Bitiş' },
+          ] as const).map(({ col, label }) => {
+            const isActive = sortCol === col;
+            return (
+              <Pressable key={col} style={[styles.sortChip, isActive && styles.sortChipOn]} onPress={() => onSort(col)}>
+                <Text style={[styles.sortChipText, isActive && styles.sortChipTextOn]}>
+                  {label}{isActive ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
+                </Text>
+              </Pressable>
+            );
+          })}
+          <Text style={styles.countText}>{filtered.length} üye</Text>
+        </ScrollView>
       </View>
       <FlatList
         data={visible}
@@ -204,4 +237,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  sortRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  sortChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  sortChipOn: { borderColor: 'rgba(124,92,255,0.5)', backgroundColor: 'rgba(124,92,255,0.15)' },
+  sortChipText: { fontSize: 12, color: colors.muted, fontWeight: '600' },
+  sortChipTextOn: { color: colors.text },
+  countText: { fontSize: 12, color: colors.muted, paddingHorizontal: 6, alignSelf: 'center' },
 });
