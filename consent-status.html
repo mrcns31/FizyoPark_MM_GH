@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b1020" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <title>KVKK / Gizlilik Onayları – FizyoPark Yönetim Paneli</title>
+    <link rel="manifest" href="./manifest.json" />
+    <link rel="icon" href="./icons/icon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="logs-page">
+      <header class="logs-page__header">
+        <h1 class="logs-page__title">KVKK / Gizlilik Onayları</h1>
+        <button type="button" class="btn btn--ghost" id="consentsCloseBtn">Kapat</button>
+      </header>
+      <p class="hint logs-page__intro">Hangi üyelerin güncel KVKK / Gizlilik Politikası metnini onayladığını gösterir.</p>
+      <div class="logs-page__filters">
+        <input id="consentsSearchInput" class="input" type="search" placeholder="İsim veya telefon ile ara" />
+        <select id="consentsStatusFilter" class="input">
+          <option value="">Tümü</option>
+          <option value="accepted">Onayladı</option>
+          <option value="pending">Onaylamadı</option>
+        </select>
+      </div>
+      <div id="consentsError" class="error hidden"></div>
+      <div id="consentsCards" class="activity-logs-cards hidden"></div>
+      <div class="logs-page__tableWrap activity-logs-table-wrap" id="consentsTableWrap">
+        <table class="packagesTable activity-logs-table">
+          <thead>
+            <tr>
+              <th>Üye No</th>
+              <th>Ad Soyad</th>
+              <th>Telefon</th>
+              <th>Hesap</th>
+              <th>Onay Durumu</th>
+              <th>Onay Tarihi</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="consentsTableBody"></tbody>
+        </table>
+      </div>
+    </div>
+    <script src="./api.js"></script>
+    <script src="./consent-status.js"></script>
+    <script src="./pwa-register.js"></script>
+  </body>
+</html>

@@ -3634,6 +3634,23 @@ body.body--sidebar-open{
   overflow-x:auto;
   -webkit-overflow-scrolling:touch;
 }
+.consent-status-badge{
+  display:inline-block;
+  padding:2px 8px;
+  border-radius:999px;
+  font-size:11px;
+  font-weight:700;
+}
+.consent-status-badge--ok{
+  color:#7ee3a8;
+  background:rgba(126,227,168,.14);
+  border:1px solid rgba(126,227,168,.28);
+}
+.consent-status-badge--pending{
+  color:#ff8a96;
+  background:rgba(255,107,122,.14);
+  border:1px solid rgba(255,107,122,.28);
+}
 .list-members-card__deletion-badge,
 .list-members-table__deletion-badge{
   display:inline-block;

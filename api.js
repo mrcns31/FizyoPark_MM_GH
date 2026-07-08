@@ -445,6 +445,14 @@
     return apiFetch('/members/' + id + '/reset-password', { method: 'POST', body: JSON.stringify({}) });
   }
 
+  async function getMembersConsentStatus() {
+    return apiFetch('/members/consent-status');
+  }
+
+  async function resetMemberConsent(id) {
+    return apiFetch('/members/' + id + '/reset-consent', { method: 'POST', body: JSON.stringify({}) });
+  }
+
   async function forgotPassword(email) {
     return apiFetch('/auth/forgot-password', { method: 'POST', body: JSON.stringify({ email }) });
   }
@@ -1131,6 +1139,8 @@
     clearStaffCalendarRange,
     apiFetch,
     getActivityLogs,
+    getMembersConsentStatus,
+    resetMemberConsent,
     getDevResetMeta,
     previewDevReset,
     executeDevReset,

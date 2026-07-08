@@ -13,6 +13,7 @@
     "member.update": "Üye güncelleme",
     "member.delete": "Üye silme",
     "member.delete_permanent": "Üye tam silme",
+    "member.reset_consent": "KVKK/gizlilik onayı sıfırlama",
     "member.request_deletion": "Üyelik iptal talebi",
     "member.approve_deletion_request": "Üyelik iptali onayı",
     "member.reject_deletion_request": "Üyelik iptal talebi reddi",

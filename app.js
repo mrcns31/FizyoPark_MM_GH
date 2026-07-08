@@ -4673,6 +4673,10 @@ function openBroadcastsPage() {
   window.open("./broadcasts.html", "_blank", "noopener,noreferrer");
 }
 
+function openConsentStatusPage() {
+  window.open("./consent-status.html", "_blank", "noopener,noreferrer");
+}
+
 // ── Bildirim Gönder View ──────────────────────────────────────────────────
 
 var _broadcastTab = 'active';       // 'active' | 'passive' | 'all'
@@ -8756,6 +8760,11 @@ function bindAdminHubNav() {
   document.querySelectorAll("[data-admin-hub-open-broadcast-history]").forEach(function (btn) {
     btn.addEventListener("click", function () {
       openBroadcastsPage();
+    });
+  });
+  document.querySelectorAll("[data-admin-hub-open-consents]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      openConsentStatusPage();
     });
   });
   document.querySelectorAll("[data-admin-hub-section]").forEach(function (btn) {

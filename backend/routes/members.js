@@ -6,6 +6,7 @@ import { verifyToken } from './auth.js';
 import { toPhoneFormat, phoneDigits } from '../utils/phone.js';
 import { ensureMemberUserAccount, resetMemberPassword } from '../utils/memberAccount.js';
 import { log as activityLog } from '../utils/activityLogger.js';
+import { CONSENT_VERSION } from '../utils/legalConsent.js';
 
 /** Email boşsa telefon numarasından otomatik üret: 5321234567@fizyopark.com */
 function buildMemberEmail(email, phone) {
@@ -159,6 +160,42 @@ router.get('/deletion-requests', async (req, res) => {
   } catch (error) {
     console.error('Deletion requests list error:', error);
     res.status(500).json({ error: 'İptal talepleri alınırken hata oluştu' });
+  }
+});
+
+// KVKK / Gizlilik metni onay durumu (admin, manager): üye başına en güncel sürüm onayı var mı, ne zaman verildi
+router.get('/consent-status', async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Bu işlem yalnızca admin tarafından yapılabilir' });
+    }
+    const result = await db.query(
+      `SELECT m.id, m.member_no, m.first_name, m.last_name, m.name, m.phone, m.email,
+              m.user_id, uc.accepted_at AS consent_accepted_at
+       FROM members m
+       LEFT JOIN user_consents uc ON uc.user_id = m.user_id AND uc.consent_version = $1
+       WHERE m.deleted_at IS NULL
+       ORDER BY m.name`,
+      [CONSENT_VERSION]
+    );
+    res.json({
+      consentVersion: CONSENT_VERSION,
+      items: result.rows.map((row) => ({
+        id: row.id,
+        memberNo: row.member_no || '',
+        memberName: (row.name || `${row.first_name || ''} ${row.last_name || ''}`.trim()) || '',
+        phone: row.phone || '',
+        email: row.email || '',
+        hasAccount: row.user_id != null,
+        consentAccepted: row.consent_accepted_at != null,
+        consentAcceptedAt: row.consent_accepted_at
+          ? new Date(row.consent_accepted_at).toISOString()
+          : null,
+      })),
+    });
+  } catch (error) {
+    console.error('Members consent status error:', error);
+    res.status(500).json({ error: 'Onay durumu alınırken hata oluştu' });
   }
 });
 
@@ -505,6 +542,27 @@ router.post('/:id/reset-password', async (req, res) => {
   } catch (error) {
     console.error('Member reset password error:', error);
     res.status(500).json({ error: 'Şifre sıfırlanırken hata oluştu' });
+  }
+});
+
+// KVKK / Gizlilik metni onayını sıfırla (yalnızca admin): üye bir sonraki girişte tekrar onay ekranı görür
+router.post('/:id/reset-consent', async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Bu işlem yalnızca admin tarafından yapılabilir' });
+    }
+    const { id } = req.params;
+    const memberResult = await db.query('SELECT user_id FROM members WHERE id = $1', [id]);
+    const userId = memberResult.rows[0] && memberResult.rows[0].user_id;
+    if (!userId) {
+      return res.status(400).json({ error: 'Bu üyenin giriş hesabı yok' });
+    }
+    await db.query('DELETE FROM user_consents WHERE user_id = $1', [userId]);
+    await activityLog(req, { action: 'member.reset_consent', entityType: 'member', entityId: id }).catch(() => {});
+    res.json({ message: 'Üyenin KVKK/gizlilik onayı sıfırlandı. Bir sonraki girişte tekrar onay istenecek.' });
+  } catch (error) {
+    console.error('Member reset consent error:', error);
+    res.status(500).json({ error: 'Onay sıfırlanırken hata oluştu' });
   }
 });
 
