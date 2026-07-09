@@ -11,6 +11,7 @@ import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 from gpiozero import OutputDevice
+from gpiozero.pins.lgpio import LGPIOFactory
 
 # --- Ayarlar ---------------------------------------------------------------
 RELAY_PIN = 17          # Röle IN/SIG kablosunun bağlı olduğu GPIO (BCM) pini
@@ -19,8 +20,16 @@ OPEN_DURATION = 3        # Kapının açık kalma süresi (saniye)
 LISTEN_HOST = "0.0.0.0"
 LISTEN_PORT = 7000
 # ----------------------------------------------------------------------------
+# NOT: RPi.GPIO, Raspberry Pi OS Bookworm çekirdeğinde tekrarlı pin
+# toggle'larında donabiliyor (thread sonsuza kadar kilitleniyor). lgpio
+# bu sorunu yaşamıyor, bu yüzden pin factory olarak açıkça belirtiliyor.
 
-relay = OutputDevice(RELAY_PIN, active_high=not ACTIVE_LOW, initial_value=False)
+relay = OutputDevice(
+    RELAY_PIN,
+    active_high=not ACTIVE_LOW,
+    initial_value=False,
+    pin_factory=LGPIOFactory(),
+)
 trigger_lock = threading.Lock()
 
 

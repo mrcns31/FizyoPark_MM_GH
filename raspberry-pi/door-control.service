@@ -1,11 +1,11 @@
 [Unit]
 Description=FizyoPark Kapi Role Kontrol Servisi
-After=multi-user.target pigpiod.service
-Requires=pigpiod.service
+After=multi-user.target
 
 [Service]
 Type=simple
 User=__APP_USER__
+WorkingDirectory=/tmp
 ExecStart=/usr/bin/python3 __APP_DIR__/raspberry-pi/door-control.py
 Restart=on-failure
 RestartSec=2
