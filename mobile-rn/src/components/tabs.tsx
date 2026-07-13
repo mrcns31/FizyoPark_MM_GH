@@ -7,20 +7,20 @@ import type { AppColors } from '../theme/colors';
 export function makeTabScreenOptions(colors: AppColors) {
   return {
     headerStyle: { backgroundColor: colors.backgroundTop },
-    headerTitleStyle: { color: colors.white, fontWeight: '700' as const },
-    headerTintColor: colors.white,
+    headerTitleStyle: { color: colors.text, fontWeight: '700' as const },
+    headerTintColor: colors.text,
     tabBarStyle: { backgroundColor: colors.panel, borderTopColor: colors.border },
     tabBarActiveTintColor: colors.accent,
     tabBarInactiveTintColor: colors.textMuted,
   };
 }
 
-/** İç içe stack'lerde ortak koyu header. */
+/** İç içe stack'lerde ortak header. */
 export function makeStackScreenOptions(colors: AppColors) {
   return {
     headerStyle: { backgroundColor: colors.backgroundTop },
-    headerTitleStyle: { color: colors.white, fontWeight: '700' as const },
-    headerTintColor: colors.white,
+    headerTitleStyle: { color: colors.text, fontWeight: '700' as const },
+    headerTintColor: colors.text,
     contentStyle: { backgroundColor: colors.backgroundTop },
   };
 }

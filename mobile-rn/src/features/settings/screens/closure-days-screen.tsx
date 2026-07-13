@@ -185,14 +185,14 @@ function makeStyles(colors: AppColors, theme: ResolvedTheme) {
   return StyleSheet.create({
     form: { gap: 12, marginTop: 8 },
     summary: {
-      backgroundColor: 'rgba(43,213,118,0.12)',
+      backgroundColor: colors.successBg,
       borderWidth: 1,
-      borderColor: 'rgba(43,213,118,0.35)',
+      borderColor: colors.successBorder,
       paddingHorizontal: 12,
       paddingVertical: 10,
       borderRadius: 12,
     },
-    summaryText: { color: 'rgba(216,255,232,0.96)', fontSize: 13 },
+    summaryText: { color: colors.successText, fontSize: 13 },
     list: { gap: 10, marginTop: 4, marginBottom: 8 },
     item: {
       flexDirection: 'row',

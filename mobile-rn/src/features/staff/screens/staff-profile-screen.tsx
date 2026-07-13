@@ -28,6 +28,6 @@ export function StaffProfileScreen() {
 
 function makeStyles(colors: AppColors) {
   return StyleSheet.create({
-    name: { fontSize: 20, fontWeight: '800', color: colors.white },
+    name: { fontSize: 20, fontWeight: '800', color: colors.text },
   });
 }

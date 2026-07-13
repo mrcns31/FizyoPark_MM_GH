@@ -21,6 +21,9 @@ export interface AppColors {
   errorBg: string;
   errorBorder: string;
   errorText: string;
+  successBg: string;
+  successBorder: string;
+  successText: string;
   radius: number;
   radius2: number;
   backgroundTop: string;
@@ -66,6 +69,9 @@ const dark: AppColors = {
   errorBg: 'rgba(255,77,109,0.12)',
   errorBorder: 'rgba(255,77,109,0.35)',
   errorText: 'rgba(255,220,226,0.96)',
+  successBg: 'rgba(43,213,118,0.12)',
+  successBorder: 'rgba(43,213,118,0.35)',
+  successText: 'rgba(216,255,232,0.96)',
 
   radius: 14, // --radius
   radius2: 10, // --radius2
@@ -107,6 +113,9 @@ const light: AppColors = {
   errorBg: 'rgba(255,77,109,0.10)',
   errorBorder: 'rgba(255,77,109,0.35)',
   errorText: '#9F1239',
+  successBg: 'rgba(43,213,118,0.10)',
+  successBorder: 'rgba(43,213,118,0.35)',
+  successText: '#166534',
 
   radius: 14,
   radius2: 10,

@@ -146,7 +146,7 @@ function Section({ section, onNavigate }: { section: NavSection; onNavigate: () 
             <Ionicons
               name={it.icon}
               size={18}
-              color={it.danger ? colors.danger : it.active ? colors.white : surfaceTint(resolvedTheme, 0.88)}
+              color={it.danger ? colors.danger : it.active ? colors.accent : surfaceTint(resolvedTheme, 0.88)}
             />
           </View>
           <Text
@@ -228,7 +228,7 @@ function makeStyles(colors: AppColors, theme: ResolvedTheme) {
     navBtnActive: { backgroundColor: colors.accentSoft, borderColor: 'rgba(124,92,255,0.45)' },
     navIcon: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center' },
     navLabel: { flex: 1, fontSize: 13, color: colors.text },
-    navLabelActive: { color: colors.white, fontWeight: '600' },
+    navLabelActive: { color: colors.accent, fontWeight: '600' },
     navLabelDanger: { color: colors.danger },
     navBadge: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.danger },
     footer: { borderTopWidth: 1, borderTopColor: colors.border, marginTop: 4, paddingTop: 4 },

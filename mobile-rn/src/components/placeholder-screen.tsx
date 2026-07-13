@@ -19,7 +19,7 @@ export function PlaceholderScreen({ title, note }: { title: string; note?: strin
 
 function makeStyles(colors: AppColors) {
   return StyleSheet.create({
-    title: { fontSize: 20, fontWeight: '700', color: colors.white },
+    title: { fontSize: 20, fontWeight: '700', color: colors.text },
     note: { fontSize: 14, color: colors.textMuted },
   });
 }

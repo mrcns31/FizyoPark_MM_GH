@@ -96,7 +96,7 @@ export function MemberQrScreen() {
 
 function makeStyles(colors: AppColors) {
   return StyleSheet.create({
-    title: { fontSize: 22, fontWeight: '800', color: colors.white },
+    title: { fontSize: 22, fontWeight: '800', color: colors.text },
     qrCard: {
       backgroundColor: colors.white,
       width: 280,

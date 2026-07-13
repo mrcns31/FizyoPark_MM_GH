@@ -162,7 +162,7 @@ function makeStyles(colors: AppColors, theme: ResolvedTheme) {
       backgroundColor: surfaceTint(theme, 0.2),
       marginBottom: 10,
     },
-    sheetTitle: { color: colors.white, fontSize: 17, fontWeight: '700', marginBottom: 10 },
+    sheetTitle: { color: colors.text, fontSize: 17, fontWeight: '700', marginBottom: 10 },
 
     searchWrap: {
       flexDirection: 'row',
@@ -186,7 +186,7 @@ function makeStyles(colors: AppColors, theme: ResolvedTheme) {
     flat: { flexGrow: 0, flexShrink: 1 },
     option: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: surfaceTint(theme, 0.06) },
     optionText: { color: colors.textSecondary, fontSize: 16 },
-    optionActive: { color: colors.white, fontWeight: '700' },
+    optionActive: { color: colors.text, fontWeight: '700' },
     empty: { color: colors.textMuted, paddingVertical: 20, textAlign: 'center' },
   });
 }
