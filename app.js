@@ -12605,7 +12605,8 @@ function renderExpiredMembershipsTable() {
   const startStrRaw = (mp) => (mp.startDate || "").toString().slice(0, 10);
   // Gelecek tarihli ama erken tamamlanmış paketlerin sıralaması bozmasını önler:
   // seans dolup auto-complete olan paketlerin end date'i gelecekte olabilir → bugünle kapat
-  const endStrSort = (mp) => { const e = endStrRaw(mp); return e > todayStr ? todayStr : e; };
+  const _today = localTodayDateStr();
+  const endStrSort = (mp) => { const e = endStrRaw(mp); return e > _today ? _today : e; };
 
   let memberRows = [];
   for (const [mid, pkgs] of memberPkgsMap) {
