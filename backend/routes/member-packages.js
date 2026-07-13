@@ -709,7 +709,12 @@ router.post('/', [
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { member_id, package_id, start_date, end_date, skip_day_distribution = false, slots = [] } = req.body;
+    const { member_id, package_id, start_date, end_date, skip_day_distribution = false, slots = [], slot_overrides = [] } = req.body;
+    const validSlotOverrides = Array.isArray(slot_overrides) ? slot_overrides : [];
+    const postSkipDates = validSlotOverrides.length > 0 ? new Set(validSlotOverrides.filter((o) => o.skip).map((o) => o.date)) : null;
+    const postDateOverrides = validSlotOverrides.length > 0
+      ? new Map(validSlotOverrides.filter((o) => !o.skip && (o.start_time || o.staff_id != null)).map((o) => [o.date, o]))
+      : null;
 
     // Seans dağılımı her zaman bugünden (Türkiye saati) ileriye yapılır; geçmiş start_date olsa bile geçmişe seans oluşturulmaz
     const todayTurkeyPost = new Date(Date.now() + 3 * 3600 * 1000).toISOString().slice(0, 10);
@@ -746,6 +751,8 @@ router.post('/', [
         }
         const plan = buildPackageSessionInsertPlan(effectiveStart, end_date, validSlots, lessonCount, {
           memberId: member_id,
+          skipDates: postSkipDates,
+          dateOverrides: postDateOverrides,
         });
         const preConflicts = await validatePackageSessionInserts(db, plan);
         if (preConflicts.length > 0) {
@@ -773,7 +780,9 @@ router.post('/', [
     let sessionConflicts = [];
     let sessionsCreated = 0;
     if (!skip_day_distribution && validSlots.length > 0) {
-      const gen = await generateSessionsForMemberPackage(db, mp.id, member_id, effectiveStart, end_date, validSlots);
+      const gen = await generateSessionsForMemberPackage(db, mp.id, member_id, effectiveStart, end_date, validSlots, null, {
+        slotOverrides: validSlotOverrides,
+      });
       sessionConflicts = gen.conflicts || [];
       sessionsCreated = gen.sessionsCreated || 0;
       if (sessionConflicts.length > 0) {

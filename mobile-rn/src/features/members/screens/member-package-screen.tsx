@@ -236,8 +236,8 @@ export function MemberPackageScreen() {
       );
     } else {
       create.mutate(
-        { memberId, packageId: packageId!, startDate, endDate, skipDayDistribution: skipDist, slots },
-        { onSuccess: (mp) => onDone(mp.sessionsCreated, 'Paket tanımlandı'), onError: (e) => setError(e instanceof ApiError ? e.message : 'İşlem başarısız.') },
+        { memberId, packageId: packageId!, startDate, endDate, skipDayDistribution: skipDist, slots, slotOverrides: slotOverrides.length > 0 ? slotOverrides : undefined },
+        { onSuccess: (mp) => onDone(mp.sessionsCreated, 'Paket tanımlandı'), onError: onErr },
       );
     }
   }
@@ -264,7 +264,7 @@ export function MemberPackageScreen() {
 
   /** Tüm çakışmalar çözüldükten sonra kaydet. */
   async function onConflictSave() {
-    if (!memberId || !editingId) return;
+    if (!memberId) return;
     const checkedDays = openDays.filter((d) => days[d]?.checked);
     const slots: SlotInput[] = checkedDays.map((d) => ({
       dayOfWeek: d, startTime: days[d].startTime, staffId: days[d].staffId,

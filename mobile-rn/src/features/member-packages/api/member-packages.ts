@@ -21,6 +21,7 @@ export interface MemberPackageInput {
   endDate: string;
   skipDayDistribution: boolean;
   slots: SlotInput[];
+  slotOverrides?: SlotOverride[];
 }
 
 function slotsToApi(slots: SlotInput[]) {
@@ -31,6 +32,15 @@ function slotsToApi(slots: SlotInput[]) {
   }));
 }
 
+function slotOverridesToApi(overrides: SlotOverride[]) {
+  return overrides.map((o) => ({
+    date: o.date,
+    ...(o.skip ? { skip: true } : {}),
+    ...(o.startTime != null ? { start_time: o.startTime } : {}),
+    ...(o.staffId != null ? { staff_id: o.staffId } : {}),
+  }));
+}
+
 export async function getMemberPackages(memberId?: number): Promise<MemberPackage[]> {
   const path = memberId != null ? `/member-packages?memberId=${memberId}` : '/member-packages';
   const { data } = await apiClient.get(path);
@@ -38,7 +48,7 @@ export async function getMemberPackages(memberId?: number): Promise<MemberPackag
 }
 
 export async function createMemberPackage(input: MemberPackageInput): Promise<MemberPackage> {
-  const payload = {
+  const payload: Record<string, unknown> = {
     member_id: input.memberId,
     package_id: input.packageId,
     start_date: input.startDate,
@@ -46,6 +56,9 @@ export async function createMemberPackage(input: MemberPackageInput): Promise<Me
     skip_day_distribution: input.skipDayDistribution,
     slots: slotsToApi(input.slots),
   };
+  if (input.slotOverrides?.length) {
+    payload.slot_overrides = slotOverridesToApi(input.slotOverrides);
+  }
   const { data } = await apiClient.post('/member-packages', payload);
   return memberPackageFromApi(data);
 }
