@@ -7,7 +7,8 @@ import { Badge, Card, Muted } from '../../../components/ui';
 import { ScreenHeader } from '../../../components/screen-header';
 import { formatDayShort, formatTime } from '../../../lib/datetime';
 import { useResponsive } from '../../../lib/responsive';
-import { colors } from '../../../theme/colors';
+import { useTheme } from '../../theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../../../theme/colors';
 import { useConfirmAttendance, useEntryList, useWalkInList } from '../api/hooks';
 
 const DAY_MS = 24 * 3600 * 1000;
@@ -103,6 +104,8 @@ function fmtDateShort(ts: number): string {
 
 /** Giriş Listesi */
 export function EntryListScreen() {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const { contentMaxWidth, gutter } = useResponsive();
   const [anchor, setAnchor] = useState(todayStr());
   const [mode, setMode] = useState<ViewMode>('day');
@@ -354,80 +357,82 @@ export function EntryListScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  dateNav: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  navBtn: {
-    width: 30, height: 30, borderRadius: 8, borderWidth: 1,
-    borderColor: colors.border, backgroundColor: 'rgba(255,255,255,0.04)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  dateLabel: { fontSize: 13, fontWeight: '700', color: colors.text, width: 132, textAlign: 'center' },
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: colors.bg },
+    dateNav: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    navBtn: {
+      width: 30, height: 30, borderRadius: 8, borderWidth: 1,
+      borderColor: colors.border, backgroundColor: surfaceTint(theme, 0.04),
+      alignItems: 'center', justifyContent: 'center',
+    },
+    dateLabel: { fontSize: 13, fontWeight: '700', color: colors.text, width: 132, textAlign: 'center' },
 
-  top: { gap: 8, paddingTop: 4, paddingBottom: 8 },
+    top: { gap: 8, paddingTop: 4, paddingBottom: 8 },
 
-  viewModeRow: { flexDirection: 'row', gap: 6 },
-  modeBtn: {
-    flex: 1, paddingVertical: 7, borderRadius: 9, alignItems: 'center',
-    borderWidth: 1, borderColor: colors.border, backgroundColor: 'rgba(255,255,255,0.03)',
-  },
-  modeBtnOn: { backgroundColor: 'rgba(124,92,255,0.18)', borderColor: 'rgba(124,92,255,0.5)' },
-  modeBtnText: { color: colors.muted, fontSize: 12, fontWeight: '700' },
-  modeBtnTextOn: { color: colors.text },
+    viewModeRow: { flexDirection: 'row', gap: 6 },
+    modeBtn: {
+      flex: 1, paddingVertical: 7, borderRadius: 9, alignItems: 'center',
+      borderWidth: 1, borderColor: colors.border, backgroundColor: surfaceTint(theme, 0.03),
+    },
+    modeBtnOn: { backgroundColor: 'rgba(124,92,255,0.18)', borderColor: 'rgba(124,92,255,0.5)' },
+    modeBtnText: { color: colors.muted, fontSize: 12, fontWeight: '700' },
+    modeBtnTextOn: { color: colors.text },
 
-  tabs: { flexDirection: 'row', gap: 8 },
-  tab: {
-    flex: 1, paddingVertical: 9, borderRadius: 10, alignItems: 'center',
-    borderWidth: 1, borderColor: colors.border, backgroundColor: 'rgba(255,255,255,0.03)',
-  },
-  tabOn: { backgroundColor: 'rgba(124,92,255,0.20)', borderColor: 'rgba(124,92,255,0.5)' },
-  tabText: { color: colors.muted, fontWeight: '700', fontSize: 13 },
-  tabTextOn: { color: colors.text },
+    tabs: { flexDirection: 'row', gap: 8 },
+    tab: {
+      flex: 1, paddingVertical: 9, borderRadius: 10, alignItems: 'center',
+      borderWidth: 1, borderColor: colors.border, backgroundColor: surfaceTint(theme, 0.03),
+    },
+    tabOn: { backgroundColor: 'rgba(124,92,255,0.20)', borderColor: 'rgba(124,92,255,0.5)' },
+    tabText: { color: colors.muted, fontWeight: '700', fontSize: 13 },
+    tabTextOn: { color: colors.text },
 
-  chips: { gap: 6, paddingRight: 8 },
-  chip: {
-    paddingHorizontal: 12, paddingVertical: 7, borderRadius: 9, borderWidth: 1,
-    borderColor: colors.border, backgroundColor: 'rgba(255,255,255,0.03)',
-  },
-  chipOn: { backgroundColor: 'rgba(124,92,255,0.20)', borderColor: 'rgba(124,92,255,0.5)' },
-  chipText: { color: colors.muted, fontSize: 13, fontWeight: '600' },
-  chipTextOn: { color: colors.text },
-  chipPresent: { borderColor: 'rgba(43,213,118,0.4)', backgroundColor: 'rgba(43,213,118,0.08)' },
-  chipNoShow: { borderColor: 'rgba(255,77,109,0.4)', backgroundColor: 'rgba(255,77,109,0.08)' },
-  chipPresentOn: { borderColor: 'rgba(43,213,118,0.7)', backgroundColor: 'rgba(43,213,118,0.22)' },
-  chipNoShowOn: { borderColor: 'rgba(255,77,109,0.7)', backgroundColor: 'rgba(255,77,109,0.22)' },
+    chips: { gap: 6, paddingRight: 8 },
+    chip: {
+      paddingHorizontal: 12, paddingVertical: 7, borderRadius: 9, borderWidth: 1,
+      borderColor: colors.border, backgroundColor: surfaceTint(theme, 0.03),
+    },
+    chipOn: { backgroundColor: 'rgba(124,92,255,0.20)', borderColor: 'rgba(124,92,255,0.5)' },
+    chipText: { color: colors.muted, fontSize: 13, fontWeight: '600' },
+    chipTextOn: { color: colors.text },
+    chipPresent: { borderColor: 'rgba(43,213,118,0.4)', backgroundColor: 'rgba(43,213,118,0.08)' },
+    chipNoShow: { borderColor: 'rgba(255,77,109,0.4)', backgroundColor: 'rgba(255,77,109,0.08)' },
+    chipPresentOn: { borderColor: 'rgba(43,213,118,0.7)', backgroundColor: 'rgba(43,213,118,0.22)' },
+    chipNoShowOn: { borderColor: 'rgba(255,77,109,0.7)', backgroundColor: 'rgba(255,77,109,0.22)' },
 
-  searchWrap: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderWidth: 1, borderColor: colors.border,
-    borderRadius: 10, paddingHorizontal: 10, paddingVertical: 7,
-  },
-  searchIcon: { flexShrink: 0 },
-  searchInput: { flex: 1, color: colors.text, fontSize: 14, padding: 0 },
+    searchWrap: {
+      flexDirection: 'row', alignItems: 'center', gap: 8,
+      backgroundColor: surfaceTint(theme, 0.05),
+      borderWidth: 1, borderColor: colors.border,
+      borderRadius: 10, paddingHorizontal: 10, paddingVertical: 7,
+    },
+    searchIcon: { flexShrink: 0 },
+    searchInput: { flex: 1, color: colors.text, fontSize: 14, padding: 0 },
 
-  list: { paddingBottom: 24, gap: 8, flexGrow: 1 },
-  row: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    gap: 10, padding: 12, borderWidth: 1,
-    borderColor: colors.border, borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-  },
-  rowEditable: { borderColor: 'rgba(124,92,255,0.35)' },
-  rowLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
-  timeCol: { alignItems: 'center', minWidth: 46 },
-  dateInRow: { color: colors.muted, fontSize: 10, fontWeight: '700', textAlign: 'center' },
-  time: { color: colors.text, fontSize: 15, fontWeight: '800' },
-  rowInfo: { flex: 1, gap: 2 },
-  member: { color: colors.text, fontSize: 14, fontWeight: '600' },
-  staff: { color: colors.muted, fontSize: 12 },
-  checkInTime: { color: colors.ok, fontSize: 11, fontWeight: '700' },
-  rowRight: { alignItems: 'flex-end', gap: 6 },
-  actions: { flexDirection: 'row', gap: 6 },
-  actBtn: {
-    width: 32, height: 32, borderRadius: 8, borderWidth: 1,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  actPresent: { borderColor: 'rgba(43,213,118,0.5)', backgroundColor: 'rgba(43,213,118,0.12)' },
-  actNoShow: { borderColor: 'rgba(255,77,109,0.5)', backgroundColor: 'rgba(255,77,109,0.12)' },
-});
+    list: { paddingBottom: 24, gap: 8, flexGrow: 1 },
+    row: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      gap: 10, padding: 12, borderWidth: 1,
+      borderColor: colors.border, borderRadius: 12,
+      backgroundColor: surfaceTint(theme, 0.03),
+    },
+    rowEditable: { borderColor: 'rgba(124,92,255,0.35)' },
+    rowLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+    timeCol: { alignItems: 'center', minWidth: 46 },
+    dateInRow: { color: colors.muted, fontSize: 10, fontWeight: '700', textAlign: 'center' },
+    time: { color: colors.text, fontSize: 15, fontWeight: '800' },
+    rowInfo: { flex: 1, gap: 2 },
+    member: { color: colors.text, fontSize: 14, fontWeight: '600' },
+    staff: { color: colors.muted, fontSize: 12 },
+    checkInTime: { color: colors.ok, fontSize: 11, fontWeight: '700' },
+    rowRight: { alignItems: 'flex-end', gap: 6 },
+    actions: { flexDirection: 'row', gap: 6 },
+    actBtn: {
+      width: 32, height: 32, borderRadius: 8, borderWidth: 1,
+      alignItems: 'center', justifyContent: 'center',
+    },
+    actPresent: { borderColor: 'rgba(43,213,118,0.5)', backgroundColor: 'rgba(43,213,118,0.12)' },
+    actNoShow: { borderColor: 'rgba(255,77,109,0.5)', backgroundColor: 'rgba(255,77,109,0.12)' },
+  });
+}

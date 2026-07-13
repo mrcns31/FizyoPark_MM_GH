@@ -9,7 +9,8 @@ import { TimeField } from '../../../components/time-field';
 import { SelectField } from '../../../components/select-field';
 import { Badge, Button, Card, ErrorBox, Muted, SectionTitle } from '../../../components/ui';
 import { ApiError } from '../../../lib/api-client';
-import { colors } from '../../../theme/colors';
+import { useTheme } from '../../theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../../../theme/colors';
 import type { MemberPackage } from '../../../types/api';
 import {
   type AvailabilityConflict,
@@ -62,6 +63,8 @@ interface DayRow {
 
 /** Üyeye paket tanımlama — web `openMemberPackageModal`/`saveMemberPackageFromForm` birebir. */
 export function MemberPackageScreen() {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const { memberId: memberIdParam, packageId: packageIdParam } = useLocalSearchParams<{
     memberId?: string;
     packageId?: string;
@@ -363,7 +366,7 @@ export function MemberPackageScreen() {
 
         <Pressable style={styles.skipRow} onPress={() => setSkipDist((v) => !v)} hitSlop={6}>
           <View style={[styles.check, skipDist && styles.checkOn]}>
-            {skipDist ? <Ionicons name="checkmark" size={15} color="#fff" /> : null}
+            {skipDist ? <Ionicons name="checkmark" size={15} color={colors.white} /> : null}
           </View>
           <Text style={styles.skipText}>Haftalık gün dağılımı yapma (seansları sonra elle ekle)</Text>
         </Pressable>
@@ -379,7 +382,7 @@ export function MemberPackageScreen() {
                 <View key={d} style={[styles.dayCard, checked && styles.dayCardOn]}>
                   <Pressable style={styles.dayToggle} onPress={() => toggleDay(d)} hitSlop={6}>
                     <View style={[styles.check, checked && styles.checkOn]}>
-                      {checked ? <Ionicons name="checkmark" size={15} color="#fff" /> : null}
+                      {checked ? <Ionicons name="checkmark" size={15} color={colors.white} /> : null}
                     </View>
                     <Text style={styles.dayName}>{DAY_NAMES[d]}</Text>
                   </Pressable>
@@ -522,98 +525,100 @@ export function MemberPackageScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  memberName: { color: colors.text, fontSize: 18, fontWeight: '800', marginTop: 8, marginBottom: 4 },
-  list: { gap: 8, marginBottom: 8 },
-  pkgItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-  },
-  pkgLeft: { flex: 1, gap: 2 },
-  pkgName: { color: colors.text, fontSize: 14, fontWeight: '700' },
-  pkgMeta: { color: colors.muted, fontSize: 12 },
-  iconBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  formHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  cancelEdit: { color: colors.accent, fontSize: 13, fontWeight: '700' },
-  form: { gap: 12, marginBottom: 16 },
-  label: { color: colors.muted, fontSize: 12, marginBottom: 6 },
-  dateRow: { flexDirection: 'row', gap: 10 },
-  dateCol: { flex: 1 },
-  skipRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  check: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkOn: { backgroundColor: colors.accent, borderColor: colors.accent },
-  skipText: { flex: 1, color: colors.text, fontSize: 13 },
-  slots: { gap: 8 },
-  dayCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.02)',
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  dayCardOn: { borderColor: 'rgba(124,92,255,0.4)', backgroundColor: 'rgba(124,92,255,0.06)' },
-  dayToggle: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
-  dayName: { color: colors.text, fontSize: 14, fontWeight: '600' },
-  dayTime: { width: 80 },
-  dayStaff: { flex: 1.4 },
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    memberName: { color: colors.text, fontSize: 18, fontWeight: '800', marginTop: 8, marginBottom: 4 },
+    list: { gap: 8, marginBottom: 8 },
+    pkgItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      padding: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      backgroundColor: surfaceTint(theme, 0.03),
+    },
+    pkgLeft: { flex: 1, gap: 2 },
+    pkgName: { color: colors.text, fontSize: 14, fontWeight: '700' },
+    pkgMeta: { color: colors.muted, fontSize: 12 },
+    iconBtn: {
+      width: 32,
+      height: 32,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    formHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    cancelEdit: { color: colors.accent, fontSize: 13, fontWeight: '700' },
+    form: { gap: 12, marginBottom: 16 },
+    label: { color: colors.muted, fontSize: 12, marginBottom: 6 },
+    dateRow: { flexDirection: 'row', gap: 10 },
+    dateCol: { flex: 1 },
+    skipRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    check: {
+      width: 22,
+      height: 22,
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: surfaceTint(theme, 0.03),
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    checkOn: { backgroundColor: colors.accent, borderColor: colors.accent },
+    skipText: { flex: 1, color: colors.text, fontSize: 13 },
+    slots: { gap: 8 },
+    dayCard: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      backgroundColor: surfaceTint(theme, 0.02),
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+    },
+    dayCardOn: { borderColor: 'rgba(124,92,255,0.4)', backgroundColor: 'rgba(124,92,255,0.06)' },
+    dayToggle: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
+    dayName: { color: colors.text, fontSize: 14, fontWeight: '600' },
+    dayTime: { width: 80 },
+    dayStaff: { flex: 1.4 },
 
-  // Conflict UI
-  conflictSection: { gap: 10, marginTop: 4 },
-  conflictTitle: { color: '#f59e0b', fontSize: 15, fontWeight: '700' },
-  conflictSubtitle: { color: colors.muted, fontSize: 12 },
-  conflictCard: {
-    borderLeftWidth: 3,
-    borderRadius: 8,
-    padding: 12,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    gap: 6,
-  },
-  conflictRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  conflictDate: { color: colors.text, fontSize: 14, fontWeight: '600' },
-  conflictMeta: { color: colors.muted, fontSize: 12, marginTop: 2 },
-  conflictActions: { flexDirection: 'row', gap: 8, marginTop: 8 },
-  conflictActionBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    borderRadius: 8,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  conflictSkipBtn: { backgroundColor: 'rgba(100,116,139,0.15)' },
-  conflictActionText: { color: colors.text, fontSize: 13, fontWeight: '600' },
-  conflictEditBox: { gap: 8 },
-  conflictEditRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
-  conflictEditActions: { flexDirection: 'row', gap: 8 },
-  conflictCount: { fontSize: 13, fontWeight: '600' },
-  conflictFooter: { flexDirection: 'row', gap: 10 },
-  conflictBtn: { flex: 1 },
-  undoText: { color: colors.accent, fontSize: 12, fontWeight: '600' },
-});
+    // Conflict UI
+    conflictSection: { gap: 10, marginTop: 4 },
+    conflictTitle: { color: '#f59e0b', fontSize: 15, fontWeight: '700' },
+    conflictSubtitle: { color: colors.muted, fontSize: 12 },
+    conflictCard: {
+      borderLeftWidth: 3,
+      borderRadius: 8,
+      padding: 12,
+      backgroundColor: surfaceTint(theme, 0.04),
+      gap: 6,
+    },
+    conflictRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    conflictDate: { color: colors.text, fontSize: 14, fontWeight: '600' },
+    conflictMeta: { color: colors.muted, fontSize: 12, marginTop: 2 },
+    conflictActions: { flexDirection: 'row', gap: 8, marginTop: 8 },
+    conflictActionBtn: {
+      paddingHorizontal: 14,
+      paddingVertical: 7,
+      borderRadius: 8,
+      backgroundColor: surfaceTint(theme, 0.08),
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    conflictSkipBtn: { backgroundColor: 'rgba(100,116,139,0.15)' },
+    conflictActionText: { color: colors.text, fontSize: 13, fontWeight: '600' },
+    conflictEditBox: { gap: 8 },
+    conflictEditRow: { flexDirection: 'row', gap: 8, alignItems: 'center' },
+    conflictEditActions: { flexDirection: 'row', gap: 8 },
+    conflictCount: { fontSize: 13, fontWeight: '600' },
+    conflictFooter: { flexDirection: 'row', gap: 10 },
+    conflictBtn: { flex: 1 },
+    undoText: { color: colors.accent, fontSize: 12, fontWeight: '600' },
+  });
+}

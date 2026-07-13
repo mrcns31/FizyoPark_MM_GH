@@ -13,7 +13,8 @@ import { Button, Card } from '../../../components/ui';
 import { ApiError } from '../../../lib/api-client';
 import { getMembers } from '../../members/api/members';
 import { getStaff } from '../../staff/api/staff';
-import { colors } from '../../../theme/colors';
+import { useTheme } from '../../theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../../../theme/colors';
 import { sessionKeys, useCreateSession, useDeleteSession, useSessions, useUpdateSession } from '../api/hooks';
 import { useWorkingHours } from '../../settings/api/hooks';
 import { useMemberPackages } from '../../member-packages/api/hooks';
@@ -44,6 +45,8 @@ function mergeTime(base: Date, timeStr: string): Date {
  *   çıkar→sil, slot/personel/oda değişince kalanları günceller.
  */
 export function SessionFormScreen() {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const router = useRouter();
   const qc = useQueryClient();
   const params = useLocalSearchParams<{ id?: string; date?: string; defaultTs?: string; singleEdit?: string; forceMemberId?: string; forceMemberPackageId?: string }>();
@@ -356,34 +359,36 @@ export function SessionFormScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  card: { gap: 14, marginTop: 8 },
-  label: { color: colors.muted, fontSize: 12, marginBottom: 6 },
-  req: { color: colors.danger },
-  dtRow: { flexDirection: 'column', gap: 0 },
-  arrowRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  arrowBtn: {
-    width: 34, height: 34,
-    borderRadius: 8, borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  arrowField: { flex: 1 },
-  memberRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    marginBottom: 8,
-  },
-  memberName: { color: colors.text, fontSize: 15, fontWeight: '600', flex: 1 },
-  removeBtn: { padding: 2 },
-  submit: { marginTop: 14, marginBottom: 8 },
-});
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    card: { gap: 14, marginTop: 8 },
+    label: { color: colors.muted, fontSize: 12, marginBottom: 6 },
+    req: { color: colors.danger },
+    dtRow: { flexDirection: 'column', gap: 0 },
+    arrowRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    arrowBtn: {
+      width: 34, height: 34,
+      borderRadius: 8, borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: surfaceTint(theme, 0.05),
+      alignItems: 'center', justifyContent: 'center',
+    },
+    arrowField: { flex: 1 },
+    memberRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 10,
+      paddingVertical: 10,
+      paddingHorizontal: 12,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: surfaceTint(theme, 0.03),
+      marginBottom: 8,
+    },
+    memberName: { color: colors.text, fontSize: 15, fontWeight: '600', flex: 1 },
+    removeBtn: { padding: 2 },
+    submit: { marginTop: 14, marginBottom: 8 },
+  });
+}

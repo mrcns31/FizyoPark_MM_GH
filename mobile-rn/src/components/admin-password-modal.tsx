@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
   Modal,
@@ -10,9 +10,12 @@ import {
   View,
 } from 'react-native';
 import { adminPasswordEmitter } from '../lib/admin-password-emitter';
-import { colors } from '../theme/colors';
+import { useTheme } from '../features/theme';
+import type { AppColors } from '../theme/colors';
 
 export function AdminPasswordModal() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [visible, setVisible] = useState(false);
   const [message, setMessage] = useState('');
   const [password, setPassword] = useState('');
@@ -72,44 +75,46 @@ export function AdminPasswordModal() {
   );
 }
 
-const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.65)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 24,
-  },
-  box: {
-    backgroundColor: colors.panel,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    padding: 20,
-    width: '100%',
-    maxWidth: 360,
-    gap: 12,
-  },
-  title: { color: colors.text, fontSize: 17, fontWeight: '700' },
-  message: { color: colors.muted, fontSize: 14 },
-  input: {
-    backgroundColor: colors.backgroundTop,
-    borderWidth: 1,
-    borderColor: 'rgba(124,92,255,0.4)',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    color: colors.text,
-    fontSize: 15,
-  },
-  buttons: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 4 },
-  btnCancel: { paddingHorizontal: 16, paddingVertical: 8 },
-  btnCancelText: { color: colors.muted, fontSize: 15 },
-  btnConfirm: {
-    backgroundColor: colors.accent,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  btnConfirmText: { color: '#fff', fontSize: 15, fontWeight: '600' },
-});
+function makeStyles(colors: AppColors) {
+  return StyleSheet.create({
+    overlay: {
+      flex: 1,
+      backgroundColor: colors.overlay,
+      justifyContent: 'center',
+      alignItems: 'center',
+      padding: 24,
+    },
+    box: {
+      backgroundColor: colors.panel,
+      borderRadius: 14,
+      borderWidth: 1,
+      borderColor: colors.border,
+      padding: 20,
+      width: '100%',
+      maxWidth: 360,
+      gap: 12,
+    },
+    title: { color: colors.text, fontSize: 17, fontWeight: '700' },
+    message: { color: colors.muted, fontSize: 14 },
+    input: {
+      backgroundColor: colors.backgroundTop,
+      borderWidth: 1,
+      borderColor: 'rgba(124,92,255,0.4)',
+      borderRadius: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      color: colors.text,
+      fontSize: 15,
+    },
+    buttons: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 4 },
+    btnCancel: { paddingHorizontal: 16, paddingVertical: 8 },
+    btnCancelText: { color: colors.muted, fontSize: 15 },
+    btnConfirm: {
+      backgroundColor: colors.accent,
+      paddingHorizontal: 16,
+      paddingVertical: 8,
+      borderRadius: 8,
+    },
+    btnConfirmText: { color: colors.white, fontSize: 15, fontWeight: '600' },
+  });
+}

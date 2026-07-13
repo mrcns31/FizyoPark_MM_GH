@@ -1,6 +1,8 @@
+import { useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
 
-import { colors } from '../theme/colors';
+import { useTheme } from '../features/theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../theme/colors';
 
 // Web `initAlphaFilterBar` ile aynı Türkçe alfabe.
 export const TR_LETTERS = [
@@ -22,6 +24,8 @@ export function AlphaFilter({
   value: string | null;
   onChange: (letter: string | null) => void;
 }) {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   return (
     <ScrollView
       horizontal
@@ -47,20 +51,22 @@ export function AlphaFilter({
   );
 }
 
-const styles = StyleSheet.create({
-  row: { gap: 6, paddingVertical: 2, paddingRight: 8 },
-  chip: {
-    minWidth: 34,
-    paddingHorizontal: 8,
-    paddingVertical: 7,
-    borderRadius: 9,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  chipActive: { backgroundColor: 'rgba(124,92,255,0.20)', borderColor: 'rgba(124,92,255,0.5)' },
-  chipText: { color: colors.muted, fontSize: 13, fontWeight: '700' },
-  chipTextActive: { color: colors.text },
-});
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    row: { gap: 6, paddingVertical: 2, paddingRight: 8 },
+    chip: {
+      minWidth: 34,
+      paddingHorizontal: 8,
+      paddingVertical: 7,
+      borderRadius: 9,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: surfaceTint(theme, 0.03),
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    chipActive: { backgroundColor: 'rgba(124,92,255,0.20)', borderColor: 'rgba(124,92,255,0.5)' },
+    chipText: { color: colors.muted, fontSize: 13, fontWeight: '700' },
+    chipTextActive: { color: colors.text },
+  });
+}

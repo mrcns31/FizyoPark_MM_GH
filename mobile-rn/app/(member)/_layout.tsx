@@ -1,10 +1,11 @@
 import { Tabs } from 'expo-router';
 
 import { MemberTabBar } from '../../src/components/member-tab-bar';
-import { colors } from '../../src/theme/colors';
+import { useTheme } from '../../src/features/theme';
 
 /** Üye kabuğu — alt bar: Seanslar · [QR FAB] · Profil. */
 export default function MemberLayout() {
+  const { colors } = useTheme();
   return (
     <Tabs
       tabBar={(props) => <MemberTabBar state={props.state} navigation={props.navigation as never} />}

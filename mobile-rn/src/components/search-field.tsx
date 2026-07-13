@@ -1,7 +1,9 @@
+import { useMemo } from 'react';
 import { Pressable, StyleSheet, TextInput, View, type TextInputProps } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-import { colors } from '../theme/colors';
+import { useTheme } from '../features/theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../theme/colors';
 
 /**
  * Arama kutucuğu — sağında X (temizle) butonu.
@@ -13,6 +15,8 @@ export function SearchField({
   style,
   ...rest
 }: TextInputProps & { onChangeText: (v: string) => void }) {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   return (
     <View style={[styles.wrap, style as any]}>
       <Ionicons name="search-outline" size={16} color={colors.muted} style={styles.icon} />
@@ -32,24 +36,26 @@ export function SearchField({
   );
 }
 
-const styles = StyleSheet.create({
-  wrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    gap: 6,
-  },
-  icon: { flexShrink: 0 },
-  input: {
-    flex: 1,
-    color: colors.text,
-    fontSize: 14,
-    paddingVertical: 8,
-  },
-  clear: { flexShrink: 0 },
-});
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    wrap: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: surfaceTint(theme, 0.05),
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      paddingHorizontal: 10,
+      paddingVertical: 4,
+      gap: 6,
+    },
+    icon: { flexShrink: 0 },
+    input: {
+      flex: 1,
+      color: colors.text,
+      fontSize: 14,
+      paddingVertical: 8,
+    },
+    clear: { flexShrink: 0 },
+  });
+}

@@ -1,13 +1,15 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Badge, Button, Card, Muted, SectionTitle } from '../../../components/ui';
 import { BottomSheet } from '../../../components/bottom-sheet';
+import { ThemeToggle } from '../../../components/theme-toggle';
 import { ChangePasswordForm } from '../../auth/components/change-password-form';
 import { useResponsive } from '../../../lib/responsive';
-import { colors } from '../../../theme/colors';
+import { useTheme } from '../../theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../../../theme/colors';
 import { useAuth } from '../../auth';
 import { useCreatePackageRequest, useMarkBroadcastSeen, useMemberDashboard, useMyBroadcasts, useRequestAccountDeletion } from '../api/hooks';
 import type { CatalogPackage, MemberBroadcast } from '../api/member-portal';
@@ -25,6 +27,8 @@ function fmtDate(v: string): string {
 
 /** Üye profili — bilgiler + Paketler/Şifre Değiştir (bottom sheet) + çıkış. */
 export function MemberProfileScreen() {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const { signOut } = useAuth();
   const { data, refetch } = useMemberDashboard();
   const deletion = useRequestAccountDeletion();
@@ -112,6 +116,11 @@ export function MemberProfileScreen() {
           onPress={() => setNotifListOpen(true)}
         />
         <NavRow icon="lock-closed-outline" label="Şifre Değiştir" onPress={() => setPwOpen(true)} />
+
+        <Card>
+          <SectionTitle>Görünüm</SectionTitle>
+          <ThemeToggle />
+        </Card>
 
         <Button title="Çıkış Yap" variant="ghost" onPress={signOut} style={{ marginTop: 6 }} />
         {!p?.deletionRequestedAt ? (
@@ -225,6 +234,8 @@ export function MemberProfileScreen() {
 }
 
 function Row({ label, value }: { label: string; value?: string | null }) {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   if (!value) return null;
   return (
     <View style={styles.row}>
@@ -235,6 +246,8 @@ function Row({ label, value }: { label: string; value?: string | null }) {
 }
 
 function NavRow({ icon, label, onPress, badge }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void; badge?: number }) {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   return (
     <Pressable style={styles.navRow} onPress={onPress}>
       <Ionicons name={icon} size={20} color={colors.muted} />
@@ -249,67 +262,69 @@ function NavRow({ icon, label, onPress, badge }: { icon: keyof typeof Ionicons.g
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  content: { paddingVertical: 16, gap: 12, flexGrow: 1 },
-  title: { fontSize: 24, fontWeight: '800', color: colors.text, marginBottom: 2 },
-  name: { fontSize: 20, fontWeight: '800', color: colors.text },
-  row: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
-  rowLabel: { color: colors.muted, fontSize: 14 },
-  rowValue: { color: colors.text, fontSize: 14, fontWeight: '600' },
-  warn: { backgroundColor: 'rgba(255,149,0,0.1)', borderColor: 'rgba(255,149,0,0.3)' },
-  navRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-  },
-  navLabel: { flex: 1, color: colors.text, fontSize: 15, fontWeight: '600' },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  pending: { backgroundColor: 'rgba(255,149,0,0.1)', borderColor: 'rgba(255,149,0,0.3)' },
-  pkgName: { fontSize: 16, fontWeight: '700', color: colors.text },
-  navBadge: {
-    minWidth: 20, height: 20, borderRadius: 10,
-    backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center',
-    paddingHorizontal: 5, marginRight: 4,
-  },
-  navBadgeText: { color: '#fff', fontSize: 11, fontWeight: '800' },
-  // Bildirim listesi
-  notifList: { gap: 8 },
-  notifItem: {
-    padding: 12, borderRadius: 12, borderWidth: 1,
-    borderColor: colors.border, backgroundColor: 'rgba(255,255,255,0.02)', gap: 4,
-  },
-  notifItemUnread: {
-    borderColor: 'rgba(124,92,255,0.4)',
-    backgroundColor: 'rgba(124,92,255,0.06)',
-  },
-  notifItemHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  notifItemTitle: { flex: 1, fontSize: 14, fontWeight: '700', color: colors.text },
-  unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.accent },
-  notifItemBody: { fontSize: 13, color: 'rgba(232,236,255,0.7)', lineHeight: 18 },
-  notifItemDate: { fontSize: 11, color: colors.muted },
-  // Detay modal
-  modalOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.6)',
-    alignItems: 'center', justifyContent: 'center', padding: 24,
-  },
-  modalCard: {
-    backgroundColor: '#1a1a2e', borderRadius: 18, padding: 24,
-    width: '100%', maxWidth: 420, gap: 14,
-    borderWidth: 1, borderColor: 'rgba(124,92,255,0.3)',
-  },
-  modalTitle: { fontSize: 18, fontWeight: '800', color: colors.text },
-  modalBody: { fontSize: 15, color: 'rgba(232,236,255,0.85)', lineHeight: 22 },
-  modalDate: { fontSize: 12, color: colors.muted },
-  modalCloseBtn: {
-    marginTop: 4, paddingVertical: 13, borderRadius: 12,
-    backgroundColor: colors.accent, alignItems: 'center',
-  },
-  modalCloseBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
-});
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: colors.bg },
+    content: { paddingVertical: 16, gap: 12, flexGrow: 1 },
+    title: { fontSize: 24, fontWeight: '800', color: colors.text, marginBottom: 2 },
+    name: { fontSize: 20, fontWeight: '800', color: colors.text },
+    row: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 4 },
+    rowLabel: { color: colors.muted, fontSize: 14 },
+    rowValue: { color: colors.text, fontSize: 14, fontWeight: '600' },
+    warn: { backgroundColor: 'rgba(255,149,0,0.1)', borderColor: 'rgba(255,149,0,0.3)' },
+    navRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingHorizontal: 14,
+      paddingVertical: 14,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: surfaceTint(theme, 0.03),
+    },
+    navLabel: { flex: 1, color: colors.text, fontSize: 15, fontWeight: '600' },
+    rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    pending: { backgroundColor: 'rgba(255,149,0,0.1)', borderColor: 'rgba(255,149,0,0.3)' },
+    pkgName: { fontSize: 16, fontWeight: '700', color: colors.text },
+    navBadge: {
+      minWidth: 20, height: 20, borderRadius: 10,
+      backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center',
+      paddingHorizontal: 5, marginRight: 4,
+    },
+    navBadgeText: { color: colors.white, fontSize: 11, fontWeight: '800' },
+    // Bildirim listesi
+    notifList: { gap: 8 },
+    notifItem: {
+      padding: 12, borderRadius: 12, borderWidth: 1,
+      borderColor: colors.border, backgroundColor: surfaceTint(theme, 0.02), gap: 4,
+    },
+    notifItemUnread: {
+      borderColor: 'rgba(124,92,255,0.4)',
+      backgroundColor: 'rgba(124,92,255,0.06)',
+    },
+    notifItemHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    notifItemTitle: { flex: 1, fontSize: 14, fontWeight: '700', color: colors.text },
+    unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.accent },
+    notifItemBody: { fontSize: 13, color: colors.textSecondary, lineHeight: 18 },
+    notifItemDate: { fontSize: 11, color: colors.muted },
+    // Detay modal
+    modalOverlay: {
+      flex: 1, backgroundColor: colors.overlay,
+      alignItems: 'center', justifyContent: 'center', padding: 24,
+    },
+    modalCard: {
+      backgroundColor: colors.modalBg, borderRadius: 18, padding: 24,
+      width: '100%', maxWidth: 420, gap: 14,
+      borderWidth: 1, borderColor: 'rgba(124,92,255,0.3)',
+    },
+    modalTitle: { fontSize: 18, fontWeight: '800', color: colors.text },
+    modalBody: { fontSize: 15, color: surfaceTint(theme, 0.85), lineHeight: 22 },
+    modalDate: { fontSize: 12, color: colors.muted },
+    modalCloseBtn: {
+      marginTop: 4, paddingVertical: 13, borderRadius: 12,
+      backgroundColor: colors.accent, alignItems: 'center',
+    },
+    modalCloseBtnText: { color: colors.white, fontWeight: '800', fontSize: 15 },
+  });
+}

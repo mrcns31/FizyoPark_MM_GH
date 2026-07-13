@@ -1,8 +1,10 @@
+import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { colors } from '../theme/colors';
+import { useTheme } from '../features/theme';
+import type { AppColors } from '../theme/colors';
 
 /** expo-router/@react-navigation tipleri çakışıyor; gerekli alanları yerel tanımla. */
 interface TabBarProps {
@@ -22,6 +24,8 @@ const RIGHT: { name: string; label: string; icon: keyof typeof Ionicons.glyphMap
 ];
 
 export function MemberTabBar({ state, navigation }: TabBarProps) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const current = state.routes[state.index]?.name;
 
   function go(name: string) {
@@ -42,7 +46,7 @@ export function MemberTabBar({ state, navigation }: TabBarProps) {
         ))}
 
         <Pressable style={styles.fab} onPress={() => go('qr')}>
-          <Ionicons name="qr-code" size={26} color="#fff" />
+          <Ionicons name="qr-code" size={26} color={colors.white} />
         </Pressable>
 
         {right.map((t) => (
@@ -64,6 +68,8 @@ function TabBtn({
   active: boolean;
   onPress: () => void;
 }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <Pressable style={styles.tab} onPress={onPress}>
       <Ionicons name={icon} size={22} color={active ? colors.accent : colors.muted} />
@@ -74,36 +80,38 @@ function TabBtn({
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { backgroundColor: '#0c1226' },
-  bar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    backgroundColor: '#0c1226',
-    borderTopWidth: 1,
-    borderTopColor: colors.border,
-  },
-  tab: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 3, paddingVertical: 6 },
-  tabLabel: { fontSize: 11, fontWeight: '700', color: colors.muted },
-  tabLabelActive: { color: colors.accent },
-  fab: {
-    width: 58,
-    height: 58,
-    borderRadius: 29,
-    marginHorizontal: 6,
-    marginTop: -22,
-    backgroundColor: colors.accent,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 4,
-    borderColor: '#0c1226',
-    shadowColor: colors.accent,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.45,
-    shadowRadius: 16,
-    elevation: 8,
-  },
-});
+function makeStyles(colors: AppColors) {
+  return StyleSheet.create({
+    safe: { backgroundColor: colors.tabBarBg },
+    bar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      backgroundColor: colors.tabBarBg,
+      borderTopWidth: 1,
+      borderTopColor: colors.border,
+    },
+    tab: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 3, paddingVertical: 6 },
+    tabLabel: { fontSize: 11, fontWeight: '700', color: colors.muted },
+    tabLabelActive: { color: colors.accent },
+    fab: {
+      width: 58,
+      height: 58,
+      borderRadius: 29,
+      marginHorizontal: 6,
+      marginTop: -22,
+      backgroundColor: colors.accent,
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderWidth: 4,
+      borderColor: colors.tabBarBg,
+      shadowColor: colors.accent,
+      shadowOffset: { width: 0, height: 6 },
+      shadowOpacity: 0.45,
+      shadowRadius: 16,
+      elevation: 8,
+    },
+  });
+}

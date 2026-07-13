@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -13,10 +13,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { FadeIn } from '../../../components/fade-in';
 import { ScreenContainer } from '../../../components/screen-container';
 import { ApiError } from '../../../lib/api-client';
-import { colors } from '../../../theme/colors';
+import { useTheme } from '../../theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../../../theme/colors';
 import { requestPasswordReset } from '../api/auth';
 
 export function ForgotPasswordScreen() {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
@@ -100,63 +103,65 @@ export function ForgotPasswordScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  card: {
-    width: '100%',
-    maxWidth: 400,
-    alignSelf: 'center',
-    backgroundColor: colors.panel,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: colors.radius,
-    paddingHorizontal: 20,
-    paddingVertical: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.45,
-    shadowRadius: 40,
-    elevation: 8,
-  },
-  backBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 16 },
-  backText: { color: colors.muted, fontSize: 14 },
-  title: { color: colors.text, fontSize: 20, fontWeight: '700', marginBottom: 10 },
-  hint: { color: colors.muted, fontSize: 13, marginBottom: 18, lineHeight: 20 },
-  formRow: { marginBottom: 12 },
-  label: { color: colors.muted, fontSize: 12, marginBottom: 6 },
-  input: {
-    width: '100%',
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 11,
-    color: colors.text,
-    fontSize: 16,
-  },
-  errorBox: {
-    marginTop: 4,
-    marginBottom: 8,
-    backgroundColor: 'rgba(255,77,109,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,77,109,0.35)',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
-  },
-  errorText: { color: 'rgba(255,220,226,0.96)', fontSize: 13 },
-  loginBtn: {
-    marginTop: 8,
-    backgroundColor: colors.fpGreen,
-    borderWidth: 1,
-    borderColor: 'rgba(61,184,74,0.45)',
-    borderRadius: 12,
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loginBtnText: { color: colors.white, fontSize: 15, fontWeight: '700' },
-  btnDisabled: { opacity: 0.6 },
-  successBox: { gap: 10 },
-  successText: { color: colors.muted, fontSize: 14, textAlign: 'center', lineHeight: 22 },
-});
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    card: {
+      width: '100%',
+      maxWidth: 400,
+      alignSelf: 'center',
+      backgroundColor: colors.panel,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: colors.radius,
+      paddingHorizontal: 20,
+      paddingVertical: 24,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 12 },
+      shadowOpacity: 0.45,
+      shadowRadius: 40,
+      elevation: 8,
+    },
+    backBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 16 },
+    backText: { color: colors.muted, fontSize: 14 },
+    title: { color: colors.text, fontSize: 20, fontWeight: '700', marginBottom: 10 },
+    hint: { color: colors.muted, fontSize: 13, marginBottom: 18, lineHeight: 20 },
+    formRow: { marginBottom: 12 },
+    label: { color: colors.muted, fontSize: 12, marginBottom: 6 },
+    input: {
+      width: '100%',
+      backgroundColor: surfaceTint(theme, 0.03),
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      paddingHorizontal: 10,
+      paddingVertical: 11,
+      color: colors.text,
+      fontSize: 16,
+    },
+    errorBox: {
+      marginTop: 4,
+      marginBottom: 8,
+      backgroundColor: colors.errorBg,
+      borderWidth: 1,
+      borderColor: colors.errorBorder,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderRadius: 12,
+    },
+    errorText: { color: colors.errorText, fontSize: 13 },
+    loginBtn: {
+      marginTop: 8,
+      backgroundColor: colors.fpGreen,
+      borderWidth: 1,
+      borderColor: 'rgba(61,184,74,0.45)',
+      borderRadius: 12,
+      minHeight: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    loginBtnText: { color: colors.white, fontSize: 15, fontWeight: '700' },
+    btnDisabled: { opacity: 0.6 },
+    successBox: { gap: 10 },
+    successText: { color: colors.muted, fontSize: 14, textAlign: 'center', lineHeight: 22 },
+  });
+}

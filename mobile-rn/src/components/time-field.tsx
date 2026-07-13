@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Dimensions, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 import { SheetModal } from './sheet-modal';
-import { colors } from '../theme/colors';
+import { useTheme } from '../features/theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../theme/colors';
 
 const WIN_H = Dimensions.get('window').height;
 
@@ -43,6 +44,8 @@ export function TimeField({
   /** hourOnly ızgarasında gösterilecek son saat — dahil (varsayılan 23). */
   maxHour?: number;
 }) {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const [open, setOpen] = useState(false);
   const [iosTemp, setIosTemp] = useState<Date>(() => strToDate(value));
 
@@ -156,78 +159,80 @@ export function TimeField({
   );
 }
 
-const styles = StyleSheet.create({
-  btn: {
-    minWidth: 84,
-    minHeight: 46,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  btnDisabled: { opacity: 0.4 },
-  btnText: { color: colors.text, fontSize: 15, fontWeight: '600' },
-  btnTextDisabled: { color: colors.muted },
-  sheet: {
-    backgroundColor: colors.panel,
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    borderTopWidth: 1,
-    borderColor: colors.border,
-    paddingBottom: 24,
-  },
-  sheetHead: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  cancel: { color: colors.muted, fontSize: 16 },
-  done: { color: colors.accent, fontSize: 16, fontWeight: '700' },
-  spinner: { alignSelf: 'center' },
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    btn: {
+      minWidth: 84,
+      minHeight: 46,
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: surfaceTint(theme, 0.03),
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    btnDisabled: { opacity: 0.4 },
+    btnText: { color: colors.text, fontSize: 15, fontWeight: '600' },
+    btnTextDisabled: { color: colors.muted },
+    sheet: {
+      backgroundColor: colors.panel,
+      borderTopLeftRadius: 18,
+      borderTopRightRadius: 18,
+      borderTopWidth: 1,
+      borderColor: colors.border,
+      paddingBottom: 24,
+    },
+    sheetHead: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    cancel: { color: colors.muted, fontSize: 16 },
+    done: { color: colors.accent, fontSize: 16, fontWeight: '700' },
+    spinner: { alignSelf: 'center' },
 
-  // hourOnly liste seçici
-  listSheet: {
-    backgroundColor: colors.panel,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 24,
-    minHeight: Math.round(WIN_H * 0.36),
-    maxHeight: Math.round(WIN_H * 0.7),
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  handle: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    marginBottom: 10,
-  },
-  listTitle: { color: colors.text, fontSize: 17, fontWeight: '800', marginBottom: 12 },
-  flat: { flexGrow: 0, flexShrink: 1 },
-  grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingBottom: 8 },
-  hourChip: {
-    width: '22%',
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  hourChipOn: { backgroundColor: 'rgba(124,92,255,0.20)', borderColor: 'rgba(124,92,255,0.5)' },
-  hourChipText: { color: colors.text, fontSize: 15, fontWeight: '700' },
-  hourChipTextOn: { color: colors.accent },
-});
+    // hourOnly liste seçici
+    listSheet: {
+      backgroundColor: colors.panel,
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      paddingHorizontal: 20,
+      paddingTop: 8,
+      paddingBottom: 24,
+      minHeight: Math.round(WIN_H * 0.36),
+      maxHeight: Math.round(WIN_H * 0.7),
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    handle: {
+      alignSelf: 'center',
+      width: 40,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: surfaceTint(theme, 0.2),
+      marginBottom: 10,
+    },
+    listTitle: { color: colors.text, fontSize: 17, fontWeight: '800', marginBottom: 12 },
+    flat: { flexGrow: 0, flexShrink: 1 },
+    grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingBottom: 8 },
+    hourChip: {
+      width: '22%',
+      paddingVertical: 12,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: surfaceTint(theme, 0.03),
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    hourChipOn: { backgroundColor: 'rgba(124,92,255,0.20)', borderColor: 'rgba(124,92,255,0.5)' },
+    hourChipText: { color: colors.text, fontSize: 15, fontWeight: '700' },
+    hourChipTextOn: { color: colors.accent },
+  });
+}

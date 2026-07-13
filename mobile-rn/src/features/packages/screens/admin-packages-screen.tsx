@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,12 +8,15 @@ import { Badge, Card, ErrorBox, Muted } from '../../../components/ui';
 import { Fab } from '../../../components/fab';
 import { ScreenHeader } from '../../../components/screen-header';
 import { useResponsive } from '../../../lib/responsive';
-import { colors } from '../../../theme/colors';
+import { useTheme } from '../../theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../../../theme/colors';
 import { useDeletePackage, usePackages } from '../api/hooks';
 import { verifyAdminPassword } from '../../auth/api/auth';
 
 /** Admin paket katalog listesi — ekle/düzenle/sil (web `deletePackage` + `renderPackages` paritesi). */
 export function AdminPackagesScreen() {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const router = useRouter();
   const { data, isLoading, isError, error, refetch, isRefetching } = usePackages();
   const del = useDeletePackage();
@@ -128,31 +132,33 @@ export function AdminPackagesScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  refreshBtn: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
-  list: { paddingTop: 16, paddingBottom: 96, gap: 10 },
-  card: {
-    padding: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-  },
-  head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 },
-  nameWrap: { flex: 1, minWidth: 0, gap: 6, alignItems: 'flex-start' },
-  name: { fontSize: 15, fontWeight: '700', color: colors.text },
-  headActions: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 0 },
-  iconBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  meta: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
-  metaText: { fontSize: 12, color: colors.muted, marginRight: 8 },
-});
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: colors.bg },
+    refreshBtn: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
+    list: { paddingTop: 16, paddingBottom: 96, gap: 10 },
+    card: {
+      padding: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      backgroundColor: surfaceTint(theme, 0.03),
+    },
+    head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 },
+    nameWrap: { flex: 1, minWidth: 0, gap: 6, alignItems: 'flex-start' },
+    name: { fontSize: 15, fontWeight: '700', color: colors.text },
+    headActions: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 0 },
+    iconBtn: {
+      width: 30,
+      height: 30,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: surfaceTint(theme, 0.03),
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    meta: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
+    metaText: { fontSize: 12, color: colors.muted, marginRight: 8 },
+  });
+}

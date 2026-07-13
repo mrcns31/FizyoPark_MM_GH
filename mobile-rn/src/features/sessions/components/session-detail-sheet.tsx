@@ -1,10 +1,12 @@
+import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { BottomSheet } from '../../../components/bottom-sheet';
 import { Badge, Button } from '../../../components/ui';
 import { formatDayLabel, formatTime } from '../../../lib/datetime';
-import { colors } from '../../../theme/colors';
+import { useTheme } from '../../theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../../../theme/colors';
 import type { PlannerSession } from '../api/sessions';
 
 function attendanceBadge(outcome: string | null): { label: string; tone: 'green' | 'red' | 'neutral' } {
@@ -31,6 +33,8 @@ export function SessionDetailSheet({
   onAttendance: (s: PlannerSession, action: 'present' | 'no_show') => void;
   busy?: boolean;
 }) {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const anchor = group && group.length ? group[0] : null;
   const isGroup = !!group && group.length > 1;
 
@@ -99,35 +103,37 @@ export function SessionDetailSheet({
   );
 }
 
-const styles = StyleSheet.create({
-  body: { gap: 10 },
-  header: { gap: 2, marginBottom: 2 },
-  staffTime: { color: colors.text, fontSize: 16, fontWeight: '800' },
-  date: { color: colors.muted, fontSize: 13 },
-  memberCard: {
-    gap: 8,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    padding: 10,
-  },
-  memberTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
-  memberInfo: { flex: 1, gap: 2 },
-  memberName: { color: colors.text, fontSize: 14, fontWeight: '600' },
-  memberStatus: { color: colors.muted, fontSize: 12 },
-  attRow: { flexDirection: 'row', gap: 6 },
-  attBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 9,
-    borderWidth: 1.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  attPresent: { borderColor: 'rgba(43,213,118,0.6)', backgroundColor: 'rgba(43,213,118,0.18)' },
-  attNoShow: { borderColor: 'rgba(255,77,109,0.6)', backgroundColor: 'rgba(255,77,109,0.18)' },
-  note: { color: colors.muted, fontSize: 12 },
-  actions: { flexDirection: 'row', gap: 10, marginTop: 2 },
-  flex: { flex: 1 },
-});
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    body: { gap: 10 },
+    header: { gap: 2, marginBottom: 2 },
+    staffTime: { color: colors.text, fontSize: 16, fontWeight: '800' },
+    date: { color: colors.muted, fontSize: 13 },
+    memberCard: {
+      gap: 8,
+      backgroundColor: surfaceTint(theme, 0.03),
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      padding: 10,
+    },
+    memberTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 },
+    memberInfo: { flex: 1, gap: 2 },
+    memberName: { color: colors.text, fontSize: 14, fontWeight: '600' },
+    memberStatus: { color: colors.muted, fontSize: 12 },
+    attRow: { flexDirection: 'row', gap: 6 },
+    attBtn: {
+      width: 34,
+      height: 34,
+      borderRadius: 9,
+      borderWidth: 1.5,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    attPresent: { borderColor: 'rgba(43,213,118,0.6)', backgroundColor: 'rgba(43,213,118,0.18)' },
+    attNoShow: { borderColor: 'rgba(255,77,109,0.6)', backgroundColor: 'rgba(255,77,109,0.18)' },
+    note: { color: colors.muted, fontSize: 12 },
+    actions: { flexDirection: 'row', gap: 10, marginTop: 2 },
+    flex: { flex: 1 },
+  });
+}

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -8,7 +8,8 @@ import { DateField } from '../../../components/date-field';
 import { FormField } from '../../../components/form';
 import { Button, Card, ErrorBox, Label, Muted, SectionTitle } from '../../../components/ui';
 import { ApiError } from '../../../lib/api-client';
-import { colors } from '../../../theme/colors';
+import { useTheme } from '../../theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../../../theme/colors';
 import {
   useClosurePeriods,
   useCreateClosurePeriod,
@@ -44,6 +45,8 @@ function summaryText(s: ClosureSummary): string {
  */
 export function ClosureDaysScreen() {
   const router = useRouter();
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const { data: periods } = useClosurePeriods();
   const create = useCreateClosurePeriod();
   const del = useDeleteClosurePeriod();
@@ -178,40 +181,42 @@ export function ClosureDaysScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  form: { gap: 12, marginTop: 8 },
-  summary: {
-    backgroundColor: 'rgba(43,213,118,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(43,213,118,0.35)',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
-  },
-  summaryText: { color: 'rgba(216,255,232,0.96)', fontSize: 13 },
-  list: { gap: 10, marginTop: 4, marginBottom: 8 },
-  item: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-  },
-  itemLeft: { flexShrink: 1, gap: 2 },
-  itemTitle: { color: colors.text, fontSize: 14, fontWeight: '700' },
-  itemMeta: { color: colors.muted, fontSize: 12 },
-  delBtn: {
-    width: 32,
-    height: 32,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    form: { gap: 12, marginTop: 8 },
+    summary: {
+      backgroundColor: 'rgba(43,213,118,0.12)',
+      borderWidth: 1,
+      borderColor: 'rgba(43,213,118,0.35)',
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderRadius: 12,
+    },
+    summaryText: { color: 'rgba(216,255,232,0.96)', fontSize: 13 },
+    list: { gap: 10, marginTop: 4, marginBottom: 8 },
+    item: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 10,
+      padding: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      backgroundColor: surfaceTint(theme, 0.03),
+    },
+    itemLeft: { flexShrink: 1, gap: 2 },
+    itemTitle: { color: colors.text, fontSize: 14, fontWeight: '700' },
+    itemMeta: { color: colors.muted, fontSize: 12 },
+    delBtn: {
+      width: 32,
+      height: 32,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: surfaceTint(theme, 0.03),
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+  });
+}

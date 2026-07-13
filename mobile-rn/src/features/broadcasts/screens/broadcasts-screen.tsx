@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -6,7 +6,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Card, Muted } from '../../../components/ui';
 import { ScreenHeader } from '../../../components/screen-header';
 import { useResponsive } from '../../../lib/responsive';
-import { colors } from '../../../theme/colors';
+import { useTheme } from '../../theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../../../theme/colors';
 import { useBroadcasts, useBroadcastRecipients } from '../api/hooks';
 import type { Broadcast } from '../api/broadcasts';
 
@@ -23,6 +24,8 @@ function fmtDate(v: string): string {
 }
 
 function RecipientList({ broadcastId }: { broadcastId: number }) {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const { data, isLoading } = useBroadcastRecipients(broadcastId);
   if (isLoading) return <ActivityIndicator color={colors.accent} style={{ marginTop: 8 }} />;
   if (!data?.length) return <Muted>Alıcı bulunamadı.</Muted>;
@@ -46,6 +49,8 @@ function RecipientList({ broadcastId }: { broadcastId: number }) {
 }
 
 function BroadcastCard({ item }: { item: Broadcast }) {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const [expanded, setExpanded] = useState(false);
 
   return (
@@ -88,6 +93,8 @@ function BroadcastCard({ item }: { item: Broadcast }) {
 }
 
 export function BroadcastsScreen() {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const { contentMaxWidth, gutter } = useResponsive();
   const [page, setPage] = useState(1);
   const { data, isLoading } = useBroadcasts(page);
@@ -142,35 +149,37 @@ export function BroadcastsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  list: { paddingVertical: 12, gap: 10, flexGrow: 1 },
-  card: {
-    padding: 12, borderWidth: 1, borderColor: colors.border,
-    borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.03)', gap: 6,
-  },
-  cardHead: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 },
-  cardMeta: { flex: 1, gap: 2 },
-  cardTitle: { fontSize: 14, fontWeight: '700', color: colors.text },
-  cardDate: { fontSize: 11, color: colors.muted },
-  cardBody: { fontSize: 13, color: 'rgba(232,236,255,0.75)', lineHeight: 18 },
-  stats: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginTop: 2 },
-  stat: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  statText: { fontSize: 12, color: colors.muted },
-  sentBy: { fontSize: 11, color: colors.muted, marginLeft: 'auto' },
-  recipientList: { marginTop: 8, gap: 5, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8 },
-  recipientRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  recipientName: { fontSize: 13, color: colors.text, flex: 1 },
-  recipientNoToken: { color: colors.muted },
-  noTokenLabel: { fontSize: 11, color: colors.muted },
-  pager: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, gap: 10 },
-  pageBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: 14, paddingVertical: 9, borderRadius: 10,
-    borderWidth: 1, borderColor: colors.border, backgroundColor: 'rgba(255,255,255,0.03)',
-  },
-  pageBtnOff: { opacity: 0.4 },
-  pageBtnText: { color: colors.text, fontWeight: '700', fontSize: 13 },
-  pageBtnTextOff: { color: colors.muted },
-  pageInfo: { color: colors.muted, fontSize: 13 },
-});
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: colors.bg },
+    list: { paddingVertical: 12, gap: 10, flexGrow: 1 },
+    card: {
+      padding: 12, borderWidth: 1, borderColor: colors.border,
+      borderRadius: 12, backgroundColor: surfaceTint(theme, 0.03), gap: 6,
+    },
+    cardHead: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 },
+    cardMeta: { flex: 1, gap: 2 },
+    cardTitle: { fontSize: 14, fontWeight: '700', color: colors.text },
+    cardDate: { fontSize: 11, color: colors.muted },
+    cardBody: { fontSize: 13, color: colors.textSecondary, lineHeight: 18 },
+    stats: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 10, marginTop: 2 },
+    stat: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    statText: { fontSize: 12, color: colors.muted },
+    sentBy: { fontSize: 11, color: colors.muted, marginLeft: 'auto' },
+    recipientList: { marginTop: 8, gap: 5, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 8 },
+    recipientRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    recipientName: { fontSize: 13, color: colors.text, flex: 1 },
+    recipientNoToken: { color: colors.muted },
+    noTokenLabel: { fontSize: 11, color: colors.muted },
+    pager: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, gap: 10 },
+    pageBtn: {
+      flexDirection: 'row', alignItems: 'center', gap: 4,
+      paddingHorizontal: 14, paddingVertical: 9, borderRadius: 10,
+      borderWidth: 1, borderColor: colors.border, backgroundColor: surfaceTint(theme, 0.03),
+    },
+    pageBtnOff: { opacity: 0.4 },
+    pageBtnText: { color: colors.text, fontWeight: '700', fontSize: 13 },
+    pageBtnTextOff: { color: colors.muted },
+    pageInfo: { color: colors.muted, fontSize: 13 },
+  });
+}

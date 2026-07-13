@@ -2,7 +2,8 @@ import { createContext, useCallback, useContext, useMemo, useState } from 'react
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
-import { colors } from '../../../theme/colors';
+import { useTheme } from '../../theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../../../theme/colors';
 import { dayOfWeekOfTs, formatDayLabel, weekdayLong } from '../../../lib/datetime';
 import { useStaffCalendarRange } from '../../settings/api/hooks';
 
@@ -65,6 +66,8 @@ export function useStaffDate(): StaffDateCtx {
 
 /** Ortak < Tarih > navigasyon çubuğu — her iki ekranda aynı bileşen. */
 export function StaffDateBar({ wide }: { wide?: object }) {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const { dayTs, canBack, canFwd, navDay, goToday } = useStaffDate();
   const isToday = startOfDayIst(dayTs) === startOfDayIst(Date.now());
 
@@ -98,20 +101,22 @@ export function StaffDateBar({ wide }: { wide?: object }) {
   );
 }
 
-const styles = StyleSheet.create({
-  bar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    gap: 4,
-  },
-  btn: {
-    width: 38, height: 38, borderRadius: 10, borderWidth: 1,
-    borderColor: colors.border, backgroundColor: 'rgba(255,255,255,0.04)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  btnOff: { opacity: 0.3 },
-  center: { flex: 1, alignItems: 'center', gap: 2 },
-  dateText: { color: colors.text, fontSize: 15, fontWeight: '800', textAlign: 'center' },
-  todayHint: { color: colors.accent, fontSize: 11, fontWeight: '600' },
-});
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    bar: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      paddingVertical: 8,
+      gap: 4,
+    },
+    btn: {
+      width: 38, height: 38, borderRadius: 10, borderWidth: 1,
+      borderColor: colors.border, backgroundColor: surfaceTint(theme, 0.04),
+      alignItems: 'center', justifyContent: 'center',
+    },
+    btnOff: { opacity: 0.3 },
+    center: { flex: 1, alignItems: 'center', gap: 2 },
+    dateText: { color: colors.text, fontSize: 15, fontWeight: '800', textAlign: 'center' },
+    todayHint: { color: colors.accent, fontSize: 11, fontWeight: '600' },
+  });
+}

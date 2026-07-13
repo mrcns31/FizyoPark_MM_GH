@@ -1,9 +1,11 @@
+import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { HamburgerButton } from './hamburger-button';
 import { useResponsive } from '../lib/responsive';
-import { colors } from '../theme/colors';
+import { useTheme } from '../features/theme';
+import type { AppColors } from '../theme/colors';
 
 /**
  * Tüm sayfalarda ortak header — soldan hamburger + sola yaslı kalın başlık.
@@ -18,6 +20,8 @@ export function ScreenHeader({
   right?: React.ReactNode;
   onBack?: () => void;
 }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { contentMaxWidth, gutter } = useResponsive();
   return (
     <View
@@ -42,9 +46,11 @@ export function ScreenHeader({
   );
 }
 
-const styles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 8, paddingBottom: 6 },
-  title: { fontSize: 20, fontWeight: '800', color: colors.text },
-  spacer: { flex: 1 },
-  backBtn: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
-});
+function makeStyles(colors: AppColors) {
+  return StyleSheet.create({
+    row: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 8, paddingBottom: 6 },
+    title: { fontSize: 20, fontWeight: '800', color: colors.text },
+    spacer: { flex: 1 },
+    backBtn: { width: 34, height: 34, alignItems: 'center', justifyContent: 'center' },
+  });
+}

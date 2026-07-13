@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -5,7 +6,8 @@ import { useRouter } from 'expo-router';
 
 import { ScreenHeader } from '../../../components/screen-header';
 import { useResponsive } from '../../../lib/responsive';
-import { colors } from '../../../theme/colors';
+import { useTheme } from '../../theme';
+import { type AppColors } from '../../../theme/colors';
 
 type IoniconName = keyof typeof Ionicons.glyphMap;
 
@@ -23,6 +25,8 @@ const ALL_ITEMS: { label: string; icon: IoniconName; path: string; tabletOnly?: 
 /** Ayarlar hub — web admin "Ayarlar" modalıyla birebir; yönetim ekranlarına giriş. */
 export function SettingsHubScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { contentMaxWidth, gutter, isTablet } = useResponsive();
   const items = ALL_ITEMS.filter((it) => !it.tabletOnly || isTablet);
 
@@ -51,26 +55,28 @@ export function SettingsHubScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  list: { paddingVertical: 16, gap: 10, flexGrow: 1 },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    padding: 14,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    backgroundColor: colors.panel,
-  },
-  icon: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    backgroundColor: 'rgba(124,92,255,0.16)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  label: { flex: 1, color: colors.text, fontSize: 15, fontWeight: '600' },
-});
+function makeStyles(colors: AppColors) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: colors.bg },
+    list: { paddingVertical: 16, gap: 10, flexGrow: 1 },
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      padding: 14,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      backgroundColor: colors.panel,
+    },
+    icon: {
+      width: 38,
+      height: 38,
+      borderRadius: 10,
+      backgroundColor: 'rgba(124,92,255,0.16)',
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    label: { flex: 1, color: colors.text, fontSize: 15, fontWeight: '600' },
+  });
+}

@@ -1,7 +1,8 @@
-import { forwardRef } from 'react';
+import { forwardRef, useMemo } from 'react';
 import { StyleSheet, Text, TextInput, View, type KeyboardTypeOptions, type ReturnKeyTypeOptions } from 'react-native';
 
-import { colors } from '../theme/colors';
+import { useTheme } from '../features/theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../theme/colors';
 
 /** Form etiket + input — tüm CRUD formlarında kullanılır. */
 export const FormField = forwardRef<TextInput | null, {
@@ -29,6 +30,8 @@ export const FormField = forwardRef<TextInput | null, {
   onSubmitEditing,
   blurOnSubmit,
 }, ref) => {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   return (
     <View style={styles.wrap}>
       {label ? (
@@ -55,20 +58,22 @@ export const FormField = forwardRef<TextInput | null, {
   );
 });
 
-const styles = StyleSheet.create({
-  wrap: { marginBottom: 4 },
-  label: { color: colors.muted, fontSize: 12, marginBottom: 6 },
-  req: { color: colors.danger },
-  input: {
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    minHeight: 46,
-    color: colors.text,
-    fontSize: 16,
-  },
-  inputMultiline: { minHeight: 76, textAlignVertical: 'top', paddingTop: 10 },
-});
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    wrap: { marginBottom: 4 },
+    label: { color: colors.muted, fontSize: 12, marginBottom: 6 },
+    req: { color: colors.danger },
+    input: {
+      backgroundColor: surfaceTint(theme, 0.03),
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingHorizontal: 10,
+      paddingVertical: 10,
+      minHeight: 46,
+      color: colors.text,
+      fontSize: 16,
+    },
+    inputMultiline: { minHeight: 76, textAlignVertical: 'top', paddingTop: 10 },
+  });
+}

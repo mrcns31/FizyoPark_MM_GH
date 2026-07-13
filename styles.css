@@ -3667,6 +3667,17 @@ body.body--sidebar-open{
   background:rgba(255,255,255,.05);
   border:1px solid var(--border);
   font-size:13px;
+  font-family:inherit;
+  color:var(--text);
+  cursor:pointer;
+  transition:background .15s ease, border-color .15s ease;
+}
+.consents-stat:hover{
+  background:rgba(255,255,255,.1);
+}
+.consents-stat.is-active{
+  border-color:rgba(124,92,255,.6);
+  box-shadow:0 0 0 1px rgba(124,92,255,.4) inset;
 }
 .consents-stat--ok{
   color:#7ee3a8;

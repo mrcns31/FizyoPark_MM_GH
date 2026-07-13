@@ -8,7 +8,8 @@ import { ScreenHeader } from '../../../components/screen-header';
 import { SelectField } from '../../../components/select-field';
 import { DateField } from '../../../components/date-field';
 import { useResponsive } from '../../../lib/responsive';
-import { colors } from '../../../theme/colors';
+import { useTheme } from '../../theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../../../theme/colors';
 import { ACTION_LABELS, actionLabel } from '../api/activity-logs';
 import { useActivityLogs } from '../api/hooks';
 
@@ -32,6 +33,8 @@ function fmtDateTime(v: string): string {
 /** İşlem Logları — sistem aktivite kayıtları (web activity-logs.html). Sayfalı liste. */
 export function ActivityLogsScreen() {
   const router = useRouter();
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const { contentMaxWidth, gutter } = useResponsive();
   const [page, setPage] = useState(1);
   const [action, setAction] = useState<string | null>(null);
@@ -132,36 +135,38 @@ export function ActivityLogsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  filters: { paddingTop: 6, paddingBottom: 4, gap: 8 },
-  dateRow: { flexDirection: 'row', gap: 8 },
-  dateCol: { flex: 1 },
-  clear: { color: colors.accent, fontSize: 13, fontWeight: '700', alignSelf: 'flex-start' },
-  list: { paddingVertical: 12, gap: 8, flexGrow: 1 },
-  item: {
-    padding: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    gap: 3,
-  },
-  head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
-  action: { color: colors.text, fontSize: 14, fontWeight: '700', flexShrink: 1 },
-  date: { color: colors.muted, fontSize: 11 },
-  actor: { color: 'rgba(232,236,255,0.88)', fontSize: 13 },
-  meta: { color: colors.muted, fontSize: 12 },
-  pager: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, gap: 10 },
-  pageBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 9,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-  },
-  pageBtnDisabled: { opacity: 0.4 },
-  pageBtnText: { color: colors.text, fontWeight: '700', fontSize: 13 },
-  pageInfo: { color: colors.muted, fontSize: 13 },
-});
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: colors.bg },
+    filters: { paddingTop: 6, paddingBottom: 4, gap: 8 },
+    dateRow: { flexDirection: 'row', gap: 8 },
+    dateCol: { flex: 1 },
+    clear: { color: colors.accent, fontSize: 13, fontWeight: '700', alignSelf: 'flex-start' },
+    list: { paddingVertical: 12, gap: 8, flexGrow: 1 },
+    item: {
+      padding: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      backgroundColor: surfaceTint(theme, 0.03),
+      gap: 3,
+    },
+    head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8 },
+    action: { color: colors.text, fontSize: 14, fontWeight: '700', flexShrink: 1 },
+    date: { color: colors.muted, fontSize: 11 },
+    actor: { color: 'rgba(232,236,255,0.88)', fontSize: 13 },
+    meta: { color: colors.muted, fontSize: 12 },
+    pager: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8, gap: 10 },
+    pageBtn: {
+      paddingHorizontal: 14,
+      paddingVertical: 9,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: surfaceTint(theme, 0.03),
+    },
+    pageBtnDisabled: { opacity: 0.4 },
+    pageBtnText: { color: colors.text, fontWeight: '700', fontSize: 13 },
+    pageInfo: { color: colors.muted, fontSize: 13 },
+  });
+}

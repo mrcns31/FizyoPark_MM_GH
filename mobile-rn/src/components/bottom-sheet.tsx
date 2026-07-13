@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
@@ -15,7 +15,8 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { colors } from '../theme/colors';
+import { useTheme } from '../features/theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../theme/colors';
 
 /** Alttan açılan sheet — başlık + kapat + kaydırılabilir içerik. Klavyeyle uyumlu. */
 export function BottomSheet({
@@ -29,6 +30,8 @@ export function BottomSheet({
   title?: string;
   children: React.ReactNode;
 }) {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const [mounted, setMounted] = useState(visible);
   const [kbHeight, setKbHeight] = useState(0);
   const anim = useRef(new Animated.Value(0)).current;
@@ -110,33 +113,35 @@ export function BottomSheet({
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, justifyContent: 'flex-end' },
-  backdrop: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)' },
-  sheet: {
-    backgroundColor: colors.panel,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  safe: { flexShrink: 1 },
-  scroll: { flexGrow: 0, flexShrink: 1 },
-  handle: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    marginTop: 8,
-  },
-  head: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-  },
-  title: { color: colors.text, fontSize: 17, fontWeight: '800' },
-  content: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 28, gap: 12 },
-});
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    root: { flex: 1, justifyContent: 'flex-end' },
+    backdrop: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: colors.overlay },
+    sheet: {
+      backgroundColor: colors.panel,
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    safe: { flexShrink: 1 },
+    scroll: { flexGrow: 0, flexShrink: 1 },
+    handle: {
+      alignSelf: 'center',
+      width: 40,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: surfaceTint(theme, 0.2),
+      marginTop: 8,
+    },
+    head: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+    },
+    title: { color: colors.text, fontSize: 17, fontWeight: '800' },
+    content: { paddingHorizontal: 16, paddingTop: 16, paddingBottom: 28, gap: 12 },
+  });
+}

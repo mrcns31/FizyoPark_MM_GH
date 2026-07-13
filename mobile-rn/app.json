@@ -20,7 +20,7 @@
       "backgroundColor": "#E6F4FE"
     },
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.fizyopark.mobilern",

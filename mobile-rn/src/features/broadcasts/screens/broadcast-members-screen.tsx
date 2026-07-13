@@ -12,7 +12,8 @@ import { ScreenHeader } from '../../../components/screen-header';
 import { AlphaFilter, nameStartsWithLetter } from '../../../components/alpha-filter';
 import { useIncremental } from '../../../lib/use-incremental';
 import { useResponsive } from '../../../lib/responsive';
-import { colors } from '../../../theme/colors';
+import { useTheme } from '../../theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../../../theme/colors';
 import { useMembers } from '../../members/api/hooks';
 import { useMemberPackages } from '../../member-packages/api/hooks';
 import { useSendBroadcast } from '../api/hooks';
@@ -42,6 +43,8 @@ function BroadcastModal({
   onSend: (title: string, body: string) => void;
   onClose: () => void;
 }) {
+  const { colors, resolvedTheme } = useTheme();
+  const modal = useMemo(() => makeModalStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const [title, setTitle] = useState('');
   const [msgBody, setMsgBody] = useState('');
   const [kbHeight, setKbHeight] = useState(0);
@@ -122,8 +125,8 @@ function BroadcastModal({
             </Pressable>
             <Pressable style={[modal.btnSend, sending && { opacity: 0.6 }]} onPress={handleSend} disabled={sending}>
               {sending
-                ? <ActivityIndicator color="#fff" size="small" />
-                : <><Ionicons name="send" size={16} color="#fff" /><Text style={modal.btnSendText}>Gönder</Text></>}
+                ? <ActivityIndicator color={colors.white} size="small" />
+                : <><Ionicons name="send" size={16} color={colors.white} /><Text style={modal.btnSendText}>Gönder</Text></>}
             </Pressable>
           </View>
         </Animated.View>
@@ -135,6 +138,8 @@ function BroadcastModal({
 // ── Ana Ekran ─────────────────────────────────────────────────────────────
 
 export function BroadcastMembersScreen() {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const { data: allMembers, isLoading } = useMembers();
   const { data: allPackages } = useMemberPackages();
   const broadcast = useSendBroadcast();
@@ -234,7 +239,7 @@ export function BroadcastMembersScreen() {
         onPress={() => toggle(item.id)}
       >
         <View style={[styles.chk, isSelected && styles.chkOn]}>
-          {isSelected ? <Ionicons name="checkmark" size={14} color="#fff" /> : null}
+          {isSelected ? <Ionicons name="checkmark" size={14} color={colors.white} /> : null}
         </View>
         <View style={styles.rowInfo}>
           <Text style={styles.rowName} numberOfLines={1}>{item.name}</Text>
@@ -278,7 +283,7 @@ export function BroadcastMembersScreen() {
         {/* Tümünü seç satırı */}
         <Pressable style={styles.selectAllRow} onPress={toggleAll}>
           <View style={[styles.chk, allSelected && styles.chkOn, someSelected && !allSelected && styles.chkIndeterminate]}>
-            {allSelected ? <Ionicons name="checkmark" size={14} color="#fff" /> : someSelected ? <View style={styles.chkDash} /> : null}
+            {allSelected ? <Ionicons name="checkmark" size={14} color={colors.white} /> : someSelected ? <View style={styles.chkDash} /> : null}
           </View>
           <Text style={styles.selectAllText}>
             {allSelected ? 'Tüm seçimi kaldır' : `Tümünü seç (${filtered.length})`}
@@ -311,7 +316,7 @@ export function BroadcastMembersScreen() {
         <View style={[styles.footer, wide]}>
           <Text style={styles.footerCount}>{selected.size} üye seçili</Text>
           <Pressable style={styles.footerBtn} onPress={() => setShowModal(true)}>
-            <Ionicons name="send" size={16} color="#fff" />
+            <Ionicons name="send" size={16} color={colors.white} />
             <Text style={styles.footerBtnText}>Bildirim Gönder</Text>
           </Pressable>
         </View>
@@ -330,103 +335,107 @@ export function BroadcastMembersScreen() {
 
 // ── Stiller ───────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  controls: { paddingTop: 8, gap: 8 },
-  tabs: { flexDirection: 'row', gap: 6 },
-  tabBtn: {
-    flex: 1, paddingVertical: 9, borderRadius: 10, alignItems: 'center',
-    borderWidth: 1, borderColor: colors.border, backgroundColor: 'rgba(255,255,255,0.03)',
-  },
-  tabBtnOn: { backgroundColor: 'rgba(124,92,255,0.20)', borderColor: 'rgba(124,92,255,0.5)' },
-  tabText: { color: colors.muted, fontWeight: '700', fontSize: 13 },
-  tabTextOn: { color: colors.text },
-  search: {
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    borderRadius: 12, borderWidth: 1, borderColor: colors.border,
-    paddingHorizontal: 10, paddingVertical: 10,
-    color: colors.text, fontSize: 15,
-  },
-  selectAllRow: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.border,
-  },
-  selectAllText: { color: colors.muted, fontSize: 13, fontWeight: '600', flex: 1 },
-  selCount: { color: colors.accent, fontSize: 13, fontWeight: '700' },
-  list: { paddingTop: 4, paddingBottom: 100, gap: 6 },
-  row: {
-    flexDirection: 'row', alignItems: 'center', gap: 10,
-    padding: 12, borderRadius: 12, borderWidth: 1,
-    borderColor: colors.border, backgroundColor: 'rgba(255,255,255,0.02)',
-  },
-  rowSelected: {
-    borderColor: 'rgba(124,92,255,0.6)',
-    backgroundColor: 'rgba(124,92,255,0.10)',
-  },
-  chk: {
-    width: 22, height: 22, borderRadius: 6, borderWidth: 2,
-    borderColor: colors.muted, alignItems: 'center', justifyContent: 'center',
-    flexShrink: 0,
-  },
-  chkOn: { borderColor: colors.accent, backgroundColor: colors.accent },
-  chkIndeterminate: { borderColor: colors.accent },
-  chkDash: { width: 10, height: 2, backgroundColor: colors.accent, borderRadius: 1 },
-  rowInfo: { flex: 1, gap: 2 },
-  rowName: { fontSize: 14, fontWeight: '700', color: colors.text },
-  rowSub: { fontSize: 11, color: colors.muted },
-  badge: {
-    paddingHorizontal: 8, paddingVertical: 3,
-    borderRadius: 999, borderWidth: 1, flexShrink: 0,
-  },
-  badgeActive: { borderColor: 'rgba(46,204,113,0.4)', backgroundColor: 'rgba(46,204,113,0.08)' },
-  badgePassive: { borderColor: colors.border, backgroundColor: 'transparent' },
-  badgeText: { fontSize: 11, fontWeight: '700' },
-  badgeTextActive: { color: '#2ecc71' },
-  badgeTextPassive: { color: colors.muted },
-  footer: {
-    position: 'absolute', bottom: 0, left: 0, right: 0,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingVertical: 12, paddingBottom: 28,
-    backgroundColor: '#12121f',
-    borderTopWidth: 1, borderTopColor: colors.border,
-    gap: 12,
-  },
-  footerCount: { color: colors.muted, fontSize: 14, fontWeight: '600' },
-  footerBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    paddingHorizontal: 20, paddingVertical: 12,
-    borderRadius: 12, backgroundColor: colors.accent,
-  },
-  footerBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
-});
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: colors.bg },
+    controls: { paddingTop: 8, gap: 8 },
+    tabs: { flexDirection: 'row', gap: 6 },
+    tabBtn: {
+      flex: 1, paddingVertical: 9, borderRadius: 10, alignItems: 'center',
+      borderWidth: 1, borderColor: colors.border, backgroundColor: surfaceTint(theme, 0.03),
+    },
+    tabBtnOn: { backgroundColor: 'rgba(124,92,255,0.20)', borderColor: 'rgba(124,92,255,0.5)' },
+    tabText: { color: colors.muted, fontWeight: '700', fontSize: 13 },
+    tabTextOn: { color: colors.text },
+    search: {
+      backgroundColor: surfaceTint(theme, 0.03),
+      borderRadius: 12, borderWidth: 1, borderColor: colors.border,
+      paddingHorizontal: 10, paddingVertical: 10,
+      color: colors.text, fontSize: 15,
+    },
+    selectAllRow: {
+      flexDirection: 'row', alignItems: 'center', gap: 10,
+      paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: colors.border,
+    },
+    selectAllText: { color: colors.muted, fontSize: 13, fontWeight: '600', flex: 1 },
+    selCount: { color: colors.accent, fontSize: 13, fontWeight: '700' },
+    list: { paddingTop: 4, paddingBottom: 100, gap: 6 },
+    row: {
+      flexDirection: 'row', alignItems: 'center', gap: 10,
+      padding: 12, borderRadius: 12, borderWidth: 1,
+      borderColor: colors.border, backgroundColor: surfaceTint(theme, 0.02),
+    },
+    rowSelected: {
+      borderColor: 'rgba(124,92,255,0.6)',
+      backgroundColor: 'rgba(124,92,255,0.10)',
+    },
+    chk: {
+      width: 22, height: 22, borderRadius: 6, borderWidth: 2,
+      borderColor: colors.muted, alignItems: 'center', justifyContent: 'center',
+      flexShrink: 0,
+    },
+    chkOn: { borderColor: colors.accent, backgroundColor: colors.accent },
+    chkIndeterminate: { borderColor: colors.accent },
+    chkDash: { width: 10, height: 2, backgroundColor: colors.accent, borderRadius: 1 },
+    rowInfo: { flex: 1, gap: 2 },
+    rowName: { fontSize: 14, fontWeight: '700', color: colors.text },
+    rowSub: { fontSize: 11, color: colors.muted },
+    badge: {
+      paddingHorizontal: 8, paddingVertical: 3,
+      borderRadius: 999, borderWidth: 1, flexShrink: 0,
+    },
+    badgeActive: { borderColor: 'rgba(46,204,113,0.4)', backgroundColor: 'rgba(46,204,113,0.08)' },
+    badgePassive: { borderColor: colors.border, backgroundColor: 'transparent' },
+    badgeText: { fontSize: 11, fontWeight: '700' },
+    badgeTextActive: { color: '#2ecc71' },
+    badgeTextPassive: { color: colors.muted },
+    footer: {
+      position: 'absolute', bottom: 0, left: 0, right: 0,
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      paddingHorizontal: 16, paddingVertical: 12, paddingBottom: 28,
+      backgroundColor: colors.panel2,
+      borderTopWidth: 1, borderTopColor: colors.border,
+      gap: 12,
+    },
+    footerCount: { color: colors.muted, fontSize: 14, fontWeight: '600' },
+    footerBtn: {
+      flexDirection: 'row', alignItems: 'center', gap: 8,
+      paddingHorizontal: 20, paddingVertical: 12,
+      borderRadius: 12, backgroundColor: colors.accent,
+    },
+    footerBtnText: { color: colors.white, fontWeight: '800', fontSize: 15 },
+  });
+}
 
-const modal = StyleSheet.create({
-  root: { flex: 1, justifyContent: 'flex-end' },
-  backdrop: { ...StyleSheet.absoluteFill, backgroundColor: 'rgba(0,0,0,0.55)' },
-  sheet: {
-    backgroundColor: '#1a1a2e', borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    padding: 20, paddingBottom: 36, gap: 10,
-  },
-  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.2)', alignSelf: 'center', marginBottom: 6 },
-  heading: { fontSize: 17, fontWeight: '800', color: colors.text },
-  sub: { fontSize: 13, color: colors.muted, marginTop: -4 },
-  label: { fontSize: 13, color: colors.muted, fontWeight: '600', marginTop: 4 },
-  input: {
-    backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 10,
-    borderWidth: 1, borderColor: colors.border,
-    paddingHorizontal: 12, paddingVertical: 10, color: colors.text, fontSize: 15,
-  },
-  inputMulti: { minHeight: 90, textAlignVertical: 'top' },
-  actions: { flexDirection: 'row', gap: 10, marginTop: 6 },
-  btnCancel: {
-    flex: 1, paddingVertical: 12, borderRadius: 10,
-    borderWidth: 1, borderColor: colors.border, alignItems: 'center',
-  },
-  btnCancelText: { color: colors.muted, fontWeight: '700' },
-  btnSend: {
-    flex: 2, flexDirection: 'row', gap: 6, paddingVertical: 12,
-    borderRadius: 10, backgroundColor: colors.accent,
-    alignItems: 'center', justifyContent: 'center',
-  },
-  btnSendText: { color: '#fff', fontWeight: '800', fontSize: 15 },
-});
+function makeModalStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    root: { flex: 1, justifyContent: 'flex-end' },
+    backdrop: { ...StyleSheet.absoluteFill, backgroundColor: colors.overlay },
+    sheet: {
+      backgroundColor: colors.modalBg, borderTopLeftRadius: 20, borderTopRightRadius: 20,
+      padding: 20, paddingBottom: 36, gap: 10,
+    },
+    handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: surfaceTint(theme, 0.2), alignSelf: 'center', marginBottom: 6 },
+    heading: { fontSize: 17, fontWeight: '800', color: colors.text },
+    sub: { fontSize: 13, color: colors.muted, marginTop: -4 },
+    label: { fontSize: 13, color: colors.muted, fontWeight: '600', marginTop: 4 },
+    input: {
+      backgroundColor: surfaceTint(theme, 0.05), borderRadius: 10,
+      borderWidth: 1, borderColor: colors.border,
+      paddingHorizontal: 12, paddingVertical: 10, color: colors.text, fontSize: 15,
+    },
+    inputMulti: { minHeight: 90, textAlignVertical: 'top' },
+    actions: { flexDirection: 'row', gap: 10, marginTop: 6 },
+    btnCancel: {
+      flex: 1, paddingVertical: 12, borderRadius: 10,
+      borderWidth: 1, borderColor: colors.border, alignItems: 'center',
+    },
+    btnCancelText: { color: colors.muted, fontWeight: '700' },
+    btnSend: {
+      flex: 2, flexDirection: 'row', gap: 6, paddingVertical: 12,
+      borderRadius: 10, backgroundColor: colors.accent,
+      alignItems: 'center', justifyContent: 'center',
+    },
+    btnSendText: { color: colors.white, fontWeight: '800', fontSize: 15 },
+  });
+}

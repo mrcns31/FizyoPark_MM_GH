@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 import { SheetModal } from './sheet-modal';
-import { colors } from '../theme/colors';
+import { useTheme } from '../features/theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../theme/colors';
 
 /** "YYYY-MM-DD" → yerel Date. Boşsa bugün. */
 function strToDate(v: string): Date {
@@ -50,6 +51,8 @@ export function DateField({
   /** Özel tetikleyici — sağlanırsa varsayılan buton yerine bu render edilir. */
   trigger?: React.ReactNode;
 }) {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const [open, setOpen] = useState(false);
   const [iosTemp, setIosTemp] = useState<Date>(() => strToDate(value));
 
@@ -117,38 +120,40 @@ export function DateField({
   );
 }
 
-const styles = StyleSheet.create({
-  btn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-  },
-  btnText: { color: colors.text, fontSize: 15, fontWeight: '600' },
-  placeholder: { color: colors.muted, fontWeight: '400' },
-  sheet: {
-    backgroundColor: colors.panel,
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    borderTopWidth: 1,
-    borderColor: colors.border,
-    paddingBottom: 24,
-  },
-  sheetHead: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  cancel: { color: colors.muted, fontSize: 16 },
-  done: { color: colors.accent, fontSize: 16, fontWeight: '700' },
-  spinner: { alignSelf: 'center' },
-});
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    btn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: surfaceTint(theme, 0.03),
+    },
+    btnText: { color: colors.text, fontSize: 15, fontWeight: '600' },
+    placeholder: { color: colors.muted, fontWeight: '400' },
+    sheet: {
+      backgroundColor: colors.panel,
+      borderTopLeftRadius: 18,
+      borderTopRightRadius: 18,
+      borderTopWidth: 1,
+      borderColor: colors.border,
+      paddingBottom: 24,
+    },
+    sheetHead: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    cancel: { color: colors.muted, fontSize: 16 },
+    done: { color: colors.accent, fontSize: 16, fontWeight: '700' },
+    spinner: { alignSelf: 'center' },
+  });
+}

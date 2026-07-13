@@ -7,7 +7,8 @@ import { useQuery } from '@tanstack/react-query';
 import { staffColor } from '../../../lib/staff-color';
 import { getStaff } from '../../staff/api/staff';
 import { useWorkingHours } from '../../settings/api/hooks';
-import { colors } from '../../../theme/colors';
+import { useTheme } from '../../theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../../../theme/colors';
 import type { PlannerSession } from '../api/sessions';
 
 /** "Arzum Çınar" → "Arzum Çın." */
@@ -18,12 +19,13 @@ function abbrStaffName(name: string): string {
 }
 
 /** Kalan/toplam oranına göre yeşil → turuncu → kırmızı renk döndürür. */
-function remainingColor(remaining: number | null, total: number): string {
-  if (remaining == null || total <= 0) return colors.muted;
+function remainingColor(remaining: number | null, total: number, theme: ResolvedTheme): string {
+  if (remaining == null || total <= 0) return surfaceTint(theme, 0.6);
   const ratio = Math.max(0, Math.min(1, remaining / total));
+  const lightness = theme === 'light' ? 45 : 60;
   if (ratio >= 1) return '#4cd473';
-  if (ratio >= 0.5) return `hsl(${Math.round(30 + ((ratio - 0.5) / 0.5) * 90)}, 75%, 60%)`;
-  if (ratio >= 0.2) return `hsl(${Math.round(((ratio - 0.2) / 0.3) * 30)}, 75%, 60%)`;
+  if (ratio >= 0.5) return `hsl(${Math.round(30 + ((ratio - 0.5) / 0.5) * 90)}, 75%, ${lightness}%)`;
+  if (ratio >= 0.2) return `hsl(${Math.round(((ratio - 0.2) / 0.3) * 30)}, 75%, ${lightness}%)`;
   return '#f25c6e';
 }
 
@@ -54,6 +56,8 @@ export function AdminCalendarGrid({
   memberPackageMap?: Map<number, MemberPkgInfo>;
   showRemaining?: boolean;
 }) {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const staffQ = useQuery({ queryKey: ['staff'], queryFn: getStaff });
   const { data: workingHours } = useWorkingHours();
 
@@ -137,7 +141,7 @@ export function AdminCalendarGrid({
                         </Text>
                         {showRemaining && pkgInfo != null ? (
                           <Text
-                            style={[styles.remainingBadge, { color: remainingColor(pkgInfo.remaining, pkgInfo.total) }]}
+                            style={[styles.remainingBadge, { color: remainingColor(pkgInfo.remaining, pkgInfo.total, resolvedTheme) }]}
                             numberOfLines={1}
                           >
                             {' '}({pkgInfo.remaining ?? '?'}/{pkgInfo.total})
@@ -186,82 +190,84 @@ function buildHourRows(sessions: PlannerSession[], minHour: number, maxHour: num
   return rows;
 }
 
-const styles = StyleSheet.create({
-  list: { paddingVertical: 0, paddingHorizontal: 0 },
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    list: { paddingVertical: 0, paddingHorizontal: 0 },
 
-  timeRow: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
-    minHeight: 52,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.07)',
-    paddingVertical: 3,
-    paddingRight: 8,
-  },
+    timeRow: {
+      flexDirection: 'row',
+      alignItems: 'stretch',
+      minHeight: 52,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: surfaceTint(theme, 0.07),
+      paddingVertical: 3,
+      paddingRight: 8,
+    },
 
-  // Sol: dikey saat etiketi
-  timeCol: {
-    width: 22,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  timeText: {
-    color: colors.muted,
-    fontSize: 10,
-    fontWeight: '700',
-    transform: [{ rotate: '-90deg' }],
-    width: 36,
-    textAlign: 'center',
-  },
+    // Sol: dikey saat etiketi
+    timeCol: {
+      width: 22,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    timeText: {
+      color: colors.muted,
+      fontSize: 10,
+      fontWeight: '700',
+      transform: [{ rotate: '-90deg' }],
+      width: 36,
+      textAlign: 'center',
+    },
 
-  // Sağ: personel kolonları yan yana
-  cols: {
-    flex: 1,
-    flexDirection: 'row',
-    gap: 5,
-  },
+    // Sağ: personel kolonları yan yana
+    cols: {
+      flex: 1,
+      flexDirection: 'row',
+      gap: 5,
+    },
 
-  slotCard: {
-    flex: 1,
-    borderRadius: 10,
-    borderWidth: 1,
-    padding: 8,
-    gap: 3,
-  },
-  slotHead: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  slotStaff: {
-    color: colors.text,
-    fontWeight: '700',
-    fontSize: 12,
-    flex: 1,
-  },
-  deleteBtn: {
-    padding: 2,
-    marginLeft: 4,
-  },
-  slotDivider: {
-    height: 1,
-    backgroundColor: 'rgba(255,255,255,0.12)',
-    marginVertical: 2,
-  },
-  memberRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'nowrap',
-  },
-  memberName: {
-    color: 'rgba(232,236,255,0.95)',
-    fontSize: 13,
-    fontWeight: '600',
-    flexShrink: 1,
-  },
-  remainingBadge: {
-    fontSize: 12,
-    fontWeight: '700',
-    flexShrink: 0,
-  },
-});
+    slotCard: {
+      flex: 1,
+      borderRadius: 10,
+      borderWidth: 1,
+      padding: 8,
+      gap: 3,
+    },
+    slotHead: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    slotStaff: {
+      color: colors.text,
+      fontWeight: '700',
+      fontSize: 12,
+      flex: 1,
+    },
+    deleteBtn: {
+      padding: 2,
+      marginLeft: 4,
+    },
+    slotDivider: {
+      height: 1,
+      backgroundColor: surfaceTint(theme, 0.12),
+      marginVertical: 2,
+    },
+    memberRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      flexWrap: 'nowrap',
+    },
+    memberName: {
+      color: surfaceTint(theme, 0.95),
+      fontSize: 13,
+      fontWeight: '600',
+      flexShrink: 1,
+    },
+    remainingBadge: {
+      fontSize: 12,
+      fontWeight: '700',
+      flexShrink: 0,
+    },
+  });
+}

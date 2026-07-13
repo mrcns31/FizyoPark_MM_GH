@@ -4,7 +4,8 @@ import { Ionicons } from '@expo/vector-icons';
 
 import { staffColor } from '../../../lib/staff-color';
 import { hourOfTs } from '../../../lib/datetime';
-import { colors } from '../../../theme/colors';
+import { useTheme } from '../../theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../../../theme/colors';
 import { useWorkingHours } from '../../settings/api/hooks';
 import type { PlannerSession } from '../api/sessions';
 import type { Room } from '../../../types/api';
@@ -107,6 +108,8 @@ export function WeeklyTabletGrid({
   memberPackageMap,
   showRemaining = false,
 }: Props) {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const { data: workingHours } = useWorkingHours();
 
   // Sadece çalışılan günleri göster
@@ -237,83 +240,85 @@ export function WeeklyTabletGrid({
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1 },
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    container: { flex: 1 },
 
-  headerRow: {
-    flexDirection: 'row',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.12)',
-    backgroundColor: colors.panel,
-  },
-  timeColHeader: {
-    width: TIME_COL_W,
-    alignItems: 'center',
-    justifyContent: 'flex-end',
-    paddingBottom: 6,
-    paddingTop: 4,
-  },
-  timeColLabel: { color: colors.muted, fontSize: 11, fontWeight: '700' },
+    headerRow: {
+      flexDirection: 'row',
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: surfaceTint(theme, 0.12),
+      backgroundColor: colors.panel,
+    },
+    timeColHeader: {
+      width: TIME_COL_W,
+      alignItems: 'center',
+      justifyContent: 'flex-end',
+      paddingBottom: 6,
+      paddingTop: 4,
+    },
+    timeColLabel: { color: colors.muted, fontSize: 11, fontWeight: '700' },
 
-  dayHeader: {
-    flex: 1,
-    paddingHorizontal: 5,
-    paddingVertical: 5,
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    borderLeftColor: 'rgba(255,255,255,0.08)',
-  },
-  dayHeaderDate: { color: colors.text, fontSize: 11, fontWeight: '800' },
-  dayHeaderName: { color: colors.muted, fontSize: 10, fontWeight: '600', marginBottom: 2 },
+    dayHeader: {
+      flex: 1,
+      paddingHorizontal: 5,
+      paddingVertical: 5,
+      borderLeftWidth: StyleSheet.hairlineWidth,
+      borderLeftColor: surfaceTint(theme, 0.08),
+    },
+    dayHeaderDate: { color: colors.text, fontSize: 11, fontWeight: '800' },
+    dayHeaderName: { color: colors.muted, fontSize: 10, fontWeight: '600', marginBottom: 2 },
 
-  // Personel baş harf + sayı — AÇ:9 formatı
-  daySummary: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, alignItems: 'center' },
-  daySummaryChip: { fontSize: 10, fontWeight: '800' },
-  daySummaryTotal: { fontSize: 10, fontWeight: '700', color: colors.muted },
+    // Personel baş harf + sayı — AÇ:9 formatı
+    daySummary: { flexDirection: 'row', flexWrap: 'wrap', gap: 4, alignItems: 'center' },
+    daySummaryChip: { fontSize: 10, fontWeight: '800' },
+    daySummaryTotal: { fontSize: 10, fontWeight: '700', color: colors.muted },
 
-  scroll: { flex: 1 },
+    scroll: { flex: 1 },
 
-  timeRow: {
-    flexDirection: 'row',
-    minHeight: 64,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
-  },
-  timeCol: {
-    width: TIME_COL_W,
-    alignItems: 'center',
-    justifyContent: 'flex-start',
-    paddingTop: 6,
-    paddingBottom: 4,
-  },
-  timeText: { color: colors.muted, fontSize: 11, fontWeight: '700' },
+    timeRow: {
+      flexDirection: 'row',
+      minHeight: 64,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: surfaceTint(theme, 0.06),
+    },
+    timeCol: {
+      width: TIME_COL_W,
+      alignItems: 'center',
+      justifyContent: 'flex-start',
+      paddingTop: 6,
+      paddingBottom: 4,
+    },
+    timeText: { color: colors.muted, fontSize: 11, fontWeight: '700' },
 
-  // Her gün hücresi: içindeki personel kartları YAN YANA (row)
-  dayCell: {
-    flex: 1,
-    flexDirection: 'row',
-    padding: 3,
-    gap: 3,
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    borderLeftColor: 'rgba(255,255,255,0.06)',
-  },
+    // Her gün hücresi: içindeki personel kartları YAN YANA (row)
+    dayCell: {
+      flex: 1,
+      flexDirection: 'row',
+      padding: 3,
+      gap: 3,
+      borderLeftWidth: StyleSheet.hairlineWidth,
+      borderLeftColor: surfaceTint(theme, 0.06),
+    },
 
-  // Her personel kartı eşit genişlik alır (flex: 1)
-  slotCard: {
-    flex: 1,
-    borderRadius: 7,
-    borderWidth: 1,
-    padding: 5,
-    gap: 2,
-  },
-  slotHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  slotStaff: { fontSize: 10, fontWeight: '800', flex: 1 },
-  deleteBtn: { padding: 2, marginLeft: 2 },
-  divider: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    marginVertical: 2,
-  },
-  memberRow: { flexDirection: 'row', alignItems: 'center' },
-  memberName: { color: 'rgba(232,236,255,0.92)', fontSize: 10, fontWeight: '600', flexShrink: 1 },
-  remainingBadge: { fontSize: 9, fontWeight: '700', color: colors.muted, flexShrink: 0 },
-});
+    // Her personel kartı eşit genişlik alır (flex: 1)
+    slotCard: {
+      flex: 1,
+      borderRadius: 7,
+      borderWidth: 1,
+      padding: 5,
+      gap: 2,
+    },
+    slotHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    slotStaff: { fontSize: 10, fontWeight: '800', flex: 1 },
+    deleteBtn: { padding: 2, marginLeft: 2 },
+    divider: {
+      height: StyleSheet.hairlineWidth,
+      backgroundColor: surfaceTint(theme, 0.15),
+      marginVertical: 2,
+    },
+    memberRow: { flexDirection: 'row', alignItems: 'center' },
+    memberName: { color: surfaceTint(theme, 0.92), fontSize: 10, fontWeight: '600', flexShrink: 1 },
+    remainingBadge: { fontSize: 9, fontWeight: '700', color: colors.muted, flexShrink: 0 },
+  });
+}

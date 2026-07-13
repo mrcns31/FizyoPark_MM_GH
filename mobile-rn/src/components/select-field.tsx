@@ -3,7 +3,8 @@ import { Dimensions, FlatList, Pressable, StyleSheet, Text, TextInput, View } fr
 import { Ionicons } from '@expo/vector-icons';
 
 import { SheetModal } from './sheet-modal';
-import { colors } from '../theme/colors';
+import { useTheme } from '../features/theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../theme/colors';
 
 const WIN_H = Dimensions.get('window').height;
 
@@ -31,6 +32,8 @@ export function SelectField<T extends number | string = number>({
   /** Açılan listede arama kutusu göster */
   searchable?: boolean;
 }) {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const selected = options.find((o) => o.value === value);
@@ -120,68 +123,70 @@ export function SelectField<T extends number | string = number>({
   );
 }
 
-const styles = StyleSheet.create({
-  wrap: { marginBottom: 4 },
-  label: { color: colors.muted, fontSize: 12, marginBottom: 6 },
-  req: { color: colors.danger },
-  input: {
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 10,
-    paddingVertical: 12,
-    minHeight: 46,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  value: { color: colors.text, fontSize: 16 },
-  placeholder: { color: colors.textMuted },
-  sheet: {
-    backgroundColor: colors.panel,
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 24,
-    minHeight: Math.round(WIN_H * 0.36),
-    maxHeight: Math.round(WIN_H * 0.8),
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  handle: {
-    alignSelf: 'center',
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.2)',
-    marginBottom: 10,
-  },
-  sheetTitle: { color: colors.white, fontSize: 17, fontWeight: '700', marginBottom: 10 },
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    wrap: { marginBottom: 4 },
+    label: { color: colors.muted, fontSize: 12, marginBottom: 6 },
+    req: { color: colors.danger },
+    input: {
+      backgroundColor: surfaceTint(theme, 0.03),
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingHorizontal: 10,
+      paddingVertical: 12,
+      minHeight: 46,
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    value: { color: colors.text, fontSize: 16 },
+    placeholder: { color: colors.textMuted },
+    sheet: {
+      backgroundColor: colors.panel,
+      borderTopLeftRadius: 20,
+      borderTopRightRadius: 20,
+      paddingHorizontal: 20,
+      paddingTop: 8,
+      paddingBottom: 24,
+      minHeight: Math.round(WIN_H * 0.36),
+      maxHeight: Math.round(WIN_H * 0.8),
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    handle: {
+      alignSelf: 'center',
+      width: 40,
+      height: 4,
+      borderRadius: 2,
+      backgroundColor: surfaceTint(theme, 0.2),
+      marginBottom: 10,
+    },
+    sheetTitle: { color: colors.white, fontSize: 17, fontWeight: '700', marginBottom: 10 },
 
-  searchWrap: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 10,
-    marginBottom: 10,
-  },
-  searchIcon: {},
-  searchInput: {
-    flex: 1,
-    color: colors.text,
-    fontSize: 15,
-    paddingVertical: 10,
-  },
+    searchWrap: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      backgroundColor: surfaceTint(theme, 0.06),
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingHorizontal: 10,
+      marginBottom: 10,
+    },
+    searchIcon: {},
+    searchInput: {
+      flex: 1,
+      color: colors.text,
+      fontSize: 15,
+      paddingVertical: 10,
+    },
 
-  flat: { flexGrow: 0, flexShrink: 1 },
-  option: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: 'rgba(255,255,255,0.06)' },
-  optionText: { color: colors.textSecondary, fontSize: 16 },
-  optionActive: { color: colors.white, fontWeight: '700' },
-  empty: { color: colors.textMuted, paddingVertical: 20, textAlign: 'center' },
-});
+    flat: { flexGrow: 0, flexShrink: 1 },
+    option: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: surfaceTint(theme, 0.06) },
+    optionText: { color: colors.textSecondary, fontSize: 16 },
+    optionActive: { color: colors.white, fontWeight: '700' },
+    empty: { color: colors.textMuted, paddingVertical: 20, textAlign: 'center' },
+  });
+}

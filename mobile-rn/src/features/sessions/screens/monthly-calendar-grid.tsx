@@ -3,7 +3,8 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 
 import { staffColor } from '../../../lib/staff-color';
 import { monthLabel, startOfMonthTs, startOfWeekTs, toDateStr } from '../../../lib/datetime';
-import { colors } from '../../../theme/colors';
+import { useTheme } from '../../theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../../../theme/colors';
 import type { PlannerSession } from '../api/sessions';
 import type { StaffMember } from '../../staff/api/staff';
 
@@ -29,6 +30,8 @@ export function MonthlyCalendarGrid({
   staff: StaffMember[];
   onPressDay: (ts: number) => void;
 }) {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const monthStart = startOfMonthTs(anchor);
   const monthKey = toDateStr(monthStart).slice(0, 7); // "YYYY-MM" (Istanbul)
   const gridStart = startOfWeekTs(monthStart);
@@ -183,89 +186,91 @@ export function MonthlyCalendarGrid({
   );
 }
 
-const styles = StyleSheet.create({
-  container: { paddingBottom: 32 },
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    container: { paddingBottom: 32 },
 
-  title: {
-    color: colors.text,
-    fontSize: 16,
-    fontWeight: '800',
-    paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 6,
-    textTransform: 'capitalize',
-  },
+    title: {
+      color: colors.text,
+      fontSize: 16,
+      fontWeight: '800',
+      paddingHorizontal: 12,
+      paddingTop: 10,
+      paddingBottom: 6,
+      textTransform: 'capitalize',
+    },
 
-  weekRow: {
-    flexDirection: 'row',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.1)',
-  },
-  headCell: { flex: 1, alignItems: 'center', paddingVertical: 6 },
-  headText: { color: colors.muted, fontSize: 12, fontWeight: '700' },
+    weekRow: {
+      flexDirection: 'row',
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: surfaceTint(theme, 0.1),
+    },
+    headCell: { flex: 1, alignItems: 'center', paddingVertical: 6 },
+    headText: { color: colors.muted, fontSize: 12, fontWeight: '700' },
 
-  grid: {},
-  weekGridRow: { flexDirection: 'row' },
+    grid: {},
+    weekGridRow: { flexDirection: 'row' },
 
-  dayCell: {
-    flex: 1,
-    minHeight: 90,
-    padding: 5,
-    borderRightWidth: StyleSheet.hairlineWidth,
-    borderRightColor: 'rgba(255,255,255,0.06)',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
-  },
-  dayCellMuted: { backgroundColor: 'rgba(255,255,255,0.02)' },
-  dayCellToday: { backgroundColor: 'rgba(124,92,255,0.12)' },
+    dayCell: {
+      flex: 1,
+      minHeight: 90,
+      padding: 5,
+      borderRightWidth: StyleSheet.hairlineWidth,
+      borderRightColor: surfaceTint(theme, 0.06),
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: surfaceTint(theme, 0.06),
+    },
+    dayCellMuted: { backgroundColor: surfaceTint(theme, 0.02) },
+    dayCellToday: { backgroundColor: 'rgba(124,92,255,0.12)' },
 
-  dayNum: { color: colors.text, fontSize: 13, fontWeight: '700', marginBottom: 3 },
-  dayNumMuted: { color: 'rgba(232,236,255,0.3)' },
-  dayNumToday: { color: colors.accent, fontWeight: '800' },
+    dayNum: { color: colors.text, fontSize: 13, fontWeight: '700', marginBottom: 3 },
+    dayNumMuted: { color: surfaceTint(theme, 0.3) },
+    dayNumToday: { color: colors.accent, fontWeight: '800' },
 
-  // Personel adı + randevu sayısı — her gün hücresinde
-  staffLine: {
-    fontSize: 10,
-    fontWeight: '600',
-    lineHeight: 15,
-  },
-  staffCount: {
-    fontWeight: '800',
-  },
+    // Personel adı + randevu sayısı — her gün hücresinde
+    staffLine: {
+      fontSize: 10,
+      fontWeight: '600',
+      lineHeight: 15,
+    },
+    staffCount: {
+      fontWeight: '800',
+    },
 
-  summary: {
-    marginTop: 16,
-    paddingHorizontal: 12,
-    paddingBottom: 8,
-  },
-  summaryTitle: {
-    color: colors.muted,
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
-    marginBottom: 10,
-  },
-  summaryCards: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  scard: {
-    borderRadius: 10,
-    borderWidth: 1,
-    padding: 10,
-    minWidth: 110,
-    flex: 1,
-  },
-  scardName: { fontSize: 12, fontWeight: '700', marginBottom: 4 },
-  scardBody: { flexDirection: 'row', alignItems: 'baseline', gap: 4 },
-  scardCount: { fontSize: 22, fontWeight: '900' },
-  scardLabel: { color: colors.muted, fontSize: 11, fontWeight: '600' },
-  scardTotal: {
-    borderColor: 'rgba(255,255,255,0.15)',
-    backgroundColor: 'rgba(255,255,255,0.05)',
-  },
-  scardTotalName: { color: colors.text, fontSize: 12, fontWeight: '700', marginBottom: 4 },
-  scardTotalCount: { color: colors.text, fontSize: 22, fontWeight: '900' },
-});
+    summary: {
+      marginTop: 16,
+      paddingHorizontal: 12,
+      paddingBottom: 8,
+    },
+    summaryTitle: {
+      color: colors.muted,
+      fontSize: 11,
+      fontWeight: '800',
+      letterSpacing: 0.5,
+      textTransform: 'uppercase',
+      marginBottom: 10,
+    },
+    summaryCards: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+    },
+    scard: {
+      borderRadius: 10,
+      borderWidth: 1,
+      padding: 10,
+      minWidth: 110,
+      flex: 1,
+    },
+    scardName: { fontSize: 12, fontWeight: '700', marginBottom: 4 },
+    scardBody: { flexDirection: 'row', alignItems: 'baseline', gap: 4 },
+    scardCount: { fontSize: 22, fontWeight: '900' },
+    scardLabel: { color: colors.muted, fontSize: 11, fontWeight: '600' },
+    scardTotal: {
+      borderColor: surfaceTint(theme, 0.15),
+      backgroundColor: surfaceTint(theme, 0.05),
+    },
+    scardTotalName: { color: colors.text, fontSize: 12, fontWeight: '700', marginBottom: 4 },
+    scardTotalCount: { color: colors.text, fontSize: 22, fontWeight: '900' },
+  });
+}

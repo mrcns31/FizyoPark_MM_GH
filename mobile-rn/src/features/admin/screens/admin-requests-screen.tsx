@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -6,7 +7,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Button, Muted } from '../../../components/ui';
 import { ScreenHeader } from '../../../components/screen-header';
 import { useResponsive } from '../../../lib/responsive';
-import { colors } from '../../../theme/colors';
+import { useTheme } from '../../theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../../../theme/colors';
 import {
   useApproveDeletion,
   useDeletionRequests,
@@ -26,26 +28,28 @@ type SectionAccent = {
   iconBg: string;
 };
 
-const ACCENTS: Record<string, SectionAccent> = {
-  package: {
-    color: colors.accent,
-    bg: 'rgba(124,92,255,0.06)',
-    border: 'rgba(124,92,255,0.35)',
-    iconBg: 'rgba(124,92,255,0.15)',
-  },
-  password: {
-    color: colors.fpOrange,
-    bg: 'rgba(255,149,0,0.06)',
-    border: 'rgba(255,149,0,0.35)',
-    iconBg: 'rgba(255,149,0,0.15)',
-  },
-  deletion: {
-    color: colors.danger,
-    bg: 'rgba(255,77,109,0.06)',
-    border: 'rgba(255,77,109,0.35)',
-    iconBg: 'rgba(255,77,109,0.15)',
-  },
-};
+function makeAccents(colors: AppColors): Record<'package' | 'password' | 'deletion', SectionAccent> {
+  return {
+    package: {
+      color: colors.accent,
+      bg: 'rgba(124,92,255,0.06)',
+      border: 'rgba(124,92,255,0.35)',
+      iconBg: 'rgba(124,92,255,0.15)',
+    },
+    password: {
+      color: colors.fpOrange,
+      bg: 'rgba(255,149,0,0.06)',
+      border: 'rgba(255,149,0,0.35)',
+      iconBg: 'rgba(255,149,0,0.15)',
+    },
+    deletion: {
+      color: colors.danger,
+      bg: 'rgba(255,77,109,0.06)',
+      border: 'rgba(255,77,109,0.35)',
+      iconBg: 'rgba(255,77,109,0.15)',
+    },
+  };
+}
 
 // ── Section container bileşeni ────────────────────────────────────────────
 
@@ -60,10 +64,13 @@ function RequestSection({
   icon: keyof typeof Ionicons.glyphMap;
   title: string;
   count: number;
-  accentKey: keyof typeof ACCENTS;
+  accentKey: 'package' | 'password' | 'deletion';
   empty: string;
   children: React.ReactNode;
 }) {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
+  const ACCENTS = useMemo(() => makeAccents(colors), [colors]);
   const a = ACCENTS[accentKey];
   return (
     <View style={[styles.section, { backgroundColor: a.bg, borderColor: a.border }]}>
@@ -94,6 +101,8 @@ function RequestSection({
 // ── Ana ekran ─────────────────────────────────────────────────────────────
 
 export function AdminRequestsScreen() {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const pkgReqs = usePackageRequests();
   const delReqs = useDeletionRequests();
   const pwReqs = usePasswordResetRequests();
@@ -255,72 +264,74 @@ export function AdminRequestsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  content: { paddingVertical: 16, gap: 14, flexGrow: 1 },
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: colors.bg },
+    content: { paddingVertical: 16, gap: 14, flexGrow: 1 },
 
-  // ── Section box
-  section: {
-    borderWidth: 1,
-    borderRadius: 16,
-    overflow: 'hidden',
-  },
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
-  },
-  sectionIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sectionTitle: {
-    flex: 1,
-    fontSize: 15,
-    fontWeight: '700',
-  },
-  countBadge: {
-    minWidth: 28,
-    height: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 8,
-  },
-  countText: { fontSize: 13, fontWeight: '800' },
+    // ── Section box
+    section: {
+      borderWidth: 1,
+      borderRadius: 16,
+      overflow: 'hidden',
+    },
+    sectionHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: surfaceTint(theme, 0.06),
+    },
+    sectionIcon: {
+      width: 34,
+      height: 34,
+      borderRadius: 10,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    sectionTitle: {
+      flex: 1,
+      fontSize: 15,
+      fontWeight: '700',
+    },
+    countBadge: {
+      minWidth: 28,
+      height: 24,
+      borderRadius: 12,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 8,
+    },
+    countText: { fontSize: 13, fontWeight: '800' },
 
-  // ── Empty state
-  emptyBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-  },
+    // ── Empty state
+    emptyBox: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 14,
+      paddingVertical: 14,
+    },
 
-  // ── Card list
-  cardList: { gap: 1 },
-  card: {
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    gap: 6,
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(255,255,255,0.05)',
-  },
-  cardRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  name: { flex: 1, fontSize: 15, fontWeight: '700', color: colors.text },
-  sub: { fontSize: 13, color: colors.muted, marginLeft: 0 },
-  actions: { flexDirection: 'row', gap: 10, marginTop: 2 },
+    // ── Card list
+    cardList: { gap: 1 },
+    card: {
+      backgroundColor: surfaceTint(theme, 0.03),
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      gap: 6,
+      borderTopWidth: 1,
+      borderTopColor: surfaceTint(theme, 0.05),
+    },
+    cardRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    name: { flex: 1, fontSize: 15, fontWeight: '700', color: colors.text },
+    sub: { fontSize: 13, color: colors.muted, marginLeft: 0 },
+    actions: { flexDirection: 'row', gap: 10, marginTop: 2 },
 
-  // ── Type badge (paket tipi)
-  typeBadge: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3 },
-  typeBadgeText: { fontSize: 12, fontWeight: '600' },
-});
+    // ── Type badge (paket tipi)
+    typeBadge: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 3 },
+    typeBadgeText: { fontSize: 12, fontWeight: '600' },
+  });
+}

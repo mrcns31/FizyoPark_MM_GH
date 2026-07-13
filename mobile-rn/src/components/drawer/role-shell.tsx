@@ -12,7 +12,9 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { colors } from '../../theme/colors';
+import { useTheme } from '../../features/theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../../theme/colors';
+import { ThemeToggle } from '../theme-toggle';
 import { DrawerContext } from './drawer-context';
 
 export type IoniconName = keyof typeof Ionicons.glyphMap;
@@ -44,6 +46,8 @@ export function RoleShell({
   footer?: NavSection;
   children: React.ReactNode;
 }) {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const anim = useRef(new Animated.Value(0)).current; // 0 kapalı, 1 açık
@@ -109,6 +113,10 @@ export function RoleShell({
                       <Section section={footer} onNavigate={() => setOpen(false)} />
                     </View>
                   ) : null}
+                  <View style={styles.themeSection}>
+                    <Text style={styles.sectionTitle}>GÖRÜNÜM</Text>
+                    <ThemeToggle />
+                  </View>
                 </ScrollView>
               </SafeAreaView>
             </Animated.View>
@@ -120,6 +128,8 @@ export function RoleShell({
 }
 
 function Section({ section, onNavigate }: { section: NavSection; onNavigate: () => void }) {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{section.title.toLocaleUpperCase('tr')}</Text>
@@ -136,7 +146,7 @@ function Section({ section, onNavigate }: { section: NavSection; onNavigate: () 
             <Ionicons
               name={it.icon}
               size={18}
-              color={it.danger ? colors.danger : it.active ? '#fff' : 'rgba(232,236,255,0.88)'}
+              color={it.danger ? colors.danger : it.active ? colors.white : surfaceTint(resolvedTheme, 0.88)}
             />
           </View>
           <Text
@@ -152,73 +162,76 @@ function Section({ section, onNavigate }: { section: NavSection; onNavigate: () 
   );
 }
 
-const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.bg },
-  content: { flex: 1 },
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    root: { flex: 1, backgroundColor: colors.bg },
+    content: { flex: 1 },
 
-  // drawer
-  backdrop: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)' },
-  drawer: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    backgroundColor: '#121a33', // gradient (rgba(18,26,51,.98)→) yaklaşımı
-    borderRightWidth: 1,
-    borderRightColor: colors.border,
-    shadowColor: '#000',
-    shadowOffset: { width: 10, height: 0 },
-    shadowOpacity: 0.35,
-    shadowRadius: 36,
-    elevation: 16,
-  },
-  drawerSafe: { flex: 1 },
-  brand: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 14,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  brandIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: 'rgba(124,92,255,0.22)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  brandText: { flex: 1, fontWeight: '800', fontSize: 14, color: colors.text },
-  close: { padding: 4 },
-  inner: { flex: 1 },
-  innerContent: { padding: 8, gap: 10 },
-  section: { paddingHorizontal: 8, paddingVertical: 8 },
-  sectionTitle: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 1,
-    color: 'rgba(232,236,255,0.45)',
-    marginBottom: 8,
-    paddingHorizontal: 4,
-  },
-  navBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 10,
-    minHeight: 44,
-    borderWidth: 1,
-    borderColor: 'transparent',
-  },
-  navBtnActive: { backgroundColor: 'rgba(124,92,255,0.22)', borderColor: 'rgba(124,92,255,0.45)' },
-  navIcon: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center' },
-  navLabel: { flex: 1, fontSize: 13, color: colors.text },
-  navLabelActive: { color: '#fff', fontWeight: '600' },
-  navLabelDanger: { color: colors.danger },
-  navBadge: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.danger },
-  footer: { borderTopWidth: 1, borderTopColor: colors.border, marginTop: 4, paddingTop: 4 },
-});
+    // drawer
+    backdrop: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: colors.overlay },
+    drawer: {
+      position: 'absolute',
+      left: 0,
+      top: 0,
+      bottom: 0,
+      backgroundColor: colors.panel,
+      borderRightWidth: 1,
+      borderRightColor: colors.border,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 10, height: 0 },
+      shadowOpacity: 0.35,
+      shadowRadius: 36,
+      elevation: 16,
+    },
+    drawerSafe: { flex: 1 },
+    brand: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 14,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    brandIcon: {
+      width: 36,
+      height: 36,
+      borderRadius: 10,
+      backgroundColor: colors.accentSoft,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    brandText: { flex: 1, fontWeight: '800', fontSize: 14, color: colors.text },
+    close: { padding: 4 },
+    inner: { flex: 1 },
+    innerContent: { padding: 8, gap: 10 },
+    section: { paddingHorizontal: 8, paddingVertical: 8 },
+    sectionTitle: {
+      fontSize: 11,
+      fontWeight: '700',
+      letterSpacing: 1,
+      color: surfaceTint(theme, 0.45),
+      marginBottom: 8,
+      paddingHorizontal: 4,
+    },
+    navBtn: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 12,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderRadius: 10,
+      minHeight: 44,
+      borderWidth: 1,
+      borderColor: 'transparent',
+    },
+    navBtnActive: { backgroundColor: colors.accentSoft, borderColor: 'rgba(124,92,255,0.45)' },
+    navIcon: { width: 22, height: 22, alignItems: 'center', justifyContent: 'center' },
+    navLabel: { flex: 1, fontSize: 13, color: colors.text },
+    navLabelActive: { color: colors.white, fontWeight: '600' },
+    navLabelDanger: { color: colors.danger },
+    navBadge: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.danger },
+    footer: { borderTopWidth: 1, borderTopColor: colors.border, marginTop: 4, paddingTop: 4 },
+    themeSection: { paddingHorizontal: 8, paddingVertical: 8, gap: 8 },
+  });
+}

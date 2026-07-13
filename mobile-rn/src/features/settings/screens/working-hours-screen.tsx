@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -7,7 +7,8 @@ import { Button, ErrorBox, Muted } from '../../../components/ui';
 import { ScreenHeader } from '../../../components/screen-header';
 import { WorkingHoursEditor, validateWorkingHours } from '../../../components/working-hours-editor';
 import { useResponsive } from '../../../lib/responsive';
-import { colors } from '../../../theme/colors';
+import { useTheme } from '../../theme';
+import { type AppColors } from '../../../theme/colors';
 import { type WorkingHours } from '../api/settings';
 import { useUpdateWorkingHours, useWorkingHours } from '../api/hooks';
 
@@ -17,6 +18,8 @@ import { useUpdateWorkingHours, useWorkingHours } from '../api/hooks';
  */
 export function WorkingHoursScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { data, isLoading } = useWorkingHours();
   const save = useUpdateWorkingHours();
   const { contentMaxWidth, gutter } = useResponsive();
@@ -73,8 +76,10 @@ export function WorkingHoursScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  content: { paddingVertical: 16, gap: 12, flexGrow: 1 },
-  save: { marginTop: 4, marginBottom: 8 },
-});
+function makeStyles(colors: AppColors) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: colors.bg },
+    content: { paddingVertical: 16, gap: 12, flexGrow: 1 },
+    save: { marginTop: 4, marginBottom: 8 },
+  });
+}

@@ -11,7 +11,8 @@ import { Fab } from '../../../components/fab';
 import { ScreenHeader } from '../../../components/screen-header';
 import { useIncremental } from '../../../lib/use-incremental';
 import { useResponsive } from '../../../lib/responsive';
-import { colors } from '../../../theme/colors';
+import { useTheme } from '../../theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../../../theme/colors';
 import type { Member } from '../../../types/api';
 import { useDeleteMember, useMembers } from '../api/hooks';
 import { useMemberPackages } from '../../member-packages/api/hooks';
@@ -22,8 +23,8 @@ function fmtDate(v: string): string {
   return `${d}-${m}-${y}`;
 }
 
-function remainingColor(remaining: number | null, total: number): string {
-  if (remaining == null || total <= 0) return colors.muted;
+function remainingColor(remaining: number | null, total: number, mutedColor: string): string {
+  if (remaining == null || total <= 0) return mutedColor;
   const ratio = Math.max(0, Math.min(1, remaining / total));
   if (ratio >= 1) return '#4cd473';
   if (ratio >= 0.5) return `hsl(${Math.round(30 + ((ratio - 0.5) / 0.5) * 90)}, 75%, 60%)`;
@@ -33,6 +34,8 @@ function remainingColor(remaining: number | null, total: number): string {
 
 /** Admin üye listesi — sadece aktif paketliler + paketsiz uyarı kutusu. */
 export function AdminMembersScreen() {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const router = useRouter();
   const { data, isLoading, refetch } = useMembers();
   const [manualRefreshing, setManualRefreshing] = useState(false);
@@ -178,7 +181,7 @@ export function AdminMembersScreen() {
         {active ? (
           <View style={styles.dates}>
             <Text style={styles.metaText}>{fmtDate(active.startDate)} – {fmtDate(active.endDate)}</Text>
-            <Text style={[styles.remainingText, { color: remainingColor(active.remainingSessions, active.lessonCount) }]}>
+            <Text style={[styles.remainingText, { color: remainingColor(active.remainingSessions, active.lessonCount, colors.muted) }]}>
               Kalan: {active.remainingSessions ?? '–'}
             </Text>
           </View>
@@ -262,90 +265,92 @@ export function AdminMembersScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.backgroundTop },
-  searchWrap: { paddingVertical: 10, gap: 6 },
-  search: {
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 10,
-    paddingVertical: 11,
-    color: colors.text,
-    fontSize: 16,
-  },
-  list: { paddingTop: 8, paddingBottom: 96, gap: 10 },
-  warningBox: {
-    borderWidth: 1,
-    borderColor: 'rgba(255,77,109,0.5)',
-    borderRadius: 10,
-    backgroundColor: 'rgba(255,77,109,0.08)',
-    padding: 12,
-    marginBottom: 10,
-    gap: 10,
-  },
-  warningTitle: { color: colors.danger, fontSize: 13, fontWeight: '700' },
-  warningChips: { gap: 8 },
-  warningChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(255,77,109,0.5)',
-  },
-  warningChipText: { color: colors.danger, fontSize: 13 },
-  card: {
-    padding: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    gap: 6,
-  },
-  cardPressed: { backgroundColor: 'rgba(124,92,255,0.07)', borderColor: 'rgba(124,92,255,0.25)' },
-  head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 },
-  nameWrap: { flex: 1, minWidth: 0, gap: 3 },
-  name: { fontSize: 15, fontWeight: '700', color: colors.text },
-  nameLow: { color: '#FF6B35' },
-  nameLine: { height: 2, backgroundColor: '#FF6B35', borderRadius: 1, marginTop: 2 },
-  memberNo: { fontSize: 11, color: colors.muted },
-  delBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 999,
-    backgroundColor: 'rgba(255,107,122,0.14)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,107,122,0.28)',
-  },
-  delBadgeText: { color: '#ff8a96', fontSize: 11, fontWeight: '700' },
-  headActions: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 0 },
-  iconBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  meta: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
-  metaText: { fontSize: 12, color: colors.muted },
-  remainingText: { fontSize: 12, fontWeight: '700' },
-  dates: { flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 },
-  sortRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  sortChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-  },
-  sortChipOn: { borderColor: 'rgba(124,92,255,0.5)', backgroundColor: 'rgba(124,92,255,0.15)' },
-  sortChipText: { fontSize: 12, color: colors.muted, fontWeight: '600' },
-  sortChipTextOn: { color: colors.text },
-  countText: { fontSize: 12, color: colors.muted, paddingHorizontal: 6, alignSelf: 'center' },
-});
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: colors.backgroundTop },
+    searchWrap: { paddingVertical: 10, gap: 6 },
+    search: {
+      backgroundColor: surfaceTint(theme, 0.03),
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      paddingHorizontal: 10,
+      paddingVertical: 11,
+      color: colors.text,
+      fontSize: 16,
+    },
+    list: { paddingTop: 8, paddingBottom: 96, gap: 10 },
+    warningBox: {
+      borderWidth: 1,
+      borderColor: 'rgba(255,77,109,0.5)',
+      borderRadius: 10,
+      backgroundColor: 'rgba(255,77,109,0.08)',
+      padding: 12,
+      marginBottom: 10,
+      gap: 10,
+    },
+    warningTitle: { color: colors.danger, fontSize: 13, fontWeight: '700' },
+    warningChips: { gap: 8 },
+    warningChip: {
+      paddingHorizontal: 12,
+      paddingVertical: 6,
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: 'rgba(255,77,109,0.5)',
+    },
+    warningChipText: { color: colors.danger, fontSize: 13 },
+    card: {
+      padding: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      backgroundColor: surfaceTint(theme, 0.03),
+      gap: 6,
+    },
+    cardPressed: { backgroundColor: 'rgba(124,92,255,0.07)', borderColor: 'rgba(124,92,255,0.25)' },
+    head: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 10 },
+    nameWrap: { flex: 1, minWidth: 0, gap: 3 },
+    name: { fontSize: 15, fontWeight: '700', color: colors.text },
+    nameLow: { color: '#FF6B35' },
+    nameLine: { height: 2, backgroundColor: '#FF6B35', borderRadius: 1, marginTop: 2 },
+    memberNo: { fontSize: 11, color: colors.muted },
+    delBadge: {
+      alignSelf: 'flex-start',
+      paddingHorizontal: 8,
+      paddingVertical: 2,
+      borderRadius: 999,
+      backgroundColor: 'rgba(255,107,122,0.14)',
+      borderWidth: 1,
+      borderColor: 'rgba(255,107,122,0.28)',
+    },
+    delBadgeText: { color: '#ff8a96', fontSize: 11, fontWeight: '700' },
+    headActions: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 0 },
+    iconBtn: {
+      width: 38,
+      height: 38,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: surfaceTint(theme, 0.03),
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    meta: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
+    metaText: { fontSize: 12, color: colors.muted },
+    remainingText: { fontSize: 12, fontWeight: '700' },
+    dates: { flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 },
+    sortRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    sortChip: {
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: surfaceTint(theme, 0.03),
+    },
+    sortChipOn: { borderColor: 'rgba(124,92,255,0.5)', backgroundColor: 'rgba(124,92,255,0.15)' },
+    sortChipText: { fontSize: 12, color: colors.muted, fontWeight: '600' },
+    sortChipTextOn: { color: colors.text },
+    countText: { fontSize: 12, color: colors.muted, paddingHorizontal: 6, alignSelf: 'center' },
+  });
+}

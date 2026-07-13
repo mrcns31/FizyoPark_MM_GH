@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,7 +7,8 @@ import { FadeIn } from '../../../components/fade-in';
 import { ScreenContainer } from '../../../components/screen-container';
 import { Button, ErrorBox, Muted } from '../../../components/ui';
 import { ApiError } from '../../../lib/api-client';
-import { colors } from '../../../theme/colors';
+import { useTheme } from '../../theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../../../theme/colors';
 import { authKeys, useSetPassword } from '../api/hooks';
 
 function validatePassword(pw: string): string | null {
@@ -20,6 +21,8 @@ function validatePassword(pw: string): string | null {
 
 /** İlk giriş — zorunlu şifre belirleme (mustChangePassword). */
 export function SetPasswordScreen() {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const qc = useQueryClient();
   const setPw = useSetPassword();
   const [pw, setPw1] = useState('');
@@ -99,59 +102,61 @@ export function SetPasswordScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  card: {
-    width: '100%',
-    maxWidth: 400,
-    alignSelf: 'center',
-    backgroundColor: colors.panel,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: colors.radius,
-    paddingHorizontal: 20,
-    paddingVertical: 24,
-    gap: 12,
-  },
-  title: { fontSize: 20, fontWeight: '800', color: colors.text, marginBottom: 2 },
-  fieldWrap: { gap: 6 },
-  label: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  inputWrap: {
-    position: 'relative',
-    justifyContent: 'center',
-  },
-  input: {
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
-    paddingHorizontal: 12,
-    paddingVertical: 13,
-    paddingRight: 44,
-    color: colors.text,
-    fontSize: 16,
-  },
-  eye: {
-    position: 'absolute',
-    right: 12,
-    padding: 4,
-  },
-  hintBox: {
-    backgroundColor: 'rgba(124,92,255,0.10)',
-    borderWidth: 1,
-    borderColor: 'rgba(124,92,255,0.25)',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 3,
-  },
-  hintText: {
-    color: colors.muted,
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  submit: { marginTop: 4 },
-});
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    card: {
+      width: '100%',
+      maxWidth: 400,
+      alignSelf: 'center',
+      backgroundColor: colors.panel,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: colors.radius,
+      paddingHorizontal: 20,
+      paddingVertical: 24,
+      gap: 12,
+    },
+    title: { fontSize: 20, fontWeight: '800', color: colors.text, marginBottom: 2 },
+    fieldWrap: { gap: 6 },
+    label: {
+      color: colors.text,
+      fontSize: 13,
+      fontWeight: '500',
+    },
+    inputWrap: {
+      position: 'relative',
+      justifyContent: 'center',
+    },
+    input: {
+      backgroundColor: surfaceTint(theme, 0.07),
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: surfaceTint(theme, 0.18),
+      paddingHorizontal: 12,
+      paddingVertical: 13,
+      paddingRight: 44,
+      color: colors.text,
+      fontSize: 16,
+    },
+    eye: {
+      position: 'absolute',
+      right: 12,
+      padding: 4,
+    },
+    hintBox: {
+      backgroundColor: 'rgba(124,92,255,0.10)',
+      borderWidth: 1,
+      borderColor: 'rgba(124,92,255,0.25)',
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      gap: 3,
+    },
+    hintText: {
+      color: colors.muted,
+      fontSize: 12,
+      lineHeight: 18,
+    },
+    submit: { marginTop: 4 },
+  });
+}

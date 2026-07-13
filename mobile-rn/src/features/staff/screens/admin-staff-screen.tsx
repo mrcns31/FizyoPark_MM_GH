@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import { Alert, FlatList, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Swipeable } from 'react-native-gesture-handler';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,7 +9,8 @@ import { Card, Muted } from '../../../components/ui';
 import { Fab } from '../../../components/fab';
 import { ScreenHeader } from '../../../components/screen-header';
 import { useResponsive } from '../../../lib/responsive';
-import { colors } from '../../../theme/colors';
+import { useTheme } from '../../theme';
+import { type AppColors } from '../../../theme/colors';
 import { toDateStr } from '../../../lib/datetime';
 import { promptAdminPassword } from '../../../lib/admin-password';
 import { getSessions } from '../../sessions/api/sessions';
@@ -26,6 +27,8 @@ function StaffCard({
   onDelete: () => void;
 }) {
   const swipeRef = useRef<Swipeable>(null);
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   return (
     <Swipeable
@@ -37,7 +40,7 @@ function StaffCard({
           style={styles.swipeEdit}
           onPress={() => { swipeRef.current?.close(); onEdit(); }}
         >
-          <Ionicons name="create-outline" size={22} color="#fff" />
+          <Ionicons name="create-outline" size={22} color={colors.white} />
         </TouchableOpacity>
       )}
       renderRightActions={() => (
@@ -45,7 +48,7 @@ function StaffCard({
           style={styles.swipeDelete}
           onPress={() => { swipeRef.current?.close(); onDelete(); }}
         >
-          <Ionicons name="trash-outline" size={22} color="#fff" />
+          <Ionicons name="trash-outline" size={22} color={colors.white} />
         </TouchableOpacity>
       )}
     >
@@ -63,6 +66,8 @@ function StaffCard({
 /** Personel listesi — swipe düzenle/sil, FAB ile ekle. */
 export function AdminStaffScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { data } = useStaff();
   const del = useDeleteStaff();
   const { contentMaxWidth, gutter } = useResponsive();
@@ -128,34 +133,36 @@ export function AdminStaffScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  formerBtn: { padding: 6 },
-  list: { paddingTop: 16, paddingBottom: 96, gap: 10, flexGrow: 1 },
-  card: {
-    padding: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    backgroundColor: colors.panel,
-  },
-  name: { fontSize: 15, fontWeight: '700', color: colors.text, marginBottom: 4 },
-  meta: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  metaText: { fontSize: 12, color: colors.muted, marginRight: 8 },
-  swipeEdit: {
-    backgroundColor: colors.accent,
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: 64,
-    borderRadius: 12,
-    marginRight: 4,
-  },
-  swipeDelete: {
-    backgroundColor: colors.danger,
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: 64,
-    borderRadius: 12,
-    marginLeft: 4,
-  },
-});
+function makeStyles(colors: AppColors) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: colors.bg },
+    formerBtn: { padding: 6 },
+    list: { paddingTop: 16, paddingBottom: 96, gap: 10, flexGrow: 1 },
+    card: {
+      padding: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      backgroundColor: colors.panel,
+    },
+    name: { fontSize: 15, fontWeight: '700', color: colors.text, marginBottom: 4 },
+    meta: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+    metaText: { fontSize: 12, color: colors.muted, marginRight: 8 },
+    swipeEdit: {
+      backgroundColor: colors.accent,
+      justifyContent: 'center',
+      alignItems: 'center',
+      width: 64,
+      borderRadius: 12,
+      marginRight: 4,
+    },
+    swipeDelete: {
+      backgroundColor: colors.danger,
+      justifyContent: 'center',
+      alignItems: 'center',
+      width: 64,
+      borderRadius: 12,
+      marginLeft: 4,
+    },
+  });
+}

@@ -10,7 +10,8 @@ import { Card, Muted } from '../../../components/ui';
 import { ScreenHeader } from '../../../components/screen-header';
 import { useIncremental } from '../../../lib/use-incremental';
 import { useResponsive } from '../../../lib/responsive';
-import { colors } from '../../../theme/colors';
+import { useTheme } from '../../theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../../../theme/colors';
 import { useMemberPackages } from '../../member-packages/api/hooks';
 import { useMembers } from '../api/hooks';
 
@@ -33,6 +34,8 @@ interface Row {
 
 /** Paketi Bitmiş Üyeler — aktif paketi olmayıp geçmiş paketi olan üyeler (web `renderExpiredMembershipsTable`). */
 export function ExpiredMembershipsScreen() {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const router = useRouter();
   const { data: members } = useMembers();
   const { data: allPackages } = useMemberPackages();
@@ -208,46 +211,48 @@ export function ExpiredMembershipsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  filters: { gap: 8, paddingTop: 4, paddingBottom: 8 },
-  list: { paddingBottom: 24, gap: 10, flexGrow: 1 },
-  card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-  },
-  cardLeft: { flex: 1, gap: 4 },
-  name: { fontSize: 15, fontWeight: '700', color: colors.text },
-  metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  meta: { fontSize: 12, color: colors.muted },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  iconBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sortRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  sortChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-  },
-  sortChipOn: { borderColor: 'rgba(124,92,255,0.5)', backgroundColor: 'rgba(124,92,255,0.15)' },
-  sortChipText: { fontSize: 12, color: colors.muted, fontWeight: '600' },
-  sortChipTextOn: { color: colors.text },
-  countText: { fontSize: 12, color: colors.muted, paddingHorizontal: 6, alignSelf: 'center' },
-});
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: colors.bg },
+    filters: { gap: 8, paddingTop: 4, paddingBottom: 8 },
+    list: { paddingBottom: 24, gap: 10, flexGrow: 1 },
+    card: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      padding: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      backgroundColor: surfaceTint(theme, 0.03),
+    },
+    cardLeft: { flex: 1, gap: 4 },
+    name: { fontSize: 15, fontWeight: '700', color: colors.text },
+    metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+    meta: { fontSize: 12, color: colors.muted },
+    actions: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    iconBtn: {
+      width: 38,
+      height: 38,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: surfaceTint(theme, 0.03),
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    sortRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    sortChip: {
+      paddingHorizontal: 10,
+      paddingVertical: 6,
+      borderRadius: 8,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: surfaceTint(theme, 0.03),
+    },
+    sortChipOn: { borderColor: 'rgba(124,92,255,0.5)', backgroundColor: 'rgba(124,92,255,0.15)' },
+    sortChipText: { fontSize: 12, color: colors.muted, fontWeight: '600' },
+    sortChipTextOn: { color: colors.text },
+    countText: { fontSize: 12, color: colors.muted, paddingHorizontal: 6, alignSelf: 'center' },
+  });
+}

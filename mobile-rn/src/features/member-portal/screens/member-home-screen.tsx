@@ -8,7 +8,8 @@ import { Badge, Button, Card, Muted, SectionTitle } from '../../../components/ui
 import { BottomSheet } from '../../../components/bottom-sheet';
 import { formatDayLabel, formatSessionRange, formatTime, weekdayLong, dayOfWeekOfTs } from '../../../lib/datetime';
 import { useResponsive } from '../../../lib/responsive';
-import { colors } from '../../../theme/colors';
+import { useTheme } from '../../theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../../../theme/colors';
 import { useAuth } from '../../auth';
 import { useCancelMemberSession, useMarkBroadcastSeen, useMemberDashboard, useMyBroadcasts } from '../api/hooks';
 import type { MemberBroadcast, MemberNotification, MemberSession } from '../api/member-portal';
@@ -39,6 +40,8 @@ function statusLabel(s: MemberSession): string {
 
 /** Üye ana ekranı — web renderMemberHome paritesi. */
 export function MemberHomeScreen() {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const { user } = useAuth();
   const { data, isLoading, error, refetch } = useMemberDashboard();
   const [manualRefreshing, setManualRefreshing] = useState(false);
@@ -260,7 +263,7 @@ export function MemberHomeScreen() {
             />
             <Pressable style={styles.rescheduleRow} onPress={() => setWantReschedule((v) => !v)} hitSlop={6}>
               <View style={[styles.check, wantReschedule && styles.checkOn]}>
-                {wantReschedule ? <Ionicons name="checkmark" size={15} color="#fff" /> : null}
+                {wantReschedule ? <Ionicons name="checkmark" size={15} color={colors.white} /> : null}
               </View>
               <Text style={styles.rescheduleText}>Yeni randevu talep etmek istiyorum</Text>
             </Pressable>
@@ -281,6 +284,8 @@ export function MemberHomeScreen() {
 }
 
 function Stat({ value, label, tone }: { value: number; label: string; tone?: 'green' }) {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   return (
     <View style={styles.stat}>
       <Text style={[styles.statValue, tone === 'green' && { color: colors.ok }]}>{value}</Text>
@@ -289,112 +294,114 @@ function Stat({ value, label, tone }: { value: number; label: string; tone?: 'gr
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  fixed: { paddingTop: 8, paddingBottom: 8, gap: 12 },
-  hello: { fontSize: 20, fontWeight: '800', color: colors.text },
-  error: { color: colors.danger },
-  notif: { backgroundColor: 'rgba(255,149,0,0.12)', borderColor: 'rgba(255,149,0,0.3)' },
-  notifText: { color: '#FFD9A0', fontSize: 14 },
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: colors.bg },
+    fixed: { paddingTop: 8, paddingBottom: 8, gap: 12 },
+    hello: { fontSize: 20, fontWeight: '800', color: colors.text },
+    error: { color: colors.danger },
+    notif: { backgroundColor: 'rgba(255,149,0,0.12)', borderColor: 'rgba(255,149,0,0.3)' },
+    notifText: { color: colors.notification, fontSize: 14 },
 
-  pkgCard: {
-    backgroundColor: colors.panel,
-    borderWidth: 1, borderColor: colors.border,
-    borderRadius: colors.radius, padding: 10, gap: 4,
-  },
-  pkgName: { flex: 1, fontSize: 14, fontWeight: '700', color: colors.text, marginRight: 8 },
-  statsRow: { flexDirection: 'row', gap: 8 },
-  stat: {
-    flex: 1, backgroundColor: colors.panel2,
-    borderRadius: 10, borderWidth: 1, borderColor: colors.border,
-    paddingVertical: 6, alignItems: 'center',
-  },
-  statValue: { fontSize: 17, fontWeight: '800', color: colors.text },
-  statLabel: { fontSize: 10, color: colors.muted, marginTop: 1 },
+    pkgCard: {
+      backgroundColor: colors.panel,
+      borderWidth: 1, borderColor: colors.border,
+      borderRadius: colors.radius, padding: 10, gap: 4,
+    },
+    pkgName: { flex: 1, fontSize: 14, fontWeight: '700', color: colors.text, marginRight: 8 },
+    statsRow: { flexDirection: 'row', gap: 8 },
+    stat: {
+      flex: 1, backgroundColor: colors.panel2,
+      borderRadius: 10, borderWidth: 1, borderColor: colors.border,
+      paddingVertical: 6, alignItems: 'center',
+    },
+    statValue: { fontSize: 17, fontWeight: '800', color: colors.text },
+    statLabel: { fontSize: 10, color: colors.muted, marginTop: 1 },
 
-  sectionLabel: { color: colors.muted, fontSize: 13, fontWeight: '700' },
-  tabs: { flexDirection: 'row', gap: 8 },
-  tab: {
-    flex: 1, paddingVertical: 9, borderRadius: 10,
-    alignItems: 'center', borderWidth: 1,
-    borderColor: colors.border, backgroundColor: 'rgba(255,255,255,0.03)',
-  },
-  tabOn: { backgroundColor: 'rgba(124,92,255,0.20)', borderColor: 'rgba(124,92,255,0.5)' },
-  tabText: { color: colors.muted, fontWeight: '700', fontSize: 13 },
-  tabTextOn: { color: colors.text },
+    sectionLabel: { color: colors.muted, fontSize: 13, fontWeight: '700' },
+    tabs: { flexDirection: 'row', gap: 8 },
+    tab: {
+      flex: 1, paddingVertical: 9, borderRadius: 10,
+      alignItems: 'center', borderWidth: 1,
+      borderColor: colors.border, backgroundColor: surfaceTint(theme, 0.03),
+    },
+    tabOn: { backgroundColor: 'rgba(124,92,255,0.20)', borderColor: 'rgba(124,92,255,0.5)' },
+    tabText: { color: colors.muted, fontWeight: '700', fontSize: 13 },
+    tabTextOn: { color: colors.text },
 
-  list: { paddingTop: 8, paddingBottom: 24, gap: 8 },
+    list: { paddingTop: 8, paddingBottom: 24, gap: 8 },
 
-  sessionCard: {
-    padding: 12, borderWidth: 1,
-    borderColor: colors.border, borderRadius: 12,
-    backgroundColor: colors.panel, gap: 6,
-  },
-  sessionCardPast: { opacity: 0.6 },
+    sessionCard: {
+      padding: 12, borderWidth: 1,
+      borderColor: colors.border, borderRadius: 12,
+      backgroundColor: colors.panel, gap: 6,
+    },
+    sessionCardPast: { opacity: 0.6 },
 
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-  rowLeft: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, flex: 1 },
-  seqNo: { color: colors.muted, fontSize: 13, fontWeight: '700', minWidth: 22, paddingTop: 2 },
-  seqNoPast: { color: 'rgba(232,236,255,0.3)' },
-  dateText: { fontSize: 14, fontWeight: '700', color: colors.text },
-  dateTextPast: { color: colors.muted },
-  dayName: { fontSize: 11, color: colors.muted, marginTop: 1 },
+    rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+    rowLeft: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, flex: 1 },
+    seqNo: { color: colors.muted, fontSize: 13, fontWeight: '700', minWidth: 22, paddingTop: 2 },
+    seqNoPast: { color: surfaceTint(theme, 0.3) },
+    dateText: { fontSize: 14, fontWeight: '700', color: colors.text },
+    dateTextPast: { color: colors.muted },
+    dayName: { fontSize: 11, color: colors.muted, marginTop: 1 },
 
-  cancelBtn: {
-    paddingHorizontal: 12, paddingVertical: 5,
-    borderRadius: 8, borderWidth: 1,
-    borderColor: 'rgba(255,77,109,0.5)',
-    backgroundColor: 'rgba(255,77,109,0.1)',
-    marginLeft: 8,
-  },
-  cancelBtnText: { color: colors.danger, fontSize: 12, fontWeight: '700' },
-  lockedBtn: {
-    paddingHorizontal: 10, paddingVertical: 5,
-    borderRadius: 8, borderWidth: 1,
-    borderColor: 'rgba(255,149,0,0.4)',
-    backgroundColor: 'rgba(255,149,0,0.08)',
-    marginLeft: 8,
-  },
-  lockedBtnText: { color: colors.fpOrange, fontSize: 11, fontWeight: '600' },
+    cancelBtn: {
+      paddingHorizontal: 12, paddingVertical: 5,
+      borderRadius: 8, borderWidth: 1,
+      borderColor: 'rgba(255,77,109,0.5)',
+      backgroundColor: 'rgba(255,77,109,0.1)',
+      marginLeft: 8,
+    },
+    cancelBtnText: { color: colors.danger, fontSize: 12, fontWeight: '700' },
+    lockedBtn: {
+      paddingHorizontal: 10, paddingVertical: 5,
+      borderRadius: 8, borderWidth: 1,
+      borderColor: 'rgba(255,149,0,0.4)',
+      backgroundColor: 'rgba(255,149,0,0.08)',
+      marginLeft: 8,
+    },
+    lockedBtnText: { color: colors.fpOrange, fontSize: 11, fontWeight: '600' },
 
-  badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-  cancelReasonText: { color: colors.muted, fontSize: 12, flex: 1 },
+    badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+    cancelReasonText: { color: colors.muted, fontSize: 12, flex: 1 },
 
-  notifOverlay: {
-    flex: 1, backgroundColor: 'rgba(0,0,0,0.6)',
-    alignItems: 'center', justifyContent: 'center', padding: 24,
-  },
-  notifModal: {
-    backgroundColor: '#1a1a2e', borderRadius: 18,
-    padding: 24, width: '100%', maxWidth: 420, gap: 14,
-    borderWidth: 1, borderColor: 'rgba(124,92,255,0.3)',
-  },
-  notifModalTitle: { fontSize: 18, fontWeight: '800', color: colors.text },
-  notifModalBody: { fontSize: 15, color: 'rgba(232,236,255,0.85)', lineHeight: 22 },
-  notifCloseBtn: {
-    marginTop: 4, paddingVertical: 13, borderRadius: 12,
-    backgroundColor: colors.accent, alignItems: 'center',
-  },
-  notifCloseBtnText: { color: '#fff', fontWeight: '800', fontSize: 15 },
-  lockedInfo: { color: colors.muted, fontSize: 11, marginTop: 2 },
-  flexibleInfo: { color: colors.muted, fontSize: 12, lineHeight: 17 },
-  cancelErrorText: { color: colors.danger, fontSize: 13 },
-  cancelSheet: { gap: 12 },
-  cancelSheetDate: { color: colors.text, fontWeight: '700', fontSize: 15 },
-  cancelLabel: { color: colors.muted, fontSize: 12 },
-  cancelInput: {
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    borderRadius: 12, borderWidth: 1, borderColor: colors.border,
-    paddingHorizontal: 12, paddingVertical: 10,
-    minHeight: 76, textAlignVertical: 'top',
-    color: colors.text, fontSize: 16,
-  },
-  rescheduleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  check: {
-    width: 22, height: 22, borderRadius: 6, borderWidth: 1,
-    borderColor: colors.border, backgroundColor: 'rgba(255,255,255,0.03)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  checkOn: { backgroundColor: colors.accent, borderColor: colors.accent },
-  rescheduleText: { flex: 1, color: colors.text, fontSize: 14 },
-});
+    notifOverlay: {
+      flex: 1, backgroundColor: colors.overlay,
+      alignItems: 'center', justifyContent: 'center', padding: 24,
+    },
+    notifModal: {
+      backgroundColor: colors.modalBg, borderRadius: 18,
+      padding: 24, width: '100%', maxWidth: 420, gap: 14,
+      borderWidth: 1, borderColor: 'rgba(124,92,255,0.3)',
+    },
+    notifModalTitle: { fontSize: 18, fontWeight: '800', color: colors.text },
+    notifModalBody: { fontSize: 15, color: surfaceTint(theme, 0.85), lineHeight: 22 },
+    notifCloseBtn: {
+      marginTop: 4, paddingVertical: 13, borderRadius: 12,
+      backgroundColor: colors.accent, alignItems: 'center',
+    },
+    notifCloseBtnText: { color: colors.white, fontWeight: '800', fontSize: 15 },
+    lockedInfo: { color: colors.muted, fontSize: 11, marginTop: 2 },
+    flexibleInfo: { color: colors.muted, fontSize: 12, lineHeight: 17 },
+    cancelErrorText: { color: colors.danger, fontSize: 13 },
+    cancelSheet: { gap: 12 },
+    cancelSheetDate: { color: colors.text, fontWeight: '700', fontSize: 15 },
+    cancelLabel: { color: colors.muted, fontSize: 12 },
+    cancelInput: {
+      backgroundColor: surfaceTint(theme, 0.03),
+      borderRadius: 12, borderWidth: 1, borderColor: colors.border,
+      paddingHorizontal: 12, paddingVertical: 10,
+      minHeight: 76, textAlignVertical: 'top',
+      color: colors.text, fontSize: 16,
+    },
+    rescheduleRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    check: {
+      width: 22, height: 22, borderRadius: 6, borderWidth: 1,
+      borderColor: colors.border, backgroundColor: surfaceTint(theme, 0.03),
+      alignItems: 'center', justifyContent: 'center',
+    },
+    checkOn: { backgroundColor: colors.accent, borderColor: colors.accent },
+    rescheduleText: { flex: 1, color: colors.text, fontSize: 14 },
+  });
+}

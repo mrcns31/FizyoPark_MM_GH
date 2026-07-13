@@ -5,6 +5,7 @@
   var isAdmin = false;
   var sortColumn = "name";
   var sortDir = "asc";
+  var activeFilter = ""; // "" | "accepted" | "pending" | "noaccount"
 
   var SORT_LABELS = {
     name: "Ad Soyad",
@@ -52,11 +53,10 @@
   function filteredItems() {
     var q = (document.getElementById("consentsSearchInput") || {}).value || "";
     q = q.trim().toLowerCase();
-    var status = (document.getElementById("consentsStatusFilter") || {}).value || "";
     var items = allItems.filter(function (item) {
-      if (status === "accepted" && !item.consentAccepted) return false;
-      if (status === "pending" && (item.consentAccepted || !item.hasAccount)) return false;
-      if (status === "noaccount" && item.hasAccount) return false;
+      if (activeFilter === "accepted" && !item.consentAccepted) return false;
+      if (activeFilter === "pending" && (item.consentAccepted || !item.hasAccount)) return false;
+      if (activeFilter === "noaccount" && item.hasAccount) return false;
       if (!q) return true;
       var haystack = (item.memberName + " " + item.phone + " " + item.memberNo).toLowerCase();
       return haystack.indexOf(q) !== -1;
@@ -93,11 +93,19 @@
     var accepted = allItems.filter(function (i) { return i.consentAccepted; }).length;
     var noAccount = allItems.filter(function (i) { return !i.hasAccount; }).length;
     var pending = total - accepted - noAccount;
+
+    function statBtn(filterValue, extraClass, count, label) {
+      var isActive = activeFilter === filterValue;
+      return '<button type="button" class="consents-stat' + (extraClass ? ' ' + extraClass : '') +
+        (isActive ? ' is-active' : '') + '" data-filter="' + filterValue + '">' +
+        '<strong>' + count + '</strong> ' + label + '</button>';
+    }
+
     statsEl.innerHTML =
-      '<span class="consents-stat"><strong>' + total + '</strong> üye</span>' +
-      '<span class="consents-stat consents-stat--ok"><strong>' + accepted + '</strong> onayladı</span>' +
-      '<span class="consents-stat consents-stat--pending"><strong>' + pending + '</strong> onaylamadı</span>' +
-      '<span class="consents-stat"><strong>' + noAccount + '</strong> hesabı yok</span>';
+      statBtn("", "", total, "üye") +
+      statBtn("accepted", "consents-stat--ok", accepted, "onayladı") +
+      statBtn("pending", "consents-stat--pending", pending, "onaylamadı") +
+      statBtn("noaccount", "", noAccount, "hesabı yok");
   }
 
   function updateSortHeaders() {
@@ -239,8 +247,15 @@
     }
     var searchEl = document.getElementById("consentsSearchInput");
     if (searchEl) searchEl.addEventListener("input", renderItems);
-    var statusEl = document.getElementById("consentsStatusFilter");
-    if (statusEl) statusEl.addEventListener("change", renderItems);
+    var statsEl = document.getElementById("consentsStats");
+    if (statsEl) {
+      statsEl.addEventListener("click", function (e) {
+        var btn = e.target.closest("[data-filter]");
+        if (!btn) return;
+        activeFilter = btn.getAttribute("data-filter") || "";
+        renderItems();
+      });
+    }
     MOBILE_MQ.addEventListener("change", renderItems);
     document.querySelectorAll("[data-sort]").forEach(function (th) {
       th.addEventListener("click", function () {

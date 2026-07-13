@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 
@@ -6,12 +6,15 @@ import { ScreenContainer } from '../../../components/screen-container';
 import { FormField } from '../../../components/form';
 import { Button, Card } from '../../../components/ui';
 import { ApiError } from '../../../lib/api-client';
-import { colors } from '../../../theme/colors';
+import { useTheme } from '../../theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../../../theme/colors';
 import type { Package } from '../../../types/api';
 import { useCreatePackage, usePackages, useUpdatePackage } from '../api/hooks';
 
 /** Paket oluştur/düzenle. id param'ı varsa düzenleme. */
 export function PackageFormScreen() {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { data: packages } = usePackages();
@@ -77,21 +80,23 @@ export function PackageFormScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  card: { gap: 12, marginTop: 8 },
-  label: { color: colors.muted, fontSize: 12, marginBottom: 6 },
-  toggle: { flexDirection: 'row', gap: 8 },
-  toggleBtn: {
-    flex: 1,
-    paddingVertical: 11,
-    borderRadius: 10,
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  toggleActive: { backgroundColor: 'rgba(124,92,255,0.20)', borderColor: 'rgba(124,92,255,0.5)' },
-  toggleText: { color: colors.muted, fontWeight: '700' },
-  toggleTextActive: { color: colors.text },
-  submit: { marginTop: 14, marginBottom: 8 },
-});
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    card: { gap: 12, marginTop: 8 },
+    label: { color: colors.muted, fontSize: 12, marginBottom: 6 },
+    toggle: { flexDirection: 'row', gap: 8 },
+    toggleBtn: {
+      flex: 1,
+      paddingVertical: 11,
+      borderRadius: 10,
+      alignItems: 'center',
+      backgroundColor: surfaceTint(theme, 0.03),
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    toggleActive: { backgroundColor: 'rgba(124,92,255,0.20)', borderColor: 'rgba(124,92,255,0.5)' },
+    toggleText: { color: colors.muted, fontWeight: '700' },
+    toggleTextActive: { color: colors.text },
+    submit: { marginTop: 14, marginBottom: 8 },
+  });
+}

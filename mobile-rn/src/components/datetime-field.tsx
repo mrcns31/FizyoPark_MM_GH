@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from '@react-native-community/datetimepicker';
 
 import { SheetModal } from './sheet-modal';
 import { formatDayLabel, formatTime } from '../lib/datetime';
-import { colors } from '../theme/colors';
+import { useTheme } from '../features/theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../theme/colors';
 
 type PickerMode = 'date' | 'time';
 
@@ -26,6 +27,8 @@ export function DateTimeField({
   /** Saat modunda dakika adımı (ör. 30 → 00/30). */
   minuteInterval?: 1 | 2 | 3 | 4 | 5 | 6 | 10 | 12 | 15 | 20 | 30;
 }) {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const [mode, setMode] = useState<PickerMode | null>(null);
   const [iosTemp, setIosTemp] = useState<Date>(value);
 
@@ -100,42 +103,44 @@ export function DateTimeField({
   );
 }
 
-const styles = StyleSheet.create({
-  wrap: { gap: 6 },
-  label: { color: colors.muted, fontSize: 12, marginBottom: 2 },
-  row: { flexDirection: 'row', gap: 8 },
-  btn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-  },
-  timeBtn: { flex: 0, minWidth: 110, justifyContent: 'center' },
-  btnText: { color: colors.text, fontSize: 15, fontWeight: '600' },
-  sheet: {
-    backgroundColor: colors.panel,
-    borderTopLeftRadius: 18,
-    borderTopRightRadius: 18,
-    borderTopWidth: 1,
-    borderColor: colors.border,
-    paddingBottom: 24,
-  },
-  sheetHead: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  cancel: { color: colors.muted, fontSize: 16 },
-  done: { color: colors.accent, fontSize: 16, fontWeight: '700' },
-  spinner: { alignSelf: 'center' },
-});
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    wrap: { gap: 6 },
+    label: { color: colors.muted, fontSize: 12, marginBottom: 2 },
+    row: { flexDirection: 'row', gap: 8 },
+    btn: {
+      flex: 1,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 12,
+      paddingVertical: 12,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: surfaceTint(theme, 0.03),
+    },
+    timeBtn: { flex: 0, minWidth: 110, justifyContent: 'center' },
+    btnText: { color: colors.text, fontSize: 15, fontWeight: '600' },
+    sheet: {
+      backgroundColor: colors.panel,
+      borderTopLeftRadius: 18,
+      borderTopRightRadius: 18,
+      borderTopWidth: 1,
+      borderColor: colors.border,
+      paddingBottom: 24,
+    },
+    sheetHead: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 16,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    cancel: { color: colors.muted, fontSize: 16 },
+    done: { color: colors.accent, fontSize: 16, fontWeight: '700' },
+    spinner: { alignSelf: 'center' },
+  });
+}

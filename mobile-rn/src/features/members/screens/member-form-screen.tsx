@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Alert, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 
@@ -8,12 +8,15 @@ import { FormField } from '../../../components/form';
 import { Button, Card } from '../../../components/ui';
 import { ApiError } from '../../../lib/api-client';
 import { useResponsive } from '../../../lib/responsive';
-import { colors } from '../../../theme/colors';
+import { useTheme } from '../../theme';
+import { type AppColors } from '../../../theme/colors';
 import type { Member } from '../../../types/api';
 import { useCreateMember, useMembers, useResetMemberPassword, useUpdateMember } from '../api/hooks';
 
 /** Üye oluştur/düzenle — web üye kartıyla aynı alanlar. */
 export function MemberFormScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { data: members } = useMembers();
@@ -205,15 +208,17 @@ export function MemberFormScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  twoCol: { flexDirection: 'row', gap: 10, flex: 1, overflow: 'hidden' },
-  col: { flex: 1, gap: 0 },
-  section: { color: colors.muted, fontSize: 11, fontWeight: '700', marginTop: 8, marginBottom: 4, letterSpacing: 0.5 },
-  card: { gap: 8, marginTop: 0, paddingVertical: 8 },
-  fieldLabel: { color: colors.muted, fontSize: 12, marginBottom: 6 },
-  noRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  noLabel: { color: colors.muted, fontSize: 12 },
-  noValue: { color: colors.text, fontSize: 14, fontWeight: '700' },
-  packages: { marginTop: 8 },
-  submit: { marginTop: 6, marginBottom: 4 },
-});
+function makeStyles(colors: AppColors) {
+  return StyleSheet.create({
+    twoCol: { flexDirection: 'row', gap: 10, flex: 1, overflow: 'hidden' },
+    col: { flex: 1, gap: 0 },
+    section: { color: colors.muted, fontSize: 11, fontWeight: '700', marginTop: 8, marginBottom: 4, letterSpacing: 0.5 },
+    card: { gap: 8, marginTop: 0, paddingVertical: 8 },
+    fieldLabel: { color: colors.muted, fontSize: 12, marginBottom: 6 },
+    noRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    noLabel: { color: colors.muted, fontSize: 12 },
+    noValue: { color: colors.text, fontSize: 14, fontWeight: '700' },
+    packages: { marginTop: 8 },
+    submit: { marginTop: 6, marginBottom: 4 },
+  });
+}

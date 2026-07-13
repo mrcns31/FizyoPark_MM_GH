@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Alert, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { Button, Card, SectionTitle } from '../../../components/ui';
 import { ApiError } from '../../../lib/api-client';
-import { colors } from '../../../theme/colors';
+import { useTheme } from '../../theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../../../theme/colors';
 import { useChangePassword } from '../api/hooks';
 
 function validatePassword(pw: string): string | null {
@@ -17,6 +18,8 @@ function validatePassword(pw: string): string | null {
 
 /** Şifre değiştirme formu. `bare`=true → Card/başlık olmadan (bottom sheet içinde). */
 export function ChangePasswordForm({ bare = false }: { bare?: boolean }) {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const change = useChangePassword();
   const [cur, setCur] = useState('');
   const [pw, setPw] = useState('');
@@ -108,6 +111,8 @@ function Field({
   show: boolean;
   onToggle: () => void;
 }) {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   return (
     <View style={styles.fieldWrap}>
       <Text style={styles.label}>{label}</Text>
@@ -130,56 +135,58 @@ function Field({
   );
 }
 
-const styles = StyleSheet.create({
-  bare: { gap: 12 },
-  fieldWrap: { gap: 6 },
-  label: {
-    color: colors.text,
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  inputWrap: {
-    position: 'relative',
-    justifyContent: 'center',
-  },
-  input: {
-    backgroundColor: 'rgba(255,255,255,0.07)',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.18)',
-    paddingHorizontal: 12,
-    paddingVertical: 13,
-    paddingRight: 44,
-    color: colors.text,
-    fontSize: 16,
-  },
-  eye: {
-    position: 'absolute',
-    right: 12,
-    padding: 4,
-  },
-  hintBox: {
-    backgroundColor: 'rgba(124,92,255,0.10)',
-    borderWidth: 1,
-    borderColor: 'rgba(124,92,255,0.25)',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    gap: 3,
-  },
-  hintText: {
-    color: colors.muted,
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  error: {
-    color: colors.danger,
-    fontSize: 13,
-    backgroundColor: 'rgba(255,77,109,0.10)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,77,109,0.25)',
-    borderRadius: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-});
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    bare: { gap: 12 },
+    fieldWrap: { gap: 6 },
+    label: {
+      color: colors.text,
+      fontSize: 13,
+      fontWeight: '500',
+    },
+    inputWrap: {
+      position: 'relative',
+      justifyContent: 'center',
+    },
+    input: {
+      backgroundColor: surfaceTint(theme, 0.07),
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: surfaceTint(theme, 0.18),
+      paddingHorizontal: 12,
+      paddingVertical: 13,
+      paddingRight: 44,
+      color: colors.text,
+      fontSize: 16,
+    },
+    eye: {
+      position: 'absolute',
+      right: 12,
+      padding: 4,
+    },
+    hintBox: {
+      backgroundColor: 'rgba(124,92,255,0.10)',
+      borderWidth: 1,
+      borderColor: 'rgba(124,92,255,0.25)',
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      gap: 3,
+    },
+    hintText: {
+      color: colors.muted,
+      fontSize: 12,
+      lineHeight: 18,
+    },
+    error: {
+      color: colors.danger,
+      fontSize: 13,
+      backgroundColor: 'rgba(255,77,109,0.10)',
+      borderWidth: 1,
+      borderColor: 'rgba(255,77,109,0.25)',
+      borderRadius: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 8,
+    },
+  });
+}

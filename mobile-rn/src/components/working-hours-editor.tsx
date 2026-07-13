@@ -1,8 +1,10 @@
+import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { TimeField } from './time-field';
-import { colors } from '../theme/colors';
+import { useTheme } from '../features/theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../theme/colors';
 import { defaultDayHours, type DayHours, type WorkingHours } from '../features/settings/api/settings';
 
 // Web ile birebir: 0=Pazar .. 6=Cumartesi.
@@ -36,6 +38,8 @@ export function WorkingHoursEditor({
   hours: WorkingHours;
   onChange: (hours: WorkingHours) => void;
 }) {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   function setDay(day: number, patch: Partial<DayHours>) {
     onChange({ ...hours, [day]: { ...(hours[day] ?? defaultDayHours()), ...patch } });
   }
@@ -55,7 +59,7 @@ export function WorkingHoursEditor({
           <View key={day} style={[styles.row, day === 6 && styles.rowLast]}>
             <Pressable style={styles.left} onPress={() => toggle(day)} hitSlop={6}>
               <View style={[styles.check, enabled && styles.checkOn]}>
-                {enabled ? <Ionicons name="checkmark" size={15} color="#fff" /> : null}
+                {enabled ? <Ionicons name="checkmark" size={15} color={colors.white} /> : null}
               </View>
               <Text style={styles.dayName}>{DAY_NAMES[day]}</Text>
             </Pressable>
@@ -71,38 +75,40 @@ export function WorkingHoursEditor({
   );
 }
 
-const styles = StyleSheet.create({
-  list: {
-    backgroundColor: colors.panel,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: colors.radius,
-    overflow: 'hidden',
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  rowLast: { borderBottomWidth: 0 },
-  left: { flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1 },
-  check: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkOn: { backgroundColor: colors.accent, borderColor: colors.accent },
-  dayName: { color: colors.text, fontSize: 15, fontWeight: '600' },
-  times: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 },
-  sep: { color: colors.muted, fontSize: 15 },
-});
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    list: {
+      backgroundColor: colors.panel,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: colors.radius,
+      overflow: 'hidden',
+    },
+    row: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 10,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    rowLast: { borderBottomWidth: 0 },
+    left: { flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 1 },
+    check: {
+      width: 22,
+      height: 22,
+      borderRadius: 6,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: surfaceTint(theme, 0.03),
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    checkOn: { backgroundColor: colors.accent, borderColor: colors.accent },
+    dayName: { color: colors.text, fontSize: 15, fontWeight: '600' },
+    times: { flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 0 },
+    sep: { color: colors.muted, fontSize: 15 },
+  });
+}

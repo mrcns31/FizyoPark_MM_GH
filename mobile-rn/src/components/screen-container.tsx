@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -10,7 +11,8 @@ import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
 
 import { ScreenHeader } from './screen-header';
 import { useResponsive } from '../lib/responsive';
-import { colors } from '../theme/colors';
+import { useTheme } from '../features/theme';
+import type { AppColors } from '../theme/colors';
 
 /**
  * Koyu temalı, güvenli alanlı, responsive ekran kabı.
@@ -37,6 +39,8 @@ export function ScreenContainer({
   onBack?: () => void;
   style?: ViewStyle;
 }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { contentMaxWidth, gutter } = useResponsive();
   const inner: ViewStyle = {
     width: '100%',
@@ -92,10 +96,12 @@ export function ScreenContainer({
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  flex: { flex: 1 },
-  scrollContent: { flexGrow: 1, paddingTop: 16, paddingBottom: 40 },
-  scrollCenter: { justifyContent: 'center' },
-  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
-});
+function makeStyles(colors: AppColors) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: colors.bg },
+    flex: { flex: 1 },
+    scrollContent: { flexGrow: 1, paddingTop: 16, paddingBottom: 40 },
+    scrollCenter: { justifyContent: 'center' },
+    center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  });
+}

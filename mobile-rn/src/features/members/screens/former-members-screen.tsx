@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Alert, FlatList, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,7 +9,8 @@ import { Badge, Card, Muted } from '../../../components/ui';
 import { ScreenHeader } from '../../../components/screen-header';
 import { SheetModal } from '../../../components/sheet-modal';
 import { useResponsive } from '../../../lib/responsive';
-import { colors } from '../../../theme/colors';
+import { useTheme } from '../../theme';
+import { type AppColors } from '../../../theme/colors';
 import { useFormerMemberPackages, useReactivateMember } from '../api/hooks';
 import { searchFormerMembers, type FormerMember, type FormerMemberPackage } from '../api/members';
 
@@ -38,6 +39,8 @@ function pkgStatusLabel(s: string): string {
 
 /* ── Paket geçmişi sheet ── */
 function PackagesSheet({ memberId, memberName, onClose }: { memberId: number | null; memberName: string; onClose: () => void }) {
+  const { colors } = useTheme();
+  const sheetStyles = useMemo(() => makeSheetStyles(colors), [colors]);
   const { data, isLoading } = useFormerMemberPackages(memberId);
   const router = useRouter();
   return (
@@ -74,6 +77,8 @@ function PackagesSheet({ memberId, memberName, onClose }: { memberId: number | n
 
 /* ── Sonuç kartı (swipe: sağ=paketler, sol=aktif et) ── */
 function ResultCard({ m, onPackages, onReactivate }: { m: FormerMember; onPackages: () => void; onReactivate: () => void }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const swipeRef = useRef<Swipeable>(null);
   return (
     <Swipeable
@@ -82,12 +87,12 @@ function ResultCard({ m, onPackages, onReactivate }: { m: FormerMember; onPackag
       overshootRight={false}
       renderLeftActions={() => (
         <TouchableOpacity style={styles.swipePackages} onPress={() => { swipeRef.current?.close(); onPackages(); }}>
-          <Ionicons name="list-outline" size={22} color="#fff" />
+          <Ionicons name="list-outline" size={22} color={colors.white} />
         </TouchableOpacity>
       )}
       renderRightActions={() => (
         <TouchableOpacity style={styles.swipeReactivate} onPress={() => { swipeRef.current?.close(); onReactivate(); }}>
-          <Ionicons name="refresh" size={20} color="#fff" />
+          <Ionicons name="refresh" size={20} color={colors.white} />
           <Text style={styles.swipeText}>Aktif Et</Text>
         </TouchableOpacity>
       )}
@@ -113,6 +118,8 @@ function ResultCard({ m, onPackages, onReactivate }: { m: FormerMember; onPackag
 
 /** Eski Üyeler — arama tabanlı (Paket Süresi Güncelle mantığı). */
 export function FormerMembersScreen() {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const router = useRouter();
   const reactivate = useReactivateMember();
   const { contentMaxWidth, gutter } = useResponsive();
@@ -219,55 +226,59 @@ export function FormerMembersScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  searchBox: { paddingTop: 12, paddingBottom: 8, gap: 6 },
-  inputRow: { flexDirection: 'row', gap: 6, alignItems: 'center' },
-  input: {
-    flex: 1, height: 42, paddingHorizontal: 10,
-    color: colors.text, fontSize: 14,
-  },
-  inputFlex: { flex: 1 },
-  inputWrap: { flexDirection: 'row', alignItems: 'center', paddingRight: 8 },
-  getirBtn: {
-    height: 42, paddingHorizontal: 16, borderRadius: 10,
-    backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center',
-  },
-  getirBtnLoading: { opacity: 0.6 },
-  getirText: { color: '#fff', fontWeight: '800', fontSize: 13 },
-  errorText: { color: colors.danger, fontSize: 12, marginTop: 2 },
-  list: { paddingBottom: 24, gap: 8, flexGrow: 1 },
-  hint: { paddingTop: 32, alignItems: 'center' },
-  card: {
-    flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12,
-    borderWidth: 1, borderColor: colors.border, borderRadius: 12,
-    backgroundColor: colors.panel,
-  },
-  cardLeft: { flex: 1, gap: 4 },
-  name: { fontSize: 15, fontWeight: '700', color: colors.text },
-  metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
-  meta: { fontSize: 12, color: colors.muted },
-  swipePackages: {
-    backgroundColor: colors.accent, justifyContent: 'center', alignItems: 'center',
-    width: 60, borderRadius: 12, marginRight: 4,
-  },
-  swipeReactivate: {
-    backgroundColor: '#2BD576', justifyContent: 'center', alignItems: 'center',
-    width: 72, borderRadius: 12, marginLeft: 4, gap: 4,
-  },
-  swipeText: { color: '#fff', fontSize: 11, fontWeight: '700' },
-});
+function makeStyles(colors: AppColors) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: colors.bg },
+    searchBox: { paddingTop: 12, paddingBottom: 8, gap: 6 },
+    inputRow: { flexDirection: 'row', gap: 6, alignItems: 'center' },
+    input: {
+      flex: 1, height: 42, paddingHorizontal: 10,
+      color: colors.text, fontSize: 14,
+    },
+    inputFlex: { flex: 1 },
+    inputWrap: { flexDirection: 'row', alignItems: 'center', paddingRight: 8 },
+    getirBtn: {
+      height: 42, paddingHorizontal: 16, borderRadius: 10,
+      backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center',
+    },
+    getirBtnLoading: { opacity: 0.6 },
+    getirText: { color: colors.white, fontWeight: '800', fontSize: 13 },
+    errorText: { color: colors.danger, fontSize: 12, marginTop: 2 },
+    list: { paddingBottom: 24, gap: 8, flexGrow: 1 },
+    hint: { paddingTop: 32, alignItems: 'center' },
+    card: {
+      flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12,
+      borderWidth: 1, borderColor: colors.border, borderRadius: 12,
+      backgroundColor: colors.panel,
+    },
+    cardLeft: { flex: 1, gap: 4 },
+    name: { fontSize: 15, fontWeight: '700', color: colors.text },
+    metaRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+    meta: { fontSize: 12, color: colors.muted },
+    swipePackages: {
+      backgroundColor: colors.accent, justifyContent: 'center', alignItems: 'center',
+      width: 60, borderRadius: 12, marginRight: 4,
+    },
+    swipeReactivate: {
+      backgroundColor: '#2BD576', justifyContent: 'center', alignItems: 'center',
+      width: 72, borderRadius: 12, marginLeft: 4, gap: 4,
+    },
+    swipeText: { color: colors.white, fontSize: 11, fontWeight: '700' },
+  });
+}
 
-const sheetStyles = StyleSheet.create({
-  container: { backgroundColor: colors.panel, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 32, gap: 14, maxHeight: '80%' },
-  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginBottom: 4 },
-  title: { color: colors.text, fontSize: 16, fontWeight: '700' },
-  list: { maxHeight: 360 },
-  pkgRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
-  pkgLeft: { flex: 1, gap: 3 },
-  pkgName: { color: colors.text, fontSize: 14, fontWeight: '600' },
-  pkgMeta: { color: colors.muted, fontSize: 12 },
-  pkgRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-  closeBtn: { alignSelf: 'center', paddingHorizontal: 28, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: colors.border, marginTop: 4 },
-  closeTxt: { color: colors.muted, fontSize: 14, fontWeight: '600' },
-});
+function makeSheetStyles(colors: AppColors) {
+  return StyleSheet.create({
+    container: { backgroundColor: colors.panel, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 32, gap: 14, maxHeight: '80%' },
+    handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginBottom: 4 },
+    title: { color: colors.text, fontSize: 16, fontWeight: '700' },
+    list: { maxHeight: 360 },
+    pkgRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
+    pkgLeft: { flex: 1, gap: 3 },
+    pkgName: { color: colors.text, fontSize: 14, fontWeight: '600' },
+    pkgMeta: { color: colors.muted, fontSize: 12 },
+    pkgRight: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    closeBtn: { alignSelf: 'center', paddingHorizontal: 28, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: colors.border, marginTop: 4 },
+    closeTxt: { color: colors.muted, fontSize: 14, fontWeight: '600' },
+  });
+}

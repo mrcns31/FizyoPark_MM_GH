@@ -6,7 +6,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { Card, Muted } from '../../../components/ui';
 import { ScreenHeader } from '../../../components/screen-header';
 import { useResponsive } from '../../../lib/responsive';
-import { colors } from '../../../theme/colors';
+import { useTheme } from '../../theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../../../theme/colors';
 import { useLatestNotification, useNotifications } from '../api/hooks';
 import { useAuth } from '../../auth';
 import { StaffDateBar, useStaffDate } from '../../staff/context/staff-date-context';
@@ -111,6 +112,8 @@ function periodLabel(period: PeriodKey, anchor: number): string {
 }
 
 function AdminNotifications({ wide }: { wide: object }) {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const [period, setPeriod] = useState<PeriodKey>('day');
   const [anchor, setAnchor] = useState(() => Date.now());
   const [anchorReady, setAnchorReady] = useState(false);
@@ -196,6 +199,8 @@ function NotificationList({ items, isLoading, totalPages, page, setPage, wide }:
   setPage: (fn: (p: number) => number) => void;
   wide: object;
 }) {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   if (isLoading) return <ActivityIndicator color={colors.accent} style={{ marginTop: 40 }} />;
 
   return (
@@ -254,6 +259,8 @@ function NotificationList({ items, isLoading, totalPages, page, setPage, wide }:
 // ── Ana bileşen ───────────────────────────────────────────────────────────
 
 export function NotificationsScreen() {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const { contentMaxWidth, gutter } = useResponsive();
   const { user } = useAuth();
   const isStaff = user?.role === 'staff';
@@ -273,62 +280,64 @@ export function NotificationsScreen() {
 
 // ── Stiller ───────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  row: { flexDirection: 'row', gap: 6, paddingVertical: 6 },
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: colors.bg },
+    row: { flexDirection: 'row', gap: 6, paddingVertical: 6 },
 
-  periodBtn: {
-    flex: 1, paddingVertical: 8, borderRadius: 10, alignItems: 'center',
-    borderWidth: 1, borderColor: colors.border, backgroundColor: 'rgba(255,255,255,0.03)',
-  },
-  periodBtnOn: { backgroundColor: 'rgba(124,92,255,0.20)', borderColor: 'rgba(124,92,255,0.5)' },
-  periodText: { color: colors.muted, fontWeight: '700', fontSize: 13 },
-  periodTextOn: { color: colors.text },
+    periodBtn: {
+      flex: 1, paddingVertical: 8, borderRadius: 10, alignItems: 'center',
+      borderWidth: 1, borderColor: colors.border, backgroundColor: surfaceTint(theme, 0.03),
+    },
+    periodBtnOn: { backgroundColor: 'rgba(124,92,255,0.20)', borderColor: 'rgba(124,92,255,0.5)' },
+    periodText: { color: colors.muted, fontWeight: '700', fontSize: 13 },
+    periodTextOn: { color: colors.text },
 
-  navRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6 },
-  navBtn: {
-    width: 34, height: 34, borderRadius: 8, borderWidth: 1,
-    borderColor: colors.border, backgroundColor: 'rgba(255,255,255,0.04)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  navBtnOff: { opacity: 0.3 },
-  navLabel: { flex: 1, alignItems: 'center' },
-  navLabelText: { color: colors.text, fontSize: 14, fontWeight: '700' },
+    navRow: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6 },
+    navBtn: {
+      width: 34, height: 34, borderRadius: 8, borderWidth: 1,
+      borderColor: colors.border, backgroundColor: surfaceTint(theme, 0.04),
+      alignItems: 'center', justifyContent: 'center',
+    },
+    navBtnOff: { opacity: 0.3 },
+    navLabel: { flex: 1, alignItems: 'center' },
+    navLabelText: { color: colors.text, fontSize: 14, fontWeight: '700' },
 
-  chip: {
-    paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10, borderWidth: 1,
-    borderColor: colors.border, backgroundColor: 'rgba(255,255,255,0.03)',
-  },
-  chipOn: { backgroundColor: 'rgba(124,92,255,0.20)', borderColor: 'rgba(124,92,255,0.5)' },
-  chipText: { color: colors.muted, fontSize: 13, fontWeight: '700' },
-  chipTextOn: { color: colors.text },
+    chip: {
+      paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10, borderWidth: 1,
+      borderColor: colors.border, backgroundColor: surfaceTint(theme, 0.03),
+    },
+    chipOn: { backgroundColor: 'rgba(124,92,255,0.20)', borderColor: 'rgba(124,92,255,0.5)' },
+    chipText: { color: colors.muted, fontSize: 13, fontWeight: '700' },
+    chipTextOn: { color: colors.text },
 
-  list: { paddingVertical: 8, gap: 8, flexGrow: 1 },
-  item: {
-    padding: 12, borderWidth: 1, borderColor: colors.border,
-    borderRadius: 12, backgroundColor: 'rgba(255,255,255,0.03)', gap: 4,
-  },
-  itemReminder: {
-    borderColor: 'rgba(255,149,0,0.4)',
-    backgroundColor: 'rgba(255,149,0,0.06)',
-  },
-  itemCancel: {
-    borderColor: 'rgba(255,77,109,0.4)',
-    backgroundColor: 'rgba(255,77,109,0.05)',
-  },
-  itemHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  title: { flex: 1, fontSize: 14, fontWeight: '700', color: colors.text },
-  time: { color: colors.muted, fontSize: 11, flexShrink: 0 },
-  body: { color: 'rgba(232,236,255,0.75)', fontSize: 13, paddingLeft: 26 },
+    list: { paddingVertical: 8, gap: 8, flexGrow: 1 },
+    item: {
+      padding: 12, borderWidth: 1, borderColor: colors.border,
+      borderRadius: 12, backgroundColor: surfaceTint(theme, 0.03), gap: 4,
+    },
+    itemReminder: {
+      borderColor: 'rgba(255,149,0,0.4)',
+      backgroundColor: 'rgba(255,149,0,0.06)',
+    },
+    itemCancel: {
+      borderColor: 'rgba(255,77,109,0.4)',
+      backgroundColor: 'rgba(255,77,109,0.05)',
+    },
+    itemHead: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    title: { flex: 1, fontSize: 14, fontWeight: '700', color: colors.text },
+    time: { color: colors.muted, fontSize: 11, flexShrink: 0 },
+    body: { color: colors.textSecondary, fontSize: 13, paddingLeft: 26 },
 
-  pager: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, gap: 10 },
-  pageBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    paddingHorizontal: 14, paddingVertical: 9, borderRadius: 10, borderWidth: 1,
-    borderColor: colors.border, backgroundColor: 'rgba(255,255,255,0.03)',
-  },
-  pageBtnOff: { opacity: 0.4 },
-  pageBtnText: { color: colors.text, fontWeight: '700', fontSize: 13 },
-  pageBtnTextOff: { color: colors.muted },
-  pageInfo: { color: colors.muted, fontSize: 13 },
-});
+    pager: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, gap: 10 },
+    pageBtn: {
+      flexDirection: 'row', alignItems: 'center', gap: 4,
+      paddingHorizontal: 14, paddingVertical: 9, borderRadius: 10, borderWidth: 1,
+      borderColor: colors.border, backgroundColor: surfaceTint(theme, 0.03),
+    },
+    pageBtnOff: { opacity: 0.4 },
+    pageBtnText: { color: colors.text, fontWeight: '700', fontSize: 13 },
+    pageBtnTextOff: { color: colors.muted },
+    pageInfo: { color: colors.muted, fontSize: 13 },
+  });
+}

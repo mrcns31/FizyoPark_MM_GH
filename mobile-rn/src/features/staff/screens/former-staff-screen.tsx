@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { ActivityIndicator, Alert, FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -5,7 +6,8 @@ import { useRouter } from 'expo-router';
 import { Card, Muted } from '../../../components/ui';
 import { ScreenHeader } from '../../../components/screen-header';
 import { useResponsive } from '../../../lib/responsive';
-import { colors } from '../../../theme/colors';
+import { useTheme } from '../../theme';
+import { type AppColors } from '../../../theme/colors';
 import { useFormerStaff, useReactivateStaff } from '../api/hooks';
 import type { StaffMember } from '../api/staff';
 
@@ -25,6 +27,8 @@ function FormerStaffCard({
   onReactivate: () => void;
   busy: boolean;
 }) {
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.card}>
       <View style={styles.cardInfo}>
@@ -35,7 +39,7 @@ function FormerStaffCard({
         </View>
       </View>
       <TouchableOpacity style={styles.reactivateBtn} onPress={onReactivate} disabled={busy}>
-        {busy ? <ActivityIndicator color="#fff" size="small" /> : <Text style={styles.reactivateBtnText}>Tekrar Aktif Et</Text>}
+        {busy ? <ActivityIndicator color={colors.white} size="small" /> : <Text style={styles.reactivateBtnText}>Tekrar Aktif Et</Text>}
       </TouchableOpacity>
     </View>
   );
@@ -44,6 +48,8 @@ function FormerStaffCard({
 /** Soft-silinmiş (eski) personel listesi — admin tekrar aktif edebilir. */
 export function FormerStaffScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { data, isLoading } = useFormerStaff();
   const reactivate = useReactivateStaff();
   const { contentMaxWidth, gutter } = useResponsive();
@@ -98,30 +104,32 @@ export function FormerStaffScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  list: { paddingTop: 16, paddingBottom: 32, gap: 10, flexGrow: 1 },
-  card: {
-    padding: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    backgroundColor: colors.panel,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  cardInfo: { flex: 1 },
-  name: { fontSize: 15, fontWeight: '700', color: colors.text, marginBottom: 4 },
-  meta: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-  metaText: { fontSize: 12, color: colors.muted, marginRight: 8 },
-  reactivateBtn: {
-    backgroundColor: colors.accent,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 10,
-    minWidth: 110,
-    alignItems: 'center',
-  },
-  reactivateBtnText: { color: '#fff', fontWeight: '700', fontSize: 12 },
-});
+function makeStyles(colors: AppColors) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: colors.bg },
+    list: { paddingTop: 16, paddingBottom: 32, gap: 10, flexGrow: 1 },
+    card: {
+      padding: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      backgroundColor: colors.panel,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+    },
+    cardInfo: { flex: 1 },
+    name: { fontSize: 15, fontWeight: '700', color: colors.text, marginBottom: 4 },
+    meta: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+    metaText: { fontSize: 12, color: colors.muted, marginRight: 8 },
+    reactivateBtn: {
+      backgroundColor: colors.accent,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderRadius: 10,
+      minWidth: 110,
+      alignItems: 'center',
+    },
+    reactivateBtnText: { color: colors.white, fontWeight: '700', fontSize: 12 },
+  });
+}

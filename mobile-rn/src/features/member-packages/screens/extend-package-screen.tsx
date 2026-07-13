@@ -8,7 +8,8 @@ import { FormField } from '../../../components/form';
 import { Button, Card, ErrorBox, Muted } from '../../../components/ui';
 import { ScreenHeader } from '../../../components/screen-header';
 import { useResponsive } from '../../../lib/responsive';
-import { colors } from '../../../theme/colors';
+import { useTheme } from '../../theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../../../theme/colors';
 import { useMembers } from '../../members/api/hooks';
 import { getMemberPackages } from '../api/member-packages';
 import { useUpdateMemberPackage } from '../api/hooks';
@@ -22,6 +23,8 @@ function fmtTR(v: string): string {
 
 /** Paket Süresi Güncelle — üye ara, son paketini bul, bitiş tarihi + durumu güncelle (web `initExtendPackagePanel`). */
 export function ExtendPackageScreen() {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const router = useRouter();
   const { data: members } = useMembers();
   const update = useUpdateMemberPackage();
@@ -192,47 +195,49 @@ export function ExtendPackageScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  content: { paddingVertical: 16, gap: 12, flexGrow: 1 },
-  card: { gap: 12 },
-  label: { color: colors.muted, fontSize: 12, marginBottom: 6 },
-  dropdown: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    overflow: 'hidden',
-  },
-  dropItem: { paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
-  dropName: { color: colors.text, fontSize: 14, fontWeight: '600' },
-  dropMeta: { color: colors.muted, fontSize: 12, marginTop: 2 },
-  pkgInfo: { gap: 2 },
-  pkgName: { color: colors.text, fontSize: 15, fontWeight: '700' },
-  pkgMeta: { color: colors.muted, fontSize: 12 },
-  statusRow: { flexDirection: 'row', gap: 8 },
-  statusBtn: {
-    flex: 1,
-    paddingVertical: 11,
-    borderRadius: 10,
-    alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    borderWidth: 1,
-    borderColor: colors.border,
-  },
-  statusOn: { backgroundColor: 'rgba(124,92,255,0.20)', borderColor: 'rgba(124,92,255,0.5)' },
-  statusText: { color: colors.muted, fontWeight: '700' },
-  statusTextOn: { color: colors.text },
-  done: {
-    backgroundColor: 'rgba(43,213,118,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(43,213,118,0.35)',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
-  },
-  doneText: { color: 'rgba(216,255,232,0.96)', fontSize: 13 },
-  divider: { height: 1, backgroundColor: colors.border, marginVertical: 4 },
-  btnRow: { flexDirection: 'row', gap: 10 },
-  btnHalf: { flex: 1 },
-});
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: colors.bg },
+    content: { paddingVertical: 16, gap: 12, flexGrow: 1 },
+    card: { gap: 12 },
+    label: { color: colors.muted, fontSize: 12, marginBottom: 6 },
+    dropdown: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      backgroundColor: surfaceTint(theme, 0.03),
+      overflow: 'hidden',
+    },
+    dropItem: { paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: colors.border },
+    dropName: { color: colors.text, fontSize: 14, fontWeight: '600' },
+    dropMeta: { color: colors.muted, fontSize: 12, marginTop: 2 },
+    pkgInfo: { gap: 2 },
+    pkgName: { color: colors.text, fontSize: 15, fontWeight: '700' },
+    pkgMeta: { color: colors.muted, fontSize: 12 },
+    statusRow: { flexDirection: 'row', gap: 8 },
+    statusBtn: {
+      flex: 1,
+      paddingVertical: 11,
+      borderRadius: 10,
+      alignItems: 'center',
+      backgroundColor: surfaceTint(theme, 0.03),
+      borderWidth: 1,
+      borderColor: colors.border,
+    },
+    statusOn: { backgroundColor: 'rgba(124,92,255,0.20)', borderColor: 'rgba(124,92,255,0.5)' },
+    statusText: { color: colors.muted, fontWeight: '700' },
+    statusTextOn: { color: colors.text },
+    done: {
+      backgroundColor: 'rgba(43,213,118,0.12)',
+      borderWidth: 1,
+      borderColor: 'rgba(43,213,118,0.35)',
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderRadius: 12,
+    },
+    doneText: { color: 'rgba(216,255,232,0.96)', fontSize: 13 },
+    divider: { height: 1, backgroundColor: colors.border, marginVertical: 4 },
+    btnRow: { flexDirection: 'row', gap: 10 },
+    btnHalf: { flex: 1 },
+  });
+}

@@ -5,7 +5,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { ScreenHeader } from '../../../components/screen-header';
 import { useResponsive } from '../../../lib/responsive';
-import { colors } from '../../../theme/colors';
+import { useTheme } from '../../theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../../../theme/colors';
 import { staffColor } from '../../../lib/staff-color';
 import { useSessions } from '../../sessions/api/hooks';
 import { useStaff } from '../../staff/api/hooks';
@@ -15,6 +16,8 @@ const MONTH_NAMES = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz',
 
 /** Web renderReportsTable mantığı — aylık personel seans tablosu. */
 export function ReportsScreen() {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const { contentMaxWidth, gutter, isTablet } = useResponsive();
   const [year, setYear] = useState(new Date().getFullYear());
 
@@ -171,63 +174,65 @@ const CELL_W = 80;
 const MONTH_CELL_W = 110;
 const TOTAL_CELL_W = 70;
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: colors.bg },
 
-  yearNav: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 8,
-    gap: 4,
-  },
-  yearBtn: {
-    width: 34, height: 34,
-    borderRadius: 8, borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    alignItems: 'center', justifyContent: 'center',
-  },
-  yearLabel: { fontSize: 18, fontWeight: '800', color: colors.text, width: 60, textAlign: 'center' },
+    yearNav: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingVertical: 8,
+      gap: 4,
+    },
+    yearBtn: {
+      width: 34, height: 34,
+      borderRadius: 8, borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: surfaceTint(theme, 0.04),
+      alignItems: 'center', justifyContent: 'center',
+    },
+    yearLabel: { fontSize: 18, fontWeight: '800', color: colors.text, width: 60, textAlign: 'center' },
 
-  scroll: { flex: 1 },
-  scrollContent: { paddingBottom: 32 },
-  empty: { color: colors.muted, textAlign: 'center', marginTop: 40, fontSize: 14 },
+    scroll: { flex: 1 },
+    scrollContent: { paddingBottom: 32 },
+    empty: { color: colors.muted, textAlign: 'center', marginTop: 40, fontSize: 14 },
 
-  row: {
-    flexDirection: 'row',
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255,255,255,0.07)',
-    minHeight: 38,
-    alignItems: 'center',
-  },
-  headerRow: {
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.12)',
-  },
-  rowEmpty: { opacity: 0.45 },
-  grandRow: {
-    backgroundColor: 'rgba(124,92,255,0.08)',
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(124,92,255,0.2)',
-    marginTop: 2,
-  },
+    row: {
+      flexDirection: 'row',
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: surfaceTint(theme, 0.07),
+      minHeight: 38,
+      alignItems: 'center',
+    },
+    headerRow: {
+      backgroundColor: surfaceTint(theme, 0.04),
+      borderBottomWidth: 1,
+      borderBottomColor: surfaceTint(theme, 0.12),
+    },
+    rowEmpty: { opacity: 0.45 },
+    grandRow: {
+      backgroundColor: 'rgba(124,92,255,0.08)',
+      borderTopWidth: 1,
+      borderTopColor: 'rgba(124,92,255,0.2)',
+      marginTop: 2,
+    },
 
-  cell: {
-    width: CELL_W,
-    paddingHorizontal: 6,
-    paddingVertical: 8,
-    fontSize: 13,
-    fontWeight: '600',
-    color: colors.muted,
-    textAlign: 'center',
-  },
-  monthCell: { width: MONTH_CELL_W, textAlign: 'left', paddingLeft: 10 },
-  totalCell: { width: TOTAL_CELL_W },
-  headerText: { fontSize: 11, fontWeight: '700', color: colors.muted },
-  formerText: { color: 'rgba(232,236,255,0.4)' },
-  zeroText: { color: 'rgba(232,236,255,0.2)' },
-  totalBold: { fontWeight: '800', color: colors.text },
-  grandText: { fontWeight: '800', color: colors.text },
-});
+    cell: {
+      width: CELL_W,
+      paddingHorizontal: 6,
+      paddingVertical: 8,
+      fontSize: 13,
+      fontWeight: '600',
+      color: colors.muted,
+      textAlign: 'center',
+    },
+    monthCell: { width: MONTH_CELL_W, textAlign: 'left', paddingLeft: 10 },
+    totalCell: { width: TOTAL_CELL_W },
+    headerText: { fontSize: 11, fontWeight: '700', color: colors.muted },
+    formerText: { color: surfaceTint(theme, 0.4) },
+    zeroText: { color: surfaceTint(theme, 0.2) },
+    totalBold: { fontWeight: '800', color: colors.text },
+    grandText: { fontWeight: '800', color: colors.text },
+  });
+}

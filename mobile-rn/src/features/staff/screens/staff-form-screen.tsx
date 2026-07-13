@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Alert, StyleSheet, Text, View } from 'react-native';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 
@@ -9,7 +9,8 @@ import {
   WorkingHoursEditor,
   validateWorkingHours,
 } from '../../../components/working-hours-editor';
-import { colors } from '../../../theme/colors';
+import { useTheme } from '../../theme';
+import { type AppColors } from '../../../theme/colors';
 import type { WorkingHours } from '../../settings/api/settings';
 import { useCreateStaff, useResetStaffPassword, useStaff, useUpdateStaff } from '../api/hooks';
 
@@ -25,6 +26,8 @@ function defaultStaffHours(): WorkingHours {
 /** Personel oluştur/düzenle (modal sheet). ?id= düzenleme. Çalışma saatleri dahil. */
 export function StaffFormScreen() {
   const router = useRouter();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { id } = useLocalSearchParams<{ id?: string }>();
   const { data } = useStaff();
   const editing = id ? data?.find((s) => s.id === Number(id)) : undefined;
@@ -114,10 +117,12 @@ export function StaffFormScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  card: { gap: 12, marginTop: 8 },
-  section: { marginTop: 16, gap: 8 },
-  sectionTitle: { color: colors.text, fontSize: 15, fontWeight: '700' },
-  sectionHint: { color: colors.muted, fontSize: 12 },
-  submit: { marginTop: 16, marginBottom: 8 },
-});
+function makeStyles(colors: AppColors) {
+  return StyleSheet.create({
+    card: { gap: 12, marginTop: 8 },
+    section: { marginTop: 16, gap: 8 },
+    sectionTitle: { color: colors.text, fontSize: 15, fontWeight: '700' },
+    sectionHint: { color: colors.muted, fontSize: 12 },
+    submit: { marginTop: 16, marginBottom: 8 },
+  });
+}

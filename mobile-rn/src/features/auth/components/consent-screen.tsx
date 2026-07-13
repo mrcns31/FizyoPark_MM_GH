@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Linking, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,7 +7,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { FadeIn } from '../../../components/fade-in';
 import { ErrorBox } from '../../../components/ui';
 import { ApiError } from '../../../lib/api-client';
-import { colors } from '../../../theme/colors';
+import { useTheme } from '../../theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../../../theme/colors';
 import { useAuth } from '../stores/auth-context';
 import { authKeys, useAcceptConsent } from '../api/hooks';
 
@@ -20,6 +21,8 @@ const CONSENT_ITEMS = [
 ] as const;
 
 export function ConsentScreen() {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const qc = useQueryClient();
   const { signOut } = useAuth();
   const accept = useAcceptConsent();
@@ -57,7 +60,7 @@ export function ConsentScreen() {
           {/* hero */}
           <View style={styles.hero}>
             <View style={styles.heroIcon}>
-              <Ionicons name="shield-checkmark" size={34} color="#fff" />
+              <Ionicons name="shield-checkmark" size={34} color={colors.white} />
             </View>
             <Text style={styles.heroTitle}>Verilerinizin Korunması</Text>
           </View>
@@ -88,7 +91,7 @@ export function ConsentScreen() {
                   </Text>
                   <Pressable style={styles.checkboxField} onPress={() => toggle(item.key)} hitSlop={4}>
                     <View style={[styles.checkbox, checked[item.key] && styles.checkboxOn, isError && styles.checkboxError]}>
-                      {checked[item.key] ? <Ionicons name="checkmark" size={13} color="#fff" /> : null}
+                      {checked[item.key] ? <Ionicons name="checkmark" size={13} color={colors.white} /> : null}
                     </View>
                     <Text style={[styles.checkboxText, isError && styles.checkboxTextError]}>
                       Okudum ve kabul ediyorum.
@@ -108,7 +111,7 @@ export function ConsentScreen() {
               onPress={onAccept}
               disabled={accept.isPending}
             >
-              <Ionicons name="checkmark" size={18} color="#fff" />
+              <Ionicons name="checkmark" size={18} color={colors.white} />
               <Text style={styles.submitText}>Kabul Ediyorum ve Devam Et</Text>
             </Pressable>
           </View>
@@ -122,105 +125,107 @@ export function ConsentScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  header: {
-    minHeight: 52,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border,
-  },
-  headerTitle: { fontSize: 17, fontWeight: '800', color: colors.text, textAlign: 'center' },
-  scroll: { padding: 16, paddingBottom: 28 },
-  // hero
-  hero: { alignItems: 'center', marginBottom: 18 },
-  heroIcon: {
-    width: 88,
-    height: 88,
-    borderRadius: 44,
-    backgroundColor: '#5b6dff', // gradient (#4a69ff→#7c5cff) yaklaşımı
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 14,
-    shadowColor: '#4a69ff',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.35,
-    shadowRadius: 32,
-    elevation: 6,
-  },
-  heroTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
-  // info
-  info: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    padding: 14,
-    marginBottom: 18,
-    borderWidth: 1,
-    borderColor: 'rgba(74,105,255,0.22)',
-    borderRadius: 14,
-    backgroundColor: 'rgba(74,105,255,0.08)',
-  },
-  infoIcon: { marginTop: 1 },
-  infoText: { flex: 1, fontSize: 13, lineHeight: 19, color: '#8ec5ff' },
-  // form card
-  formCard: {
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 16,
-    padding: 14,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    gap: 14,
-  },
-  consentItem: {
-    gap: 8,
-    padding: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 10,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-  },
-  consentItemError: {
-    borderColor: '#ef4444',
-    backgroundColor: 'rgba(239,68,68,0.07)',
-  },
-  consentLink: { fontSize: 14, fontWeight: '700', color: '#6b9fff', textDecorationLine: 'underline' },
-  checkboxField: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
-  checkbox: {
-    width: 18,
-    height: 18,
-    marginTop: 2,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxOn: { backgroundColor: '#4a69ff', borderColor: '#4a69ff' },
-  checkboxError: { borderColor: '#ef4444', borderWidth: 2 },
-  checkboxText: { flex: 1, fontSize: 13, lineHeight: 20, color: colors.text },
-  checkboxTextError: { color: '#ef4444' },
-  requiredLabel: { fontSize: 12, color: '#ef4444', fontWeight: '600' },
-  // submit
-  submit: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    minHeight: 48,
-    marginTop: 2,
-    borderRadius: 12,
-    backgroundColor: '#4a69ff',
-    shadowColor: '#4a69ff',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.35,
-    shadowRadius: 24,
-    elevation: 5,
-  },
-  submitDisabled: { opacity: 0.6 },
-  submitText: { color: '#fff', fontSize: 15, fontWeight: '800' },
-  logout: { color: colors.muted, fontSize: 14, textAlign: 'center', marginTop: 18, textDecorationLine: 'underline' },
-});
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: colors.bg },
+    header: {
+      minHeight: 52,
+      alignItems: 'center',
+      justifyContent: 'center',
+      paddingHorizontal: 16,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+    },
+    headerTitle: { fontSize: 17, fontWeight: '800', color: colors.text, textAlign: 'center' },
+    scroll: { padding: 16, paddingBottom: 28 },
+    // hero
+    hero: { alignItems: 'center', marginBottom: 18 },
+    heroIcon: {
+      width: 88,
+      height: 88,
+      borderRadius: 44,
+      backgroundColor: '#5b6dff', // gradient (#4a69ff→#7c5cff) yaklaşımı
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginBottom: 14,
+      shadowColor: '#4a69ff',
+      shadowOffset: { width: 0, height: 12 },
+      shadowOpacity: 0.35,
+      shadowRadius: 32,
+      elevation: 6,
+    },
+    heroTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
+    // info
+    info: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 10,
+      padding: 14,
+      marginBottom: 18,
+      borderWidth: 1,
+      borderColor: 'rgba(74,105,255,0.22)',
+      borderRadius: 14,
+      backgroundColor: 'rgba(74,105,255,0.08)',
+    },
+    infoIcon: { marginTop: 1 },
+    infoText: { flex: 1, fontSize: 13, lineHeight: 19, color: colors.link },
+    // form card
+    formCard: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 16,
+      padding: 14,
+      backgroundColor: surfaceTint(theme, 0.03),
+      gap: 14,
+    },
+    consentItem: {
+      gap: 8,
+      padding: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      backgroundColor: surfaceTint(theme, 0.03),
+    },
+    consentItemError: {
+      borderColor: '#ef4444',
+      backgroundColor: 'rgba(239,68,68,0.07)',
+    },
+    consentLink: { fontSize: 14, fontWeight: '700', color: '#6b9fff', textDecorationLine: 'underline' },
+    checkboxField: { flexDirection: 'row', alignItems: 'flex-start', gap: 10 },
+    checkbox: {
+      width: 18,
+      height: 18,
+      marginTop: 2,
+      borderRadius: 4,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: surfaceTint(theme, 0.03),
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    checkboxOn: { backgroundColor: '#4a69ff', borderColor: '#4a69ff' },
+    checkboxError: { borderColor: '#ef4444', borderWidth: 2 },
+    checkboxText: { flex: 1, fontSize: 13, lineHeight: 20, color: colors.text },
+    checkboxTextError: { color: '#ef4444' },
+    requiredLabel: { fontSize: 12, color: '#ef4444', fontWeight: '600' },
+    // submit
+    submit: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 10,
+      minHeight: 48,
+      marginTop: 2,
+      borderRadius: 12,
+      backgroundColor: '#4a69ff',
+      shadowColor: '#4a69ff',
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 0.35,
+      shadowRadius: 24,
+      elevation: 5,
+    },
+    submitDisabled: { opacity: 0.6 },
+    submitText: { color: colors.white, fontSize: 15, fontWeight: '800' },
+    logout: { color: colors.muted, fontSize: 14, textAlign: 'center', marginTop: 18, textDecorationLine: 'underline' },
+  });
+}

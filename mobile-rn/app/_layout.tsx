@@ -6,11 +6,16 @@ import { StatusBar } from 'expo-status-bar';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import {
+  DarkTheme as NavigationDarkTheme,
+  DefaultTheme as NavigationDefaultTheme,
+  ThemeProvider as NavigationThemeProvider,
+} from 'expo-router/react-navigation';
 
 import { AuthProvider, useAuth } from '../src/features/auth';
+import { ThemeProvider, useTheme } from '../src/features/theme';
 import { AdminPasswordModal } from '../src/components/admin-password-modal';
 import { queryClient } from '../src/lib/react-query';
-import { colors } from '../src/theme/colors';
 
 /**
  * Kök layout (Expo Router). Tüm provider'lar burada; ekranlar features/'ta,
@@ -20,20 +25,32 @@ export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <QueryClientProvider client={queryClient}>
-          <AuthProvider>
-            <StatusBar style="light" />
-            <RootNavigator />
-            <AdminPasswordModal />
-          </AuthProvider>
-        </QueryClientProvider>
+        <ThemeProvider>
+          <QueryClientProvider client={queryClient}>
+            <AuthProvider>
+              <ThemedApp />
+              <AdminPasswordModal />
+            </AuthProvider>
+          </QueryClientProvider>
+        </ThemeProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }
 
+function ThemedApp() {
+  const { resolvedTheme } = useTheme();
+  return (
+    <NavigationThemeProvider value={resolvedTheme === 'dark' ? NavigationDarkTheme : NavigationDefaultTheme}>
+      <StatusBar style={resolvedTheme === 'dark' ? 'light' : 'dark'} />
+      <RootNavigator />
+    </NavigationThemeProvider>
+  );
+}
+
 function RootNavigator() {
   useAuthRedirect();
+  const { colors } = useTheme();
   return (
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.backgroundTop } }}>
       <Stack.Screen name="index" />

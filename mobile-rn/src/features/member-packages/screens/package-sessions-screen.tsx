@@ -11,7 +11,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Badge, Card, Muted } from '../../../components/ui';
 import { BottomSheet } from '../../../components/bottom-sheet';
 import { formatTime } from '../../../lib/datetime';
-import { colors } from '../../../theme/colors';
+import { useTheme } from '../../theme';
+import { type AppColors, type ResolvedTheme } from '../../../theme/colors';
 import { useMemberPackageSessions, useMemberPackages } from '../api/hooks';
 import type { MemberPackageSession } from '../api/member-packages';
 import { useDeleteSession, useMoveSession } from '../../sessions/api/hooks';
@@ -98,6 +99,8 @@ function SessionCard({
   onDelete: () => void;
   onMove: () => void;
 }) {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const swipeRef = useRef<Swipeable>(null);
   const b = badgeFor({ ...s });
 
@@ -106,7 +109,7 @@ function SessionCard({
       style={styles.swipeDelete}
       onPress={() => { swipeRef.current?.close(); onDelete(); }}
     >
-      <Ionicons name="trash-outline" size={22} color="#fff" />
+      <Ionicons name="trash-outline" size={22} color={colors.white} />
     </TouchableOpacity>
   );
 
@@ -116,13 +119,13 @@ function SessionCard({
         style={styles.swipeEdit}
         onPress={() => { swipeRef.current?.close(); onEdit(); }}
       >
-        <Ionicons name="create-outline" size={22} color="#fff" />
+        <Ionicons name="create-outline" size={22} color={colors.white} />
       </TouchableOpacity>
       <TouchableOpacity
         style={styles.swipeMove}
         onPress={() => { swipeRef.current?.close(); onMove(); }}
       >
-        <Ionicons name="swap-horizontal-outline" size={20} color="#fff" />
+        <Ionicons name="swap-horizontal-outline" size={20} color={colors.white} />
       </TouchableOpacity>
     </View>
   );
@@ -151,6 +154,8 @@ function SessionCard({
 }
 
 export function PackageSessionsScreen() {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const { memberPackageId, packageName, startDate, endDate, packageStatus, memberId: memberIdParam } = useLocalSearchParams<{
     memberPackageId?: string;
     packageName?: string;
@@ -439,74 +444,76 @@ export function PackageSessionsScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  listContent: { padding: 12, gap: 8, paddingBottom: 40 },
-  subtitle: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
-  subtitleText: { color: colors.muted, fontSize: 13 },
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: colors.bg },
+    listContent: { padding: 12, gap: 8, paddingBottom: 40 },
+    subtitle: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
+    subtitleText: { color: colors.muted, fontSize: 13 },
 
-  card: {
-    padding: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    backgroundColor: colors.panel,
-  },
-  cardCancelled: { padding: 12, opacity: 0.6 },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  idx: { color: colors.muted, fontSize: 13, fontWeight: '700', width: 24 },
-  info: { flex: 1, gap: 2 },
-  date: { color: colors.text, fontSize: 14, fontWeight: '700' },
-  sub: { color: colors.muted, fontSize: 12 },
+    card: {
+      padding: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      backgroundColor: colors.panel,
+    },
+    cardCancelled: { padding: 12, opacity: 0.6 },
+    row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    idx: { color: colors.muted, fontSize: 13, fontWeight: '700', width: 24 },
+    info: { flex: 1, gap: 2 },
+    date: { color: colors.text, fontSize: 14, fontWeight: '700' },
+    sub: { color: colors.muted, fontSize: 12 },
 
-  cancelledHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginTop: 12,
-    marginBottom: 2,
-    paddingVertical: 4,
-  },
-  section: { color: colors.muted, fontSize: 12, fontWeight: '700', letterSpacing: 0.5 },
+    cancelledHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginTop: 12,
+      marginBottom: 2,
+      paddingVertical: 4,
+    },
+    section: { color: colors.muted, fontSize: 12, fontWeight: '700', letterSpacing: 0.5 },
 
-  swipeLeftGroup: { flexDirection: 'row', gap: 4, marginRight: 4 },
-  swipeEdit: {
-    backgroundColor: colors.accent,
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: 60,
-    borderRadius: 12,
-  },
-  swipeMove: {
-    backgroundColor: colors.fpOrange,
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: 60,
-    borderRadius: 12,
-  },
-  swipeDelete: {
-    backgroundColor: colors.danger,
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: 64,
-    borderRadius: 12,
-    marginLeft: 4,
-  },
+    swipeLeftGroup: { flexDirection: 'row', gap: 4, marginRight: 4 },
+    swipeEdit: {
+      backgroundColor: colors.accent,
+      justifyContent: 'center',
+      alignItems: 'center',
+      width: 60,
+      borderRadius: 12,
+    },
+    swipeMove: {
+      backgroundColor: colors.fpOrange,
+      justifyContent: 'center',
+      alignItems: 'center',
+      width: 60,
+      borderRadius: 12,
+    },
+    swipeDelete: {
+      backgroundColor: colors.danger,
+      justifyContent: 'center',
+      alignItems: 'center',
+      width: 64,
+      borderRadius: 12,
+      marginLeft: 4,
+    },
 
-  moveSheet: { gap: 10 },
-  moveSessionDate: { color: colors.text, fontWeight: '700', fontSize: 15, marginBottom: 4 },
-  pkgRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 12,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.panel,
-    gap: 10,
-  },
-  pkgInfo: { flex: 1, gap: 2 },
-  pkgName: { color: colors.text, fontSize: 14, fontWeight: '600' },
-  pkgMeta: { color: colors.muted, fontSize: 12 },
-});
+    moveSheet: { gap: 10 },
+    moveSessionDate: { color: colors.text, fontWeight: '700', fontSize: 15, marginBottom: 4 },
+    pkgRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: 12,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: colors.panel,
+      gap: 10,
+    },
+    pkgInfo: { flex: 1, gap: 2 },
+    pkgName: { color: colors.text, fontSize: 14, fontWeight: '600' },
+    pkgMeta: { color: colors.muted, fontSize: 12 },
+  });
+}

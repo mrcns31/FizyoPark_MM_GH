@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -16,7 +16,8 @@ import { useRouter } from 'expo-router';
 import { FadeIn } from '../../../components/fade-in';
 import { ScreenContainer } from '../../../components/screen-container';
 import { ApiError } from '../../../lib/api-client';
-import { colors } from '../../../theme/colors';
+import { useTheme } from '../../theme';
+import { surfaceTint, type AppColors, type ResolvedTheme } from '../../../theme/colors';
 import { useAuth } from '../stores/auth-context';
 
 /**
@@ -32,6 +33,8 @@ const LEGAL_LINKS = [
 ];
 
 export function LoginScreen() {
+  const { colors, resolvedTheme } = useTheme();
+  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const { signIn } = useAuth();
   const router = useRouter();
   const [email, setEmail] = useState('');
@@ -135,88 +138,90 @@ export function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  // .login-card
-  card: {
-    width: '100%',
-    maxWidth: 400,
-    alignSelf: 'center',
-    backgroundColor: colors.panel,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: colors.radius,
-    paddingHorizontal: 20,
-    paddingVertical: 24,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 12 },
-    shadowOpacity: 0.45,
-    shadowRadius: 40,
-    elevation: 8,
-  },
-  // .login-logo (kare)
-  logo: { width: 200, height: 200, alignSelf: 'center', marginBottom: 10 },
-  // .login-hint
-  hint: { color: colors.muted, fontSize: 13, textAlign: 'center', marginBottom: 18 },
-  // .formRow
-  formRow: { marginBottom: 12 },
-  // .label
-  label: { color: colors.muted, fontSize: 12, marginBottom: 6 },
-  // .input
-  input: {
-    width: '100%',
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 11,
-    color: colors.text,
-    fontSize: 16,
-  },
-  pwWrap: { position: 'relative', justifyContent: 'center' },
-  pwInput: { paddingRight: 40 },
-  pwToggle: { position: 'absolute', right: 8, padding: 4 },
-  rememberForgotRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
-  // .login-remember-row + label
-  rememberRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  checkbox: {
-    width: 18,
-    height: 18,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkboxOn: { backgroundColor: colors.accent, borderColor: colors.accent },
-  rememberText: { color: colors.muted, fontSize: 13 },
-  forgotText: { color: '#8ec5ff', fontSize: 13, textDecorationLine: 'underline' },
-  // .error
-  errorBox: {
-    marginTop: 12,
-    backgroundColor: 'rgba(255,77,109,0.12)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,77,109,0.35)',
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: 12,
-  },
-  errorText: { color: 'rgba(255,220,226,0.96)', fontSize: 13 },
-  // .login-card .btn--primary (yeşil gradient → solid yeşil yaklaşım)
-  loginBtn: {
-    marginTop: 8,
-    backgroundColor: colors.fpGreen,
-    borderWidth: 1,
-    borderColor: 'rgba(61,184,74,0.45)',
-    borderRadius: 12,
-    minHeight: 44,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loginBtnText: { color: colors.white, fontSize: 15, fontWeight: '700' },
-  btnDisabled: { opacity: 0.6 },
-  // .login-legal-links
-  legal: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', columnGap: 14, rowGap: 6, marginTop: 12 },
-  legalLink: { color: '#8ec5ff', fontSize: 12, textDecorationLine: 'underline' },
-});
+function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+  return StyleSheet.create({
+    // .login-card
+    card: {
+      width: '100%',
+      maxWidth: 400,
+      alignSelf: 'center',
+      backgroundColor: colors.panel,
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: colors.radius,
+      paddingHorizontal: 20,
+      paddingVertical: 24,
+      shadowColor: colors.shadow,
+      shadowOffset: { width: 0, height: 12 },
+      shadowOpacity: 0.45,
+      shadowRadius: 40,
+      elevation: 8,
+    },
+    // .login-logo (kare)
+    logo: { width: 200, height: 200, alignSelf: 'center', marginBottom: 10 },
+    // .login-hint
+    hint: { color: colors.muted, fontSize: 13, textAlign: 'center', marginBottom: 18 },
+    // .formRow
+    formRow: { marginBottom: 12 },
+    // .label
+    label: { color: colors.muted, fontSize: 12, marginBottom: 6 },
+    // .input
+    input: {
+      width: '100%',
+      backgroundColor: surfaceTint(theme, 0.03),
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 12,
+      paddingHorizontal: 10,
+      paddingVertical: 11,
+      color: colors.text,
+      fontSize: 16,
+    },
+    pwWrap: { position: 'relative', justifyContent: 'center' },
+    pwInput: { paddingRight: 40 },
+    pwToggle: { position: 'absolute', right: 8, padding: 4 },
+    rememberForgotRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 },
+    // .login-remember-row + label
+    rememberRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    checkbox: {
+      width: 18,
+      height: 18,
+      borderRadius: 4,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: surfaceTint(theme, 0.03),
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    checkboxOn: { backgroundColor: colors.accent, borderColor: colors.accent },
+    rememberText: { color: colors.muted, fontSize: 13 },
+    forgotText: { color: colors.link, fontSize: 13, textDecorationLine: 'underline' },
+    // .error
+    errorBox: {
+      marginTop: 12,
+      backgroundColor: colors.errorBg,
+      borderWidth: 1,
+      borderColor: colors.errorBorder,
+      paddingHorizontal: 12,
+      paddingVertical: 10,
+      borderRadius: 12,
+    },
+    errorText: { color: colors.errorText, fontSize: 13 },
+    // .login-card .btn--primary (yeşil gradient → solid yeşil yaklaşım)
+    loginBtn: {
+      marginTop: 8,
+      backgroundColor: colors.fpGreen,
+      borderWidth: 1,
+      borderColor: 'rgba(61,184,74,0.45)',
+      borderRadius: 12,
+      minHeight: 44,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    loginBtnText: { color: colors.white, fontSize: 15, fontWeight: '700' },
+    btnDisabled: { opacity: 0.6 },
+    // .login-legal-links
+    legal: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', columnGap: 14, rowGap: 6, marginTop: 12 },
+    legalLink: { color: colors.link, fontSize: 12, textDecorationLine: 'underline' },
+  });
+}

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
@@ -12,7 +12,8 @@ import { useAuth } from '../../auth';
 import { authKeys } from '../../auth/api/hooks';
 import { updateAccountProfile } from '../../auth/api/auth';
 import { useResponsive } from '../../../lib/responsive';
-import { colors } from '../../../theme/colors';
+import { useTheme } from '../../theme';
+import { type AppColors } from '../../../theme/colors';
 import { getInstitutionWhatsApp } from '../api/settings';
 
 /** Hesap İşlemleri / Profil (admin) — web `openAdminAccountScreen`. Bilgi güncelle + şifre + çıkış. */
@@ -20,6 +21,8 @@ export function AccountScreen() {
   const router = useRouter();
   const { user, role, signOut } = useAuth();
   const qc = useQueryClient();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const { contentMaxWidth, gutter } = useResponsive();
   const isAdminOrManager = role === 'admin' || role === 'manager';
 
@@ -96,9 +99,11 @@ export function AccountScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: colors.bg },
-  content: { paddingVertical: 16, gap: 14, flexGrow: 1 },
-  card: { gap: 12 },
-  logout: { marginTop: 4, marginBottom: 8 },
-});
+function makeStyles(colors: AppColors) {
+  return StyleSheet.create({
+    safe: { flex: 1, backgroundColor: colors.bg },
+    content: { paddingVertical: 16, gap: 14, flexGrow: 1 },
+    card: { gap: 12 },
+    logout: { marginTop: 4, marginBottom: 8 },
+  });
+}
