@@ -17,12 +17,14 @@
         <button type="button" class="btn btn--ghost" id="consentsCloseBtn">Kapat</button>
       </header>
       <p class="hint logs-page__intro">Hangi üyelerin güncel KVKK / Gizlilik Politikası metnini onayladığını gösterir.</p>
+      <div id="consentsStats" class="consents-stats"></div>
       <div class="logs-page__filters">
         <input id="consentsSearchInput" class="input" type="search" placeholder="İsim veya telefon ile ara" />
         <select id="consentsStatusFilter" class="input">
           <option value="">Tümü</option>
           <option value="accepted">Onayladı</option>
           <option value="pending">Onaylamadı</option>
+          <option value="noaccount">Hesabı yok</option>
         </select>
       </div>
       <div id="consentsError" class="error hidden"></div>
@@ -32,11 +34,11 @@
           <thead>
             <tr>
               <th>Üye No</th>
-              <th>Ad Soyad</th>
+              <th data-sort="name">Ad Soyad</th>
               <th>Telefon</th>
-              <th>Hesap</th>
-              <th>Onay Durumu</th>
-              <th>Onay Tarihi</th>
+              <th data-sort="account">Hesap</th>
+              <th data-sort="status">Onay Durumu</th>
+              <th data-sort="date">Onay Tarihi</th>
               <th></th>
             </tr>
           </thead>

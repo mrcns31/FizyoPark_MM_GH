@@ -3,6 +3,15 @@
   var allItems = [];
   var consentVersion = "";
   var isAdmin = false;
+  var sortColumn = "name";
+  var sortDir = "asc";
+
+  var SORT_LABELS = {
+    name: "Ad Soyad",
+    account: "Hesap",
+    status: "Onay Durumu",
+    date: "Onay Tarihi",
+  };
 
   var webDateFmt = new Intl.DateTimeFormat('tr-TR', {
     timeZone: 'Europe/Istanbul',
@@ -44,12 +53,60 @@
     var q = (document.getElementById("consentsSearchInput") || {}).value || "";
     q = q.trim().toLowerCase();
     var status = (document.getElementById("consentsStatusFilter") || {}).value || "";
-    return allItems.filter(function (item) {
+    var items = allItems.filter(function (item) {
       if (status === "accepted" && !item.consentAccepted) return false;
-      if (status === "pending" && item.consentAccepted) return false;
+      if (status === "pending" && (item.consentAccepted || !item.hasAccount)) return false;
+      if (status === "noaccount" && item.hasAccount) return false;
       if (!q) return true;
       var haystack = (item.memberName + " " + item.phone + " " + item.memberNo).toLowerCase();
       return haystack.indexOf(q) !== -1;
+    });
+    return sortItems(items);
+  }
+
+  function sortValue(item, col) {
+    switch (col) {
+      case "name": return (item.memberName || "").toLowerCase();
+      case "account": return item.hasAccount ? 1 : 0;
+      case "status": return item.consentAccepted ? 2 : (item.hasAccount ? 1 : 0);
+      case "date": return item.consentAcceptedAt ? new Date(item.consentAcceptedAt).getTime() : 0;
+      default: return 0;
+    }
+  }
+
+  function sortItems(items) {
+    var col = sortColumn;
+    var mult = sortDir === "asc" ? 1 : -1;
+    return items.slice().sort(function (a, b) {
+      var va = sortValue(a, col);
+      var vb = sortValue(b, col);
+      if (va < vb) return -1 * mult;
+      if (va > vb) return 1 * mult;
+      return 0;
+    });
+  }
+
+  function renderStats() {
+    var statsEl = document.getElementById("consentsStats");
+    if (!statsEl) return;
+    var total = allItems.length;
+    var accepted = allItems.filter(function (i) { return i.consentAccepted; }).length;
+    var noAccount = allItems.filter(function (i) { return !i.hasAccount; }).length;
+    var pending = total - accepted - noAccount;
+    statsEl.innerHTML =
+      '<span class="consents-stat"><strong>' + total + '</strong> üye</span>' +
+      '<span class="consents-stat consents-stat--ok"><strong>' + accepted + '</strong> onayladı</span>' +
+      '<span class="consents-stat consents-stat--pending"><strong>' + pending + '</strong> onaylamadı</span>' +
+      '<span class="consents-stat"><strong>' + noAccount + '</strong> hesabı yok</span>';
+  }
+
+  function updateSortHeaders() {
+    document.querySelectorAll("[data-sort]").forEach(function (th) {
+      var col = th.getAttribute("data-sort");
+      var label = SORT_LABELS[col] || col;
+      var isActive = sortColumn === col;
+      th.textContent = label + (isActive ? (sortDir === "asc" ? " ▲" : " ▼") : "");
+      th.classList.toggle("is-sorted", isActive);
     });
   }
 
@@ -135,6 +192,8 @@
 
   function renderItems() {
     updateLayout();
+    renderStats();
+    updateSortHeaders();
     var items = filteredItems();
     if (isMobileView()) renderCards(items);
     else renderTableRows(items);
@@ -183,6 +242,14 @@
     var statusEl = document.getElementById("consentsStatusFilter");
     if (statusEl) statusEl.addEventListener("change", renderItems);
     MOBILE_MQ.addEventListener("change", renderItems);
+    document.querySelectorAll("[data-sort]").forEach(function (th) {
+      th.addEventListener("click", function () {
+        var col = th.getAttribute("data-sort");
+        if (sortColumn === col) sortDir = sortDir === "asc" ? "desc" : "asc";
+        else { sortColumn = col; sortDir = "asc"; }
+        renderItems();
+      });
+    });
 
     if (window.API && window.API.getMe) {
       window.API.getMe().then(function (me) {

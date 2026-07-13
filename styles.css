@@ -3651,6 +3651,33 @@ body.body--sidebar-open{
   background:rgba(255,107,122,.14);
   border:1px solid rgba(255,107,122,.28);
 }
+.activity-logs-table th[data-sort]{
+  cursor:pointer;
+  user-select:none;
+}
+.consents-stats{
+  display:flex;
+  flex-wrap:wrap;
+  gap:10px;
+  margin:6px 0 14px;
+}
+.consents-stat{
+  padding:6px 12px;
+  border-radius:10px;
+  background:rgba(255,255,255,.05);
+  border:1px solid var(--border);
+  font-size:13px;
+}
+.consents-stat--ok{
+  color:#7ee3a8;
+  border-color:rgba(126,227,168,.28);
+  background:rgba(126,227,168,.1);
+}
+.consents-stat--pending{
+  color:#ff8a96;
+  border-color:rgba(255,107,122,.28);
+  background:rgba(255,107,122,.1);
+}
 .list-members-card__deletion-badge,
 .list-members-table__deletion-badge{
   display:inline-block;
