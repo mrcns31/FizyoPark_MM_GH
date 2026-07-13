@@ -13935,6 +13935,7 @@ function bindEvents() {
     btn.disabled = true;
     btn.textContent = "Yükleniyor…";
     try {
+      window.API.invalidateStaticCache();
       var fetchRange = getPlannerFetchRange();
       var loaded = await window.API.loadFullState(fetchRange);
       applyStateFromApi(loaded, fetchRange);
