@@ -8,6 +8,7 @@ import {
   getFormerMembers,
   getMembers,
   reactivateMember,
+  resetMemberPassword,
   updateMember,
 } from './members';
 
@@ -57,6 +58,10 @@ export function useUpdateMember() {
     mutationFn: (vars: { id: number; data: Partial<Member> }) => updateMember(vars.id, vars.data),
     onSuccess: () => qc.invalidateQueries({ queryKey: memberKeys.all }),
   });
+}
+
+export function useResetMemberPassword() {
+  return useMutation({ mutationFn: (id: number) => resetMemberPassword(id) });
 }
 
 export function useDeleteMember() {

@@ -10,7 +10,7 @@ import { ApiError } from '../../../lib/api-client';
 import { useResponsive } from '../../../lib/responsive';
 import { colors } from '../../../theme/colors';
 import type { Member } from '../../../types/api';
-import { useCreateMember, useMembers, useUpdateMember } from '../api/hooks';
+import { useCreateMember, useMembers, useResetMemberPassword, useUpdateMember } from '../api/hooks';
 
 /** Üye oluştur/düzenle — web üye kartıyla aynı alanlar. */
 export function MemberFormScreen() {
@@ -21,6 +21,7 @@ export function MemberFormScreen() {
 
   const create = useCreateMember();
   const update = useUpdateMember();
+  const resetPw = useResetMemberPassword();
   const { isTablet, isLandscape } = useResponsive();
 
   // Yatay tablet: 2 sütun, scroll yok. Diğer tüm durumlar: tek sütun, scroll.
@@ -57,6 +58,30 @@ export function MemberFormScreen() {
     } catch (e) {
       Alert.alert('Hata', e instanceof ApiError ? e.message : 'Kayıt başarısız');
     }
+  }
+
+  function onResetPassword() {
+    if (!editing) return;
+    Alert.alert(
+      'Şifre sıfırla',
+      `${editing.firstName} ${editing.lastName} için üye giriş şifresi telefonun son 4 hanesine sıfırlanacak. Devam edilsin mi?`,
+      [
+        { text: 'Vazgeç', style: 'cancel' },
+        {
+          text: 'Sıfırla',
+          style: 'destructive',
+          onPress: () =>
+            resetPw.mutate(editing.id, {
+              onSuccess: (r) =>
+                Alert.alert(
+                  'Şifre sıfırlandı',
+                  `${r.loginUsername ?? 'Üye'} girişi için yeni geçici şifre telefonun son 4 hanesidir. Üye ilk girişte şifresini değiştirmelidir.`,
+                ),
+              onError: (e) => Alert.alert('Hata', e instanceof ApiError ? e.message : 'Şifre sıfırlanamadı'),
+            }),
+        },
+      ],
+    );
   }
 
   // ── Alan blokları (hem tek sütun hem çift sütun için paylaşılır) ──
@@ -119,6 +144,15 @@ export function MemberFormScreen() {
           title="Paketler / Paket Tanımla"
           variant="ghost"
           onPress={() => router.push({ pathname: '/(admin)/members/member-packages', params: { memberId: String(editing.id) } })}
+          style={styles.packages}
+        />
+      ) : null}
+      {editing?.email ? (
+        <Button
+          title="Şifre Sıfırla"
+          variant="ghost"
+          onPress={onResetPassword}
+          loading={resetPw.isPending}
           style={styles.packages}
         />
       ) : null}

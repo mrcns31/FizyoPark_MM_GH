@@ -61,6 +61,18 @@ export async function reactivateMember(id: number): Promise<Member> {
   return memberFromApi(data);
 }
 
+/** Üyenin giriş şifresini telefon son 4 haneye sıfırlar (admin) — POST /members/:id/reset-password. */
+export async function resetMemberPassword(
+  id: number
+): Promise<{ loginUsername?: string; temporaryPassword?: string; temporaryPasswordHint?: string }> {
+  const { data } = await apiClient.post(`/members/${id}/reset-password`, {});
+  return {
+    loginUsername: data?.loginUsername ?? data?.login_username ?? undefined,
+    temporaryPassword: data?.temporaryPassword ?? undefined,
+    temporaryPasswordHint: data?.temporaryPasswordHint ?? undefined,
+  };
+}
+
 export interface FormerMemberPackage {
   id: number;
   packageId: number;

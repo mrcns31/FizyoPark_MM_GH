@@ -10,6 +10,7 @@ import { isSessionAttendanceConfirmed } from '../utils/sessionAttendance.js';
 import { matchWalkInToSession } from '../utils/facilityAccess.js';
 import { resolveLocalDateRangeMs } from '../utils/staffWorkingHours.js';
 import { localTodayDateStr } from '../utils/memberPackageStatus.js';
+import { sendExpoPush } from '../utils/pushNotifications.js';
 
 const router = express.Router();
 
@@ -35,6 +36,30 @@ async function requireAdminPasswordIfSessionConfirmed(sessionRow, adminPassword)
   const pw = await verifyAdminPassword(adminPassword);
   if (!pw.ok) return pw;
   return null;
+}
+
+// A: reminder sıfırla. B: yeni saat 24h içindeyse üyeye anlık bildirim.
+async function handleStartTsChange(sessionId, memberId, newStartTs) {
+  await db.query(
+    "DELETE FROM session_reminders WHERE session_id = $1 AND reminder_type = '24h'",
+    [sessionId]
+  ).catch(() => {});
+
+  const nowMs = Date.now();
+  const newMs = Number(newStartTs);
+  if (!memberId || newMs <= nowMs || newMs - nowMs >= 24 * 3600 * 1000) return;
+
+  const { rows } = await db.query(
+    'SELECT u.id AS user_id FROM members m JOIN users u ON u.id = m.user_id WHERE m.id = $1',
+    [memberId]
+  ).catch(() => ({ rows: [] }));
+  if (!rows.length) return;
+
+  const opts = { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' };
+  const dateOpts = { day: 'numeric', month: 'long', timeZone: 'Europe/Istanbul' };
+  const timeStr = new Date(newMs).toLocaleTimeString('tr-TR', opts);
+  const dateStr = new Date(newMs).toLocaleDateString('tr-TR', dateOpts);
+  await sendExpoPush(db, rows[0].user_id, 'Randevu Güncellendi', `Randevunuz ${dateStr} saat ${timeStr}'a alındı.`).catch(() => {});
 }
 
 /** Üyenin aynı zaman aralığında (silinmemiş) başka bir randevusu var mı? */
@@ -541,6 +566,9 @@ router.put('/:id', [
         if (updated) {
           await activityLog(req, { action: 'session.update', entityType: 'session', entityId: id, details: { staffId: updated.staff_id, memberId: updated.member_id } }).catch(() => {});
           matchWalkInToSession(db, id).catch(() => {});
+          if (updates.startTs !== undefined && Number(updates.startTs) !== Number(current.start_ts)) {
+            handleStartTsChange(id, finalMemberId, finalStartTs).catch(() => {});
+          }
         }
         return res.json({ message: 'Seans güncellendi', session: updated });
       } catch (err) {
@@ -560,6 +588,9 @@ router.put('/:id', [
     if (updated) {
       await activityLog(req, { action: 'session.update', entityType: 'session', entityId: id, details: { staffId: updated.staff_id, memberId: updated.member_id } }).catch(() => {});
       matchWalkInToSession(db, id).catch(() => {});
+      if (updates.startTs !== undefined && Number(updates.startTs) !== Number(current.start_ts)) {
+        handleStartTsChange(id, finalMemberId, finalStartTs).catch(() => {});
+      }
     }
     res.json({ message: 'Seans güncellendi', session: updated });
   } catch (error) {
