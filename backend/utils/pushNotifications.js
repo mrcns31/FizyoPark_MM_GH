@@ -6,6 +6,16 @@ const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
  * Tek bir kullanıcıya push gönderir.
  * @returns {Promise<boolean>} token bulunduysa true
  */
+async function purgeInvalidTokens(db, tokens) {
+  if (!tokens.length) return;
+  try {
+    await db.query('DELETE FROM push_tokens WHERE token = ANY($1::text[])', [tokens]);
+    console.log(`[pushNotifications] ${tokens.length} geçersiz token silindi`);
+  } catch (err) {
+    console.error('[pushNotifications] token silme hatası:', err.message);
+  }
+}
+
 export async function sendExpoPush(db, userId, title, body) {
   try {
     const { rows } = await db.query('SELECT token FROM push_tokens WHERE user_id = $1', [userId]);
@@ -19,11 +29,18 @@ export async function sendExpoPush(db, userId, title, body) {
       channelId: 'fizyopark',
       interruptionLevel: 'active',
     }));
-    await fetch(EXPO_PUSH_URL, {
+    const res = await fetch(EXPO_PUSH_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(messages),
     });
+    const data = await res.json().catch(() => null);
+    if (data?.data) {
+      const invalid = data.data
+        .map((ticket, i) => ticket.details?.error === 'DeviceNotRegistered' ? rows[i]?.token : null)
+        .filter(Boolean);
+      if (invalid.length) purgeInvalidTokens(db, invalid);
+    }
     return true;
   } catch {
     return false;
@@ -59,11 +76,19 @@ export async function sendExpoPushBulk(db, userIds, title, body) {
     // Expo max 100 mesaj/istek
     for (let i = 0; i < messages.length; i += 100) {
       try {
-        await fetch(EXPO_PUSH_URL, {
+        const batch = messages.slice(i, i + 100);
+        const res = await fetch(EXPO_PUSH_URL, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify(messages.slice(i, i + 100)),
+          body: JSON.stringify(batch),
         });
+        const data = await res.json().catch(() => null);
+        if (data?.data) {
+          const invalid = data.data
+            .map((ticket, j) => ticket.details?.error === 'DeviceNotRegistered' ? batch[j]?.to : null)
+            .filter(Boolean);
+          if (invalid.length) purgeInvalidTokens(db, invalid);
+        }
       } catch {
         // push hatası gönderimi durdurmaz
       }

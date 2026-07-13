@@ -218,8 +218,8 @@ async function sendEntryPush(memberName, method, startTs, sessionId, memberId) {
     }
 
     await Promise.all([expoPush(entryMessages), expoPush(memberMessages)]);
-  } catch {
-    // push hatası kapı girişini engellemesin
+  } catch (err) {
+    console.error('[sendEntryPush] hata:', err.message);
   }
 }
 
@@ -837,9 +837,10 @@ router.post('/sessions/:id/cancel', requireMember, async (req, res) => {
     const staffName = session.staff_id && staffMap[session.staff_id]
       ? `${staffMap[session.staff_id].first_name} ${staffMap[session.staff_id].last_name}`.trim()
       : '';
-    db.query('SELECT name FROM members WHERE id = $1', [memberId])
+    db.query('SELECT name, first_name, last_name FROM members WHERE id = $1', [memberId])
       .then(({ rows }) => {
-        const memberName = rows[0]?.name || 'Üye';
+        const r = rows[0];
+        const memberName = r ? (r.name || `${r.first_name || ''} ${r.last_name || ''}`.trim() || 'Üye') : 'Üye';
         sendCancellationPush(memberName, session.start_ts, staffName, session.staff_id).catch(() => {});
       })
       .catch(() => {});

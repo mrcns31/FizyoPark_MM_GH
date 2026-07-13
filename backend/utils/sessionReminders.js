@@ -40,11 +40,13 @@ export async function run24hReminders(now = Date.now()) {
   for (const r of rows) {
     const timeStr = formatTime(r.start_ts);
     const ok = await sendExpoPush(db, r.user_id, 'FizyoPark', `🗓️ Yarın ${timeStr}'da seansınız var. Görüşmek üzere 👋`);
-    if (ok) sent++;
-    await db.query(
-      `INSERT INTO session_reminders (session_id, reminder_type) VALUES ($1, '24h') ON CONFLICT DO NOTHING`,
-      [r.id]
-    );
+    if (ok) {
+      sent++;
+      await db.query(
+        `INSERT INTO session_reminders (session_id, reminder_type) VALUES ($1, '24h') ON CONFLICT DO NOTHING`,
+        [r.id]
+      );
+    }
   }
 
   console.log(`[sessionReminders] 24h: ${sent} bildirim gönderildi`);
