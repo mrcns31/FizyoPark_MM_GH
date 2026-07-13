@@ -311,11 +311,12 @@ router.post('/verify-access', requireKioskToken, async (req, res) => {
     let memberUserId = null;
     try {
       const memberRow = await db.query(
-        'SELECT name, user_id FROM members WHERE id = $1',
+        'SELECT name, first_name, last_name, user_id FROM members WHERE id = $1',
         [result.memberId]
       );
-      memberName = memberRow.rows[0]?.name || null;
-      memberUserId = memberRow.rows[0]?.user_id || null;
+      const r = memberRow.rows[0];
+      memberName = r ? (r.name || `${r.first_name || ''} ${r.last_name || ''}`.trim() || null) : null;
+      memberUserId = r?.user_id || null;
     } catch (_) {}
 
     if (checkIn.checkedIn) {
@@ -341,6 +342,8 @@ router.post('/verify-access', requireKioskToken, async (req, res) => {
       sendEntryPush(memberName, 'qr', checkIn.checkedIn ? checkIn.startTs : null, checkIn.checkedIn ? checkIn.sessionId : null, result.memberId).catch(() => {});
     }
 
+    const packageStats = await getActivePackageStats(db, result.memberId, checkIn.checkedIn ? checkIn.sessionId : null);
+
     res.json({
       valid: true,
       memberId: result.memberId,
@@ -348,6 +351,7 @@ router.post('/verify-access', requireKioskToken, async (req, res) => {
       checkIn: checkIn.checkedIn
         ? { ok: true, sessionId: checkIn.sessionId, startTs: checkIn.startTs }
         : { ok: false, reason: checkIn.reason || 'no_session' },
+      packageStats,
     });
   } catch (error) {
     console.error('Verify access error:', error);
@@ -366,7 +370,7 @@ router.post('/verify-card-access', requireKioskToken, async (req, res) => {
 
     // Önce üye tablosunu kontrol et (member_cards tablosundan çok kartlı arama)
     const memberRow = await db.query(
-      `SELECT m.id, m.name, m.user_id
+      `SELECT m.id, m.name, m.first_name, m.last_name, m.user_id
        FROM members m
        JOIN member_cards mc ON mc.member_id = m.id
        WHERE mc.card_no = $1 AND m.deleted_at IS NULL`,
@@ -374,7 +378,10 @@ router.post('/verify-card-access', requireKioskToken, async (req, res) => {
     );
 
     if (memberRow.rows.length) {
-      const { id: memberId, name: memberName, user_id: memberUserId } = memberRow.rows[0];
+      const _mr = memberRow.rows[0];
+      const memberId = _mr.id;
+      const memberName = _mr.name || `${_mr.first_name || ''} ${_mr.last_name || ''}`.trim() || null;
+      const memberUserId = _mr.user_id;
 
       let checkIn = { checkedIn: false, reason: 'no_session' };
       try {
@@ -456,13 +463,16 @@ router.post('/verify-phone-access', requireKioskToken, async (req, res) => {
 
     // Önce üye tablosunu kontrol et
     const memberRow = await db.query(
-      `SELECT id, name, user_id FROM members
+      `SELECT id, name, first_name, last_name, user_id FROM members
        WHERE REGEXP_REPLACE(phone, '[^0-9]', '', 'g') = $1 AND deleted_at IS NULL`,
       [digits]
     );
 
     if (memberRow.rows.length) {
-      const { id: memberId, name: memberName, user_id: memberUserId } = memberRow.rows[0];
+      const _mr = memberRow.rows[0];
+      const memberId = _mr.id;
+      const memberName = _mr.name || `${_mr.first_name || ''} ${_mr.last_name || ''}`.trim() || null;
+      const memberUserId = _mr.user_id;
 
       let checkIn = { checkedIn: false, reason: 'no_session' };
       try {
