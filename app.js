@@ -12603,6 +12603,9 @@ function renderExpiredMembershipsTable() {
   );
   const endStrRaw = (mp) => (mp.endDate || "").toString().slice(0, 10);
   const startStrRaw = (mp) => (mp.startDate || "").toString().slice(0, 10);
+  // Gelecek tarihli ama erken tamamlanmış paketlerin sıralaması bozmasını önler:
+  // seans dolup auto-complete olan paketlerin end date'i gelecekte olabilir → bugünle kapat
+  const endStrSort = (mp) => { const e = endStrRaw(mp); return e > todayStr ? todayStr : e; };
 
   let memberRows = [];
   for (const [mid, pkgs] of memberPkgsMap) {
@@ -12617,7 +12620,7 @@ function renderExpiredMembershipsTable() {
   } else if (expiredMembershipsSort.column === "start") {
     memberRows.sort((a, b) => dir * startStrRaw(a.latestPkg).localeCompare(startStrRaw(b.latestPkg)));
   } else {
-    memberRows.sort((a, b) => dir * endStrRaw(a.latestPkg).localeCompare(endStrRaw(b.latestPkg)));
+    memberRows.sort((a, b) => dir * endStrSort(a.latestPkg).localeCompare(endStrSort(b.latestPkg)));
   }
 
   if (memberRows.length === 0) {
