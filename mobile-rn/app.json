@@ -53,6 +53,7 @@
     },
     "android": {
       "package": "com.fizyopark.mobilern",
+      "versionCode": 2,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
