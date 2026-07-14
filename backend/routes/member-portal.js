@@ -369,13 +369,26 @@ router.post('/verify-card-access', requireKioskToken, async (req, res) => {
     }
 
     // Önce üye tablosunu kontrol et (member_cards tablosundan çok kartlı arama)
-    const memberRow = await db.query(
-      `SELECT m.id, m.name, m.first_name, m.last_name, m.user_id
-       FROM members m
-       JOIN member_cards mc ON mc.member_id = m.id
-       WHERE mc.card_no = $1 AND m.deleted_at IS NULL`,
-      [normalized]
-    );
+    let memberRow;
+    try {
+      memberRow = await db.query(
+        `SELECT m.id, m.name, m.first_name, m.last_name, m.user_id
+         FROM members m
+         JOIN member_cards mc ON mc.member_id = m.id
+         WHERE mc.card_no = $1 AND m.deleted_at IS NULL`,
+        [normalized]
+      );
+    } catch (err) {
+      if (err.code !== '42703') throw err;
+      console.warn('verify-card-access: first_name/last_name sütunu yok; migration_members_kimlik.sql çalıştırın');
+      memberRow = await db.query(
+        `SELECT m.id, m.name, m.user_id
+         FROM members m
+         JOIN member_cards mc ON mc.member_id = m.id
+         WHERE mc.card_no = $1 AND m.deleted_at IS NULL`,
+        [normalized]
+      );
+    }
 
     if (memberRow.rows.length) {
       const _mr = memberRow.rows[0];
@@ -462,11 +475,22 @@ router.post('/verify-phone-access', requireKioskToken, async (req, res) => {
     const digits = normalized.replace(/\D/g, '');
 
     // Önce üye tablosunu kontrol et
-    const memberRow = await db.query(
-      `SELECT id, name, first_name, last_name, user_id FROM members
-       WHERE REGEXP_REPLACE(phone, '[^0-9]', '', 'g') = $1 AND deleted_at IS NULL`,
-      [digits]
-    );
+    let memberRow;
+    try {
+      memberRow = await db.query(
+        `SELECT id, name, first_name, last_name, user_id FROM members
+         WHERE REGEXP_REPLACE(phone, '[^0-9]', '', 'g') = $1 AND deleted_at IS NULL`,
+        [digits]
+      );
+    } catch (err) {
+      if (err.code !== '42703') throw err;
+      console.warn('verify-phone-access: first_name/last_name sütunu yok; migration_members_kimlik.sql çalıştırın');
+      memberRow = await db.query(
+        `SELECT id, name, user_id FROM members
+         WHERE REGEXP_REPLACE(phone, '[^0-9]', '', 'g') = $1 AND deleted_at IS NULL`,
+        [digits]
+      );
+    }
 
     if (memberRow.rows.length) {
       const _mr = memberRow.rows[0];
