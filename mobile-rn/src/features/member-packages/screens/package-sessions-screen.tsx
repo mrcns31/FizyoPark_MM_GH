@@ -16,9 +16,21 @@ import { type AppColors, type ResolvedTheme } from '../../../theme/colors';
 import { useMemberPackageSessions, useMemberPackages } from '../api/hooks';
 import type { MemberPackageSession } from '../api/member-packages';
 import { useDeleteSession, useMoveSession } from '../../sessions/api/hooks';
-import { isAttendanceConfirmed } from '../../sessions/api/sessions';
 import { promptAdminPassword } from '../../../lib/admin-password';
 import type { MemberPackage } from '../../../types/api';
+
+// Backend requireAdminPasswordIfSessionConfirmed ile paralel: bu approvalKind'lerde
+// seansa giriş/onay kaydı var, silme/taşıma admin şifresi ister. approvalKind
+// backend'de gerçek attendance_confirmed_at kullanılarak hesaplanıyor; bu yüzden
+// checkedInAt/checkInMethod'dan PlannerSession taklit edip yeniden hesaplamak yerine
+// doğrudan buna güveniyoruz (aksi halde "Gelmedi" seanslarında şifre sorulmadan
+// backend'den "Admin şifresi gerekli" hatası dönerdi).
+const CONFIRMED_APPROVAL_KINDS = new Set([
+  'phone', 'card', 'qr', 'no_show', 'admin_present', 'staff_present', 'present',
+]);
+function needsAdminPassword(s: MemberPackageSession): boolean {
+  return !!s.approvalKind && CONFIRMED_APPROVAL_KINDS.has(s.approvalKind);
+}
 
 function fmtDate(v: string): string {
   if (!v) return '';
@@ -259,8 +271,7 @@ export function PackageSessionsScreen() {
         onPress: async () => {
           try {
             let adminPassword: string | undefined;
-            const fakeSession = { startTs: s.startTs, checkedInAt: s.checkedInAt, checkInMethod: s.checkInMethod, attendanceConfirmedAt: null, staffId: null, memberId: null, endTs: 0, memberName: '', staffName: '', roomId: null, roomName: '', note: '', attendanceOutcome: null } as any;
-            if (isAttendanceConfirmed(fakeSession)) {
+            if (needsAdminPassword(s)) {
               const pwd = await promptAdminPassword('Girişi onaylanmış seansı silmek için admin şifrenizi girin.');
               if (pwd == null) return;
               adminPassword = pwd;
@@ -282,8 +293,7 @@ export function PackageSessionsScreen() {
     setMoveTarget(null);
     try {
       let adminPassword: string | undefined;
-      const fakeSession = { startTs: s.startTs, checkedInAt: s.checkedInAt, checkInMethod: s.checkInMethod, attendanceConfirmedAt: null, staffId: null, memberId: null, endTs: 0, memberName: '', staffName: '', roomId: null, roomName: '', note: '', attendanceOutcome: null } as any;
-      if (isAttendanceConfirmed(fakeSession)) {
+      if (needsAdminPassword(s)) {
         const pwd = await promptAdminPassword('Girişi onaylanmış seansı taşımak için admin şifrenizi girin.');
         if (pwd == null) return;
         adminPassword = pwd;
