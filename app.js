@@ -840,7 +840,7 @@ let ui = {
   deletionRequests: [], // admin: bekleyen üyelik iptal talepleri
   passwordResetRequests: [], // admin: bekleyen şifre sıfırlama talepleri
   notifications: [], // admin: iptal/giriş bildirimleri
-  notificationsTypeFilter: "all", // all | cancel | checkin
+  notificationsTypeFilter: "all", // all | admin_cancel | member_cancel | checkin | shift_reminder | broadcast
   sidebarPackageRequestsOpen: false,
   sidebarCancellationRequestsOpen: false,
   adminHubSection: "working-hours",
@@ -1372,7 +1372,8 @@ function cacheEls() {
     "reportsNextYearBtn",
     "reportsToggleFormerBtn",
     "notificationsFilterAll",
-    "notificationsFilterCancel",
+    "notificationsFilterAdminCancel",
+    "notificationsFilterMemberCancel",
     "notificationsFilterCheckin",
     "memberPackageRequestCta",
     "memberOpenPackageRequestBtn",
@@ -6160,7 +6161,8 @@ function updateNotifPeriodUI() {
 }
 
 function notifTypeFilterToTypes(typeFilter) {
-  if (typeFilter === 'admin_cancel') return 'admin_cancel,member_cancel';
+  if (typeFilter === 'admin_cancel') return 'admin_cancel';
+  if (typeFilter === 'member_cancel') return 'member_cancel';
   if (typeFilter === 'shift_reminder') return 'shift_reminder';
   return null; // 'all' → filtre yok
 }
@@ -6210,7 +6212,8 @@ function setNotificationsTypeFilter(type) {
   notifViewPage = 1;
   var tabDefs = [
     { key: 'all', id: 'notificationsFilterAll' },
-    { key: 'admin_cancel', id: 'notificationsFilterCancel' },
+    { key: 'admin_cancel', id: 'notificationsFilterAdminCancel' },
+    { key: 'member_cancel', id: 'notificationsFilterMemberCancel' },
     { key: 'checkin', id: 'notificationsFilterCheckin' },
     { key: 'shift_reminder', id: 'notificationsFilterReminder' },
     { key: 'broadcast', id: 'notificationsFilterBroadcast' },
@@ -13975,7 +13978,8 @@ function bindEvents() {
   if (els.reportsNextYearBtn) els.reportsNextYearBtn.addEventListener("click", function () { reportsYear++; if (els.reportsYearLabel) els.reportsYearLabel.textContent = reportsYear; loadAndRenderReports(); });
   if (els.reportsToggleFormerBtn) els.reportsToggleFormerBtn.addEventListener("click", function () { reportsShowFormer = !reportsShowFormer; updateReportsFormerToggleUI(); renderReportsTable(); });
   if (els.notificationsFilterAll) els.notificationsFilterAll.addEventListener('click', function () { setNotificationsTypeFilter('all'); });
-  if (els.notificationsFilterCancel) els.notificationsFilterCancel.addEventListener('click', function () { setNotificationsTypeFilter('admin_cancel'); });
+  if (els.notificationsFilterAdminCancel) els.notificationsFilterAdminCancel.addEventListener('click', function () { setNotificationsTypeFilter('admin_cancel'); });
+  if (els.notificationsFilterMemberCancel) els.notificationsFilterMemberCancel.addEventListener('click', function () { setNotificationsTypeFilter('member_cancel'); });
   if (els.notificationsFilterCheckin) els.notificationsFilterCheckin.addEventListener('click', function () { setNotificationsTypeFilter('checkin'); });
   if (els.memberOpenPackageRequestBtn) els.memberOpenPackageRequestBtn.addEventListener("click", openMemberPackageRequestModal);
   if (els.memberPackageRequestSubmitBtn) {
