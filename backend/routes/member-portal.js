@@ -206,7 +206,7 @@ async function sendEntryPush(memberName, method, startTs, sessionId, memberId) {
         const { rows: pkgRows } = await db.query(
           `SELECT p.name, mp.id AS mp_id FROM member_packages mp
            JOIN packages p ON p.id = mp.package_id
-           WHERE mp.member_id = $1 AND mp.status = 'active' AND mp.deleted_at IS NULL
+           WHERE mp.member_id = $1 AND mp.status = 'active'
            ORDER BY mp.created_at DESC LIMIT 1`,
           [memberId]
         );
