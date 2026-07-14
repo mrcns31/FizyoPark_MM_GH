@@ -418,7 +418,7 @@ router.post('/verify-card-access', requireKioskToken, async (req, res) => {
         await logWalkInQrAccess(db, memberId, 'card');
       }
 
-      sendEntryPush(memberName, 'card', checkIn.checkedIn ? checkIn.startTs : null, checkIn.checkedIn ? checkIn.sessionId : null, memberId).catch(() => {});
+      if (memberName) sendEntryPush(memberName, 'card', checkIn.checkedIn ? checkIn.startTs : null, checkIn.checkedIn ? checkIn.sessionId : null, memberId).catch(() => {});
 
       const packageStats = await getActivePackageStats(db, memberId, checkIn.checkedIn ? checkIn.sessionId : null);
       return res.json({
@@ -520,7 +520,7 @@ router.post('/verify-phone-access', requireKioskToken, async (req, res) => {
         await logWalkInQrAccess(db, memberId, 'phone');
       }
 
-      sendEntryPush(memberName, 'phone', checkIn.checkedIn ? checkIn.startTs : null, checkIn.checkedIn ? checkIn.sessionId : null, memberId).catch(() => {});
+      if (memberName) sendEntryPush(memberName, 'phone', checkIn.checkedIn ? checkIn.startTs : null, checkIn.checkedIn ? checkIn.sessionId : null, memberId).catch(() => {});
 
       const packageStats = await getActivePackageStats(db, memberId, checkIn.checkedIn ? checkIn.sessionId : null);
       return res.json({
