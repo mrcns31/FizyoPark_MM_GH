@@ -156,6 +156,7 @@ async function sendCancellationPush(memberName, startTs, staffName, staffId) {
 
 async function sendEntryPush(memberName, method, startTs, sessionId, memberId) {
   try {
+    console.log(`[sendEntryPush] çağrıldı — üye: "${memberName}", method: ${method}, memberId: ${memberId}, sessionId: ${sessionId}`);
     const methodLabel = METHOD_LABEL[method] || method.toUpperCase();
     const entryBody = startTs
       ? `${memberName} - ${methodLabel} ile ${new Date(Number(startTs)).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Istanbul' })}'deki randevusu için giriş yapmıştır.`
@@ -167,6 +168,7 @@ async function sendEntryPush(memberName, method, startTs, sessionId, memberId) {
        JOIN users u ON u.id = pt.user_id
        WHERE u.role IN ('admin', 'manager')`
     );
+    console.log(`[sendEntryPush] admin/manager token sayısı: ${adminRows.length}`);
 
     // O saatteki sorumlu personelin token'ı
     let staffRows = [];
@@ -340,6 +342,8 @@ router.post('/verify-access', requireKioskToken, async (req, res) => {
 
     if (memberName) {
       sendEntryPush(memberName, 'qr', checkIn.checkedIn ? checkIn.startTs : null, checkIn.checkedIn ? checkIn.sessionId : null, result.memberId).catch(() => {});
+    } else {
+      console.warn(`[verify-access/qr] memberName null — üye #${result.memberId} için bildirim gönderilmedi`);
     }
 
     const packageStats = await getActivePackageStats(db, result.memberId, checkIn.checkedIn ? checkIn.sessionId : null);
@@ -418,7 +422,11 @@ router.post('/verify-card-access', requireKioskToken, async (req, res) => {
         await logWalkInQrAccess(db, memberId, 'card');
       }
 
-      if (memberName) sendEntryPush(memberName, 'card', checkIn.checkedIn ? checkIn.startTs : null, checkIn.checkedIn ? checkIn.sessionId : null, memberId).catch(() => {});
+      if (memberName) {
+        sendEntryPush(memberName, 'card', checkIn.checkedIn ? checkIn.startTs : null, checkIn.checkedIn ? checkIn.sessionId : null, memberId).catch(() => {});
+      } else {
+        console.warn(`[verify-card-access] memberName null — üye #${memberId} için bildirim gönderilmedi`);
+      }
 
       const packageStats = await getActivePackageStats(db, memberId, checkIn.checkedIn ? checkIn.sessionId : null);
       return res.json({
@@ -520,7 +528,11 @@ router.post('/verify-phone-access', requireKioskToken, async (req, res) => {
         await logWalkInQrAccess(db, memberId, 'phone');
       }
 
-      if (memberName) sendEntryPush(memberName, 'phone', checkIn.checkedIn ? checkIn.startTs : null, checkIn.checkedIn ? checkIn.sessionId : null, memberId).catch(() => {});
+      if (memberName) {
+        sendEntryPush(memberName, 'phone', checkIn.checkedIn ? checkIn.startTs : null, checkIn.checkedIn ? checkIn.sessionId : null, memberId).catch(() => {});
+      } else {
+        console.warn(`[verify-phone-access] memberName null — üye #${memberId} için bildirim gönderilmedi`);
+      }
 
       const packageStats = await getActivePackageStats(db, memberId, checkIn.checkedIn ? checkIn.sessionId : null);
       return res.json({
