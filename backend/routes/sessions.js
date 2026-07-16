@@ -231,6 +231,7 @@ router.get('/notifications', [
   query('page').optional().isInt({ min: 1 }),
   query('per_page').optional().isInt({ min: 1, max: 100 }),
   query('types').optional().isString(),
+  query('q').optional().isString(),
 ], async (req, res) => {
   try {
     if (req.user.role === 'member') {
@@ -249,6 +250,7 @@ router.get('/notifications', [
     const typeFilter = req.query.types
       ? String(req.query.types).split(',').map(t => t.trim()).filter(t => ALLOWED_TYPES.has(t))
       : [];
+    const searchQuery = req.query.q ? String(req.query.q).trim() : '';
 
     const params = [since, until];
     let cancelFilter = '';
@@ -309,14 +311,19 @@ router.get('/notifications', [
       ${shiftReminderSql}
     `;
 
-    // Type filtresi SQL koşulu
-    let typeWhere = '';
+    // Type + isim arama filtresi SQL koşulu
     let finalParams = [...shiftParams];
+    const whereClauses = [];
     if (typeFilter.length > 0) {
-      const idx = finalParams.length + 1;
-      typeWhere = ` WHERE type = ANY($${idx})`;
+      whereClauses.push(`type = ANY($${finalParams.length + 1})`);
       finalParams.push(typeFilter);
     }
+    if (searchQuery) {
+      const idx = finalParams.length + 1;
+      whereClauses.push(`(member_name ILIKE $${idx} OR staff_name ILIKE $${idx})`);
+      finalParams.push(`%${searchQuery}%`);
+    }
+    const typeWhere = whereClauses.length ? ` WHERE ${whereClauses.join(' AND ')}` : '';
 
     // Toplam sayı
     let total = 0;

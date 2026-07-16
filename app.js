@@ -841,6 +841,7 @@ let ui = {
   passwordResetRequests: [], // admin: bekleyen şifre sıfırlama talepleri
   notifications: [], // admin: iptal/giriş bildirimleri
   notificationsTypeFilter: "all", // all | admin_cancel | member_cancel | checkin | shift_reminder | broadcast
+  notificationsSearchQuery: "",
   sidebarPackageRequestsOpen: false,
   sidebarCancellationRequestsOpen: false,
   adminHubSection: "working-hours",
@@ -1375,6 +1376,7 @@ function cacheEls() {
     "notificationsFilterAdminCancel",
     "notificationsFilterMemberCancel",
     "notificationsFilterCheckin",
+    "notifSearchInput",
     "memberPackageRequestCta",
     "memberOpenPackageRequestBtn",
     "memberPackageRequestPending",
@@ -6190,6 +6192,7 @@ async function loadNotifPeriodData() {
       page: notifViewPage,
       per_page: notificationsPageSize,
       types: types || undefined,
+      q: (ui.notificationsSearchQuery || '').trim() || undefined,
     });
     if (Array.isArray(data)) {
       notifViewItems = data;
@@ -6356,6 +6359,8 @@ function openNotificationsView() {
   _broadcastHistoryPage = 1;
   _broadcastHistoryCache = null;
   _broadcastRecipientCache = {};
+  ui.notificationsSearchQuery = '';
+  if (els.notifSearchInput) els.notifSearchInput.value = '';
   updateNotifPeriodUI();
 
   // Rozet sayacını sıfırla
@@ -13988,6 +13993,18 @@ function bindEvents() {
   if (els.notificationsFilterAdminCancel) els.notificationsFilterAdminCancel.addEventListener('click', function () { setNotificationsTypeFilter('admin_cancel'); });
   if (els.notificationsFilterMemberCancel) els.notificationsFilterMemberCancel.addEventListener('click', function () { setNotificationsTypeFilter('member_cancel'); });
   if (els.notificationsFilterCheckin) els.notificationsFilterCheckin.addEventListener('click', function () { setNotificationsTypeFilter('checkin'); });
+  if (els.notifSearchInput) {
+    var notifSearchDebounce = null;
+    els.notifSearchInput.addEventListener('input', function () {
+      var val = els.notifSearchInput.value;
+      clearTimeout(notifSearchDebounce);
+      notifSearchDebounce = setTimeout(function () {
+        ui.notificationsSearchQuery = val;
+        notifViewPage = 1;
+        loadNotifPeriodData();
+      }, 300);
+    });
+  }
   if (els.memberOpenPackageRequestBtn) els.memberOpenPackageRequestBtn.addEventListener("click", openMemberPackageRequestModal);
   if (els.memberPackageRequestSubmitBtn) {
     els.memberPackageRequestSubmitBtn.addEventListener("click", submitMemberPackageRequestFromModal);

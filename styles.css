@@ -6720,6 +6720,12 @@ body.splash-screen-open{
   padding:4px 14px;
   border-bottom:1px solid var(--border);
 }
+.notif-search-row{
+  padding:8px 14px 2px;
+}
+.notif-search-row .input{
+  width:100%;
+}
 .notif-nav-label{
   flex:1;
   padding:6px 8px;
