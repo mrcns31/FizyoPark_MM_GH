@@ -75,6 +75,13 @@ export function buildAttendanceLabel(row, now = Date.now()) {
 /** Admin paket seans listesi: onay türü + giriş bilgisi */
 export function buildPackageSessionApprovalInfo(row, now = Date.now()) {
   if (row.deleted_at != null || isSessionCancelled(row)) {
+    const deletedByRole = row.deleted_by_role ?? row.deletedByRole ?? null;
+    if (deletedByRole === 'member') {
+      return { label: 'Üye İptali', kind: 'cancelled', checkInAt: null };
+    }
+    if (deletedByRole) {
+      return { label: 'Admin İptali', kind: 'cancelled', checkInAt: null };
+    }
     return { label: 'İptal edildi', kind: 'cancelled', checkInAt: null };
   }
 

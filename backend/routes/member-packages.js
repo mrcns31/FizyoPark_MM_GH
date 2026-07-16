@@ -1289,10 +1289,11 @@ router.get('/:id/sessions', async (req, res) => {
     const mp = mpRes.rows[0];
 
     const result = await db.query(
-      `SELECT s.*, r.name AS room_name, cu.role AS confirmer_role
+      `SELECT s.*, r.name AS room_name, cu.role AS confirmer_role, du.role AS deleted_by_role
        FROM sessions s
        LEFT JOIN rooms r ON r.id = s.room_id
        ${ATTENDANCE_JOIN_SQL}
+       LEFT JOIN users du ON du.id = s.deleted_by
        WHERE s.member_package_id = $1
        ORDER BY s.start_ts ASC`,
       [id]
