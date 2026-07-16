@@ -5165,8 +5165,15 @@ async function pollNotifications() {
     var data = await window.API.getNotifications({ since: notificationSince, per_page: 50 });
     var rows = Array.isArray(data) ? data : (data && Array.isArray(data.items) ? data.items : []);
     if (rows.length > 0) {
-      rows.forEach(function (row) {
-        showTopNotification(formatNotificationToast(row));
+      var MAX_TOASTS = 3;
+      rows.forEach(function (row, i) {
+        if (i === 0) {
+          showTopNotification(formatNotificationToast(row));
+        } else if (i === MAX_TOASTS - 1 && rows.length > MAX_TOASTS) {
+          showTopNotification("+" + (rows.length - i) + " yeni bildirim daha var.");
+        } else if (i < MAX_TOASTS) {
+          showTopNotification(formatNotificationToast(row));
+        }
         if (row.at > notificationSince) notificationSince = row.at;
         if (isAdminUser()) addNotificationToList(row);
       });

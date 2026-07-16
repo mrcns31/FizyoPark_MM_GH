@@ -275,8 +275,9 @@ router.get('/notifications', [
 
       SELECT sn.id, CASE WHEN sn.type = 'cancel' THEN 'member_cancel' ELSE 'shift_reminder' END AS type,
              EXTRACT(EPOCH FROM sn.created_at AT TIME ZONE 'Europe/Istanbul') * 1000 AS at_ts,
-             NULL::int AS staff_id, NULL::bigint AS start_ts,
-             NULL AS member_name,
+             NULL::int AS staff_id,
+             (sn.payload->>'startTs')::bigint AS start_ts,
+             sn.payload->>'memberName' AS member_name,
              NULL AS staff_name,
              NULL AS source,
              sn.title AS notif_title,
