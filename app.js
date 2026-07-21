@@ -5096,6 +5096,9 @@ var STALE_SESSION_MSG = "Bu seans artık geçerli değil (üye iptal etmiş veya
 var notificationTimer = null;
 var notificationSince = 0;
 var NOTIFICATION_INTERVAL_MS = 8000;
+
+var passwordResetRequestsTimer = null;
+var PASSWORD_RESET_REQUESTS_INTERVAL_MS = 15000;
 var NOTIFICATION_LIST_LIMIT = 50;
 var NOTIFICATION_SEEN_KEY = "lastSeenNotificationAt";
 
@@ -5289,6 +5292,7 @@ function onSessionSyncVisibility() {
   }
   syncSessionsFromServer({ silent: true });
   pollNotifications();
+  refreshPasswordResetRequests();
 }
 
 function startSessionAutoSync() {
@@ -5317,6 +5321,13 @@ function startSessionAutoSync() {
       if (document.visibilityState !== "visible") return;
       pollNotifications();
     }, NOTIFICATION_INTERVAL_MS);
+
+    // Şifre sıfırlama taleplerini periyodik yenile: başka bir cihazda (ör. telefon)
+    // işlenen talep, bu cihazda (ör. tablet) elle yenilemeden düşsün. (mobil ile aynı 15 sn)
+    passwordResetRequestsTimer = setInterval(function () {
+      if (document.visibilityState !== "visible") return;
+      refreshPasswordResetRequests();
+    }, PASSWORD_RESET_REQUESTS_INTERVAL_MS);
   }
 }
 
@@ -5328,6 +5339,10 @@ function stopSessionAutoSync() {
   if (notificationTimer) {
     clearInterval(notificationTimer);
     notificationTimer = null;
+  }
+  if (passwordResetRequestsTimer) {
+    clearInterval(passwordResetRequestsTimer);
+    passwordResetRequestsTimer = null;
   }
 }
 

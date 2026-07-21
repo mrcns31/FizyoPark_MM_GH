@@ -13,7 +13,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useTheme } from '../../features/theme';
-import { surfaceTint, type AppColors, type ResolvedTheme } from '../../theme/colors';
+import { surfaceTint, type AppColors } from '../../theme/colors';
 import { ThemeToggle } from '../theme-toggle';
 import { DrawerContext } from './drawer-context';
 
@@ -46,8 +46,8 @@ export function RoleShell({
   footer?: NavSection;
   children: React.ReactNode;
 }) {
-  const { colors, resolvedTheme } = useTheme();
-  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   const [open, setOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
   const anim = useRef(new Animated.Value(0)).current; // 0 kapalı, 1 açık
@@ -114,7 +114,6 @@ export function RoleShell({
                     </View>
                   ) : null}
                   <View style={styles.themeSection}>
-                    <Text style={styles.sectionTitle}>GÖRÜNÜM</Text>
                     <ThemeToggle />
                   </View>
                 </ScrollView>
@@ -129,10 +128,9 @@ export function RoleShell({
 
 function Section({ section, onNavigate }: { section: NavSection; onNavigate: () => void }) {
   const { colors, resolvedTheme } = useTheme();
-  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   return (
     <View style={styles.section}>
-      <Text style={styles.sectionTitle}>{section.title.toLocaleUpperCase('tr')}</Text>
       {section.items.map((it) => (
         <Pressable
           key={it.key}
@@ -162,7 +160,7 @@ function Section({ section, onNavigate }: { section: NavSection; onNavigate: () 
   );
 }
 
-function makeStyles(colors: AppColors, theme: ResolvedTheme) {
+function makeStyles(colors: AppColors) {
   return StyleSheet.create({
     root: { flex: 1, backgroundColor: colors.bg },
     content: { flex: 1 },
@@ -204,24 +202,16 @@ function makeStyles(colors: AppColors, theme: ResolvedTheme) {
     brandText: { flex: 1, fontWeight: '800', fontSize: 14, color: colors.text },
     close: { padding: 4 },
     inner: { flex: 1 },
-    innerContent: { padding: 8, gap: 10 },
-    section: { paddingHorizontal: 8, paddingVertical: 8 },
-    sectionTitle: {
-      fontSize: 11,
-      fontWeight: '700',
-      letterSpacing: 1,
-      color: surfaceTint(theme, 0.45),
-      marginBottom: 8,
-      paddingHorizontal: 4,
-    },
+    innerContent: { padding: 8, gap: 2 },
+    section: { paddingHorizontal: 8, paddingVertical: 2 },
     navBtn: {
       flexDirection: 'row',
       alignItems: 'center',
       gap: 12,
       paddingHorizontal: 12,
-      paddingVertical: 10,
+      paddingVertical: 8,
       borderRadius: 10,
-      minHeight: 44,
+      minHeight: 40,
       borderWidth: 1,
       borderColor: 'transparent',
     },
