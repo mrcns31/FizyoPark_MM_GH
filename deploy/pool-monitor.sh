@@ -44,11 +44,11 @@ LONGEST="$(docker exec "$DB_CONTAINER" sh -c \
 RESTARTS="$(docker inspect "$API_CONTAINER" --format '{{.RestartCount}}' 2>/dev/null || echo '?')"
 STATUS="$(docker inspect "$API_CONTAINER" --format '{{.State.Status}}' 2>/dev/null || echo '?')"
 
-# --- /health yanıt süresi container içinden (curl yoksa wget/busybox yedeği) ---
+# --- /health yanıt süresi container içinden (node ile — Alpine'de curl/wget yok) ---
 HEALTH_START="$(date +%s.%N)"
-if docker exec "$API_CONTAINER" sh -c \
-    'command -v curl >/dev/null && curl -sf http://localhost:3000/health >/dev/null \
-     || command -v wget >/dev/null && wget -qO- http://localhost:3000/health >/dev/null' 2>/dev/null; then
+if docker exec "$API_CONTAINER" node -e \
+    'require("http").get("http://127.0.0.1:3000/health",r=>{r.resume();process.exit(r.statusCode===200?0:1)}).on("error",()=>process.exit(1))' \
+    2>/dev/null; then
   HEALTH="ok $(awk "BEGIN{printf \"%.2f\", $(date +%s.%N)-$HEALTH_START}")s"
 else
   HEALTH="FAIL"
