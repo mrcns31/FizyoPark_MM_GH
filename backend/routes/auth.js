@@ -1,4 +1,5 @@
 import express from 'express';
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
 import { body, validationResult } from 'express-validator';
@@ -53,6 +54,24 @@ const generateToken = (userId, role, rememberMe) => {
     process.env.JWT_SECRET,
     { expiresIn: rememberMe ? (process.env.JWT_REMEMBER_EXPIRES_IN || '7d') : (process.env.JWT_EXPIRES_IN || '4h') }
   );
+};
+
+// Refresh token ömrü (gün) — kayan süre: her yenilemede bu kadar ileri atılır.
+const REFRESH_TOKEN_DAYS = parseInt(process.env.REFRESH_TOKEN_DAYS, 10) || 180;
+
+const hashRefreshToken = (raw) => crypto.createHash('sha256').update(raw).digest('hex');
+
+// "Beni hatırla" oturumu için yeni refresh token üret + hash'ini DB'ye yaz.
+// Ham token yalnızca client'a döner, DB'de sadece hash saklanır.
+const issueRefreshToken = async (userId) => {
+  const raw = crypto.randomBytes(48).toString('hex');
+  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_DAYS * 24 * 60 * 60 * 1000);
+  await db.query(
+    `INSERT INTO refresh_tokens (user_id, token_hash, remember_me, expires_at)
+     VALUES ($1, $2, true, $3)`,
+    [userId, hashRefreshToken(raw), expiresAt]
+  );
+  return raw;
 };
 
 // Token doğrula (middleware için)
@@ -151,6 +170,8 @@ router.post('/login', loginRateLimiter, [
 
     // Token oluştur
     const token = generateToken(user.id, user.role, !!rememberMe);
+    // "Beni hatırla" seçildiyse, çıkışa kadar sessiz yenileme için refresh token ver
+    const refreshToken = rememberMe ? await issueRefreshToken(user.id) : undefined;
 
     await activityLog(req, {
       action: 'auth.login',
@@ -164,6 +185,7 @@ router.post('/login', loginRateLimiter, [
 
     res.json({
       token,
+      ...(refreshToken ? { refreshToken } : {}),
       user: {
         ...buildUserProfile(user),
         ...(await getConsentStatus(user.id)),
@@ -554,14 +576,63 @@ router.put('/account', verifyToken, [
   }
 });
 
-// Token yenile
-router.post('/refresh', verifyToken, (req, res) => {
-  const newToken = generateToken(req.user.userId, req.user.role);
-  res.json({ token: newToken });
+// Token yenile — access token süresi dolduğunda refresh token ile yeni access token al.
+// verifyToken YOK: access token zaten dolmuş olabilir; kimliği refresh token doğrular.
+router.post('/refresh', async (req, res) => {
+  try {
+    const { refreshToken } = req.body || {};
+    if (!refreshToken || typeof refreshToken !== 'string') {
+      return res.status(401).json({ error: 'Oturum bulunamadı' });
+    }
+
+    const result = await db.query(
+      `SELECT rt.id, rt.user_id, rt.expires_at, rt.revoked_at,
+              u.role, u.is_active, m.deleted_at AS member_deleted_at
+         FROM refresh_tokens rt
+         JOIN users u ON u.id = rt.user_id
+         LEFT JOIN members m ON m.user_id = u.id
+        WHERE rt.token_hash = $1`,
+      [hashRefreshToken(refreshToken)]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(401).json({ error: 'Oturum geçersiz. Lütfen tekrar giriş yapın.' });
+    }
+
+    const row = result.rows[0];
+    if (row.revoked_at || new Date(row.expires_at).getTime() < Date.now()) {
+      return res.status(401).json({ error: 'Oturum süresi doldu. Lütfen tekrar giriş yapın.' });
+    }
+    // Access token doğrulamasıyla aynı hesap kontrolleri
+    if (!row.is_active) {
+      return res.status(401).json({ error: 'Hesabınız devre dışı bırakılmış. Lütfen yönetici ile iletişime geçin.' });
+    }
+    if (row.role === 'member' && row.member_deleted_at) {
+      return res.status(401).json({ error: 'Üyeliğiniz sonlandırılmış. Lütfen yönetici ile iletişime geçin.' });
+    }
+
+    // Kayan süre: her kullanımda süreyi ileri at (aktif kullanıcı çıkışa kadar hiç düşmez)
+    const newExpiresAt = new Date(Date.now() + REFRESH_TOKEN_DAYS * 24 * 60 * 60 * 1000);
+    await db.query(
+      'UPDATE refresh_tokens SET last_used_at = CURRENT_TIMESTAMP, expires_at = $1 WHERE id = $2',
+      [newExpiresAt, row.id]
+    );
+
+    const token = generateToken(row.user_id, row.role, true);
+    res.json({ token });
+  } catch (error) {
+    console.error('Token refresh error:', error);
+    res.status(500).json({ error: 'Oturum yenilenirken hata oluştu' });
+  }
 });
 
 // Çıkış yap (client-side token silinir)
 router.post('/logout', verifyToken, async (req, res) => {
+  // Refresh token'ı iptal et — çıkış sonrası bu cihazdaki oturum kesin sonlansın
+  const { refreshToken } = req.body || {};
+  if (refreshToken && typeof refreshToken === 'string') {
+    await db.query('DELETE FROM refresh_tokens WHERE token_hash = $1', [hashRefreshToken(refreshToken)]).catch(() => {});
+  }
   // Push token bu kullanıcıya bağlı kalmasın: cihazda kim login olursa push-token
   // endpoint'i tekrar register eder; aksi halde bir önceki kullanıcı bildirim almaya devam eder
   await db.query('DELETE FROM push_tokens WHERE user_id = $1', [req.user.userId]).catch(() => {});

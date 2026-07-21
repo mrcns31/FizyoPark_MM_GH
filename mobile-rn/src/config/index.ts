@@ -42,4 +42,7 @@ if (__DEV__ === false && API_BASE.startsWith('http://')) {
 /** SecureStore'da JWT anahtarı (web'de localStorage 'seans_planner_token' idi). */
 export const TOKEN_KEY = 'seans_planner_token';
 
+/** SecureStore'da refresh token anahtarı ("Beni hatırla" oturumları için). */
+export const REFRESH_TOKEN_KEY = 'seans_planner_refresh_token';
+
 export const REQUEST_TIMEOUT_MS = 15000;

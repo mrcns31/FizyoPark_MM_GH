@@ -1,11 +1,18 @@
 import { apiClient } from '../../../lib/api-client';
-import { getToken, removeToken, setToken } from '../../../lib/storage';
+import {
+  clearAuthTokens,
+  getRefreshToken,
+  getToken,
+  setRefreshToken,
+  setToken,
+} from '../../../lib/storage';
 import type { UserProfile } from '../../../types/api';
 
 /** Web api.js'teki auth çağrılarının birebir karşılığı (axios üzerinden). */
 
 export interface LoginResponse {
   token: string;
+  refreshToken?: string;
   user?: UserProfile;
   [k: string]: unknown;
 }
@@ -21,6 +28,8 @@ export async function login(
     rememberMe: !!rememberMe,
   });
   if (data.token) await setToken(data.token);
+  // "Beni hatırla" seçildiyse backend refresh token döner — sessiz yenileme için sakla
+  if (data.refreshToken) await setRefreshToken(data.refreshToken);
   return data;
 }
 
@@ -69,11 +78,13 @@ export async function requestPasswordReset(email: string): Promise<void> {
 export async function logout(): Promise<void> {
   try {
     if (await getToken()) {
-      await apiClient.post('/auth/logout', {});
+      const refreshToken = await getRefreshToken();
+      // refreshToken gönderilirse backend bu cihazın oturumunu kesin iptal eder
+      await apiClient.post('/auth/logout', refreshToken ? { refreshToken } : {});
     }
   } catch {
-    // logout backend hatası önemsiz — token'ı yine de sileriz
+    // logout backend hatası önemsiz — token'ları yine de sileriz
   } finally {
-    await removeToken();
+    await clearAuthTokens();
   }
 }
