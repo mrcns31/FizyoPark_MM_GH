@@ -72,7 +72,9 @@ export function SessionFormScreen() {
     );
   }, [editing, daySessions, params.singleEdit]);
 
-  const membersQ = useQuery({ queryKey: ['members'], queryFn: getMembers });
+  // staleTime uzun: üye listesi form her açılışında yeniden fetch edilip boş kalmasın
+  // (yavaş ağda isim çözümlemesinin gecikmesini azaltır).
+  const membersQ = useQuery({ queryKey: ['members'], queryFn: getMembers, staleTime: 5 * 60_000 });
   const staffQ = useQuery({ queryKey: ['staff'], queryFn: getStaff });
 
   const [staffId, setStaffId] = useState<number | null>(null);
@@ -136,7 +138,13 @@ export function SessionFormScreen() {
   }, [allPackages]);
 
   const members = membersQ.data ?? [];
-  const memberName = (id: number) => members.find((m) => m.id === id)?.name ?? `#${id}`;
+  // İsim çözümleme: önce ['members'] sorgusu, o boş/gecikmeliyse backend seans
+  // verisindeki isim (groupSessions.memberName) yedek. Böylece sistem yavaşken bile
+  // isim "#785" gibi ID'ye düşmez; ID fallback yalnızca ikisi de boşsa devreye girer.
+  const memberName = (id: number) =>
+    members.find((m) => m.id === id)?.name ||
+    groupSessions.find((s) => s.memberId === id)?.memberName ||
+    `#${id}`;
 
   // Eklenebilir üyeler: aktif paketli & henüz eklenmemiş. Forced member aktif olmasa da dahil.
   const addableOptions = members
