@@ -52,14 +52,22 @@ export function RoleShell({
   const [mounted, setMounted] = useState(false);
   const anim = useRef(new Animated.Value(0)).current; // 0 kapalı, 1 açık
 
+  const hasBadge = useMemo(
+    () =>
+      sections.some((s) => s.items.some((it) => it.badge)) ||
+      !!footer?.items.some((it) => it.badge),
+    [sections, footer],
+  );
+
   const api = useMemo(
     () => ({
       open,
       openDrawer: () => setOpen(true),
       closeDrawer: () => setOpen(false),
       toggleDrawer: () => setOpen((v) => !v),
+      hasBadge,
     }),
-    [open],
+    [open, hasBadge],
   );
 
   useEffect(() => {

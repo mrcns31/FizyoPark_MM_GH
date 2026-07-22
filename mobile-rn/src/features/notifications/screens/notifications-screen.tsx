@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -8,7 +8,7 @@ import { ScreenHeader } from '../../../components/screen-header';
 import { useResponsive } from '../../../lib/responsive';
 import { useTheme } from '../../theme';
 import { surfaceTint, type AppColors, type ResolvedTheme } from '../../../theme/colors';
-import { useLatestNotification, useNotifications } from '../api/hooks';
+import { useLatestNotification, useMarkNotificationsSeen, useNotifications } from '../api/hooks';
 import { useAuth } from '../../auth';
 import { StaffDateBar, useStaffDate } from '../../staff/context/staff-date-context';
 import type { StaffNotification } from '../api/notifications';
@@ -119,6 +119,8 @@ function AdminNotifications({ wide }: { wide: object }) {
   const [anchorReady, setAnchorReady] = useState(false);
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
   const [page, setPage] = useState(1);
+  const [searchInput, setSearchInput] = useState('');
+  const [search, setSearch] = useState('');
 
   const { data: latestData } = useLatestNotification();
   useEffect(() => {
@@ -129,9 +131,20 @@ function AdminNotifications({ wide }: { wide: object }) {
     setAnchorReady(true);
   }, [latestData, anchorReady]);
 
+  const markSeen = useMarkNotificationsSeen();
+  useEffect(() => {
+    const latest = latestData?.items?.[0];
+    if (latest?.at) markSeen(latest.at);
+  }, [latestData, markSeen]);
+
+  useEffect(() => {
+    const t = setTimeout(() => { setSearch(searchInput.trim()); setPage(1); }, 300);
+    return () => clearTimeout(t);
+  }, [searchInput]);
+
   const { since, until } = useMemo(() => anchorRange(period, anchor), [period, anchor]);
   const types = typeFilter === 'all' ? undefined : typeFilter;
-  const { data, isLoading, isFetching } = useNotifications(since, until, page, PER_PAGE, types);
+  const { data, isLoading, isFetching } = useNotifications(since, until, page, PER_PAGE, types, search || undefined);
   const items = data?.items ?? [];
 
   function changePeriod(p: PeriodKey) { setPeriod(p); setAnchor(Date.now()); setPage(1); }
@@ -162,6 +175,17 @@ function AdminNotifications({ wide }: { wide: object }) {
           </Pressable>
         ))}
       </View>
+      <View style={[wide as any, { paddingVertical: 6 }]}>
+        <TextInput
+          value={searchInput}
+          onChangeText={setSearchInput}
+          placeholder="Üye veya personel adına göre ara..."
+          placeholderTextColor={colors.muted}
+          autoCapitalize="none"
+          autoCorrect={false}
+          style={styles.searchInput}
+        />
+      </View>
       <NotificationList items={items} isLoading={isLoading} totalPages={data?.totalPages ?? 1} page={page} setPage={setPage} wide={wide} />
     </>
   );
@@ -177,6 +201,13 @@ function StaffNotifications({ wide }: { wide: object }) {
     const sod = startOfDayIst(dayTs);
     return { since: sod, until: sod + 86400000 - 1 };
   }, [dayTs]);
+
+  const { data: latestData } = useLatestNotification();
+  const markSeen = useMarkNotificationsSeen();
+  useEffect(() => {
+    const latest = latestData?.items?.[0];
+    if (latest?.at) markSeen(latest.at);
+  }, [latestData, markSeen]);
 
   const { data, isLoading } = useNotifications(since, until, page, PER_PAGE, 'member_cancel');
   const items = data?.items ?? [];
@@ -310,6 +341,12 @@ function makeStyles(colors: AppColors, theme: ResolvedTheme) {
     chipOn: { backgroundColor: 'rgba(124,92,255,0.20)', borderColor: 'rgba(124,92,255,0.5)' },
     chipText: { color: colors.muted, fontSize: 13, fontWeight: '700' },
     chipTextOn: { color: colors.text },
+
+    searchInput: {
+      borderWidth: 1, borderColor: colors.border, borderRadius: 10,
+      paddingHorizontal: 12, paddingVertical: 9, fontSize: 13,
+      color: colors.text, backgroundColor: surfaceTint(theme, 0.03),
+    },
 
     list: { paddingVertical: 8, gap: 8, flexGrow: 1 },
     item: {

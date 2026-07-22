@@ -1,4 +1,6 @@
+import { useCallback, useEffect, useState } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { listNotifications, markNotificationRead } from './notifications';
 
@@ -8,26 +10,71 @@ export const notificationKeys = {
   latest: ['notifications', 'latest'] as const,
 };
 
-export function useNotifications(since: number, until: number, page: number, perPage = 20, types?: string) {
+export function useNotifications(since: number, until: number, page: number, perPage = 20, types?: string, q?: string) {
   return useQuery({
-    queryKey: [...notificationKeys.list(since, until, page), types ?? 'all'],
-    queryFn: () => listNotifications({ since, until, page, perPage, types }),
+    queryKey: [...notificationKeys.list(since, until, page), types ?? 'all', q ?? ''],
+    queryFn: () => listNotifications({ since, until, page, perPage, types, q }),
     staleTime: 15_000,
   });
 }
 
-/** Sidebar badge: bugünkü bildirim sayısı. */
+const LAST_SEEN_KEY = 'notif_last_seen_at';
+
+async function getLastSeenAt(): Promise<number> {
+  try {
+    const v = await AsyncStorage.getItem(LAST_SEEN_KEY);
+    return v ? Number(v) : 0;
+  } catch {
+    return 0;
+  }
+}
+
+async function setLastSeenAt(ts: number): Promise<void> {
+  try {
+    await AsyncStorage.setItem(LAST_SEEN_KEY, String(ts));
+  } catch {}
+}
+
+/** Sidebar badge: AsyncStorage'daki lastSeenAt'ten sonraki (son 30 gün içindeki) bildirim sayısı. */
 export function useUnreadCount() {
+  const [lastSeenAt, setLastSeenAtState] = useState<number | null>(null);
+
+  useEffect(() => {
+    let alive = true;
+    getLastSeenAt().then((v) => {
+      if (alive) setLastSeenAtState(v);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const now = Date.now();
-  const TZ = 3 * 3600 * 1000;
-  const todayStart = Math.floor((now + TZ) / 86400000) * 86400000 - TZ;
+  const since = now - 30 * 24 * 3600 * 1000;
   const q = useQuery({
     queryKey: notificationKeys.recent,
-    queryFn: () => listNotifications({ since: todayStart, until: now, page: 1, perPage: 50 }),
+    queryFn: () => listNotifications({ since, until: now, page: 1, perPage: 50 }),
     refetchInterval: 20_000,
   });
-  const count = q.data?.total ?? 0;
+  const items = q.data?.items ?? [];
+  const count = lastSeenAt == null ? 0 : items.filter((n) => n.at > lastSeenAt).length;
   return { ...q, count };
+}
+
+/** Bildirimler ekranı açıldığında en son bildirimi "görüldü" olarak işaretler — sidebar badge'i temizler. */
+export function useMarkNotificationsSeen() {
+  const qc = useQueryClient();
+  return useCallback(
+    (ts: number) => {
+      if (!ts) return;
+      getLastSeenAt().then((current) => {
+        if (ts > current) {
+          setLastSeenAt(ts).then(() => qc.invalidateQueries({ queryKey: notificationKeys.recent }));
+        }
+      });
+    },
+    [qc],
+  );
 }
 
 /** En son bildirimin tarihini bulmak için tek kayıt çeker (ORDER BY at DESC). */

@@ -6,6 +6,8 @@ interface DrawerCtx {
   openDrawer: () => void;
   closeDrawer: () => void;
   toggleDrawer: () => void;
+  /** Menü öğelerinden herhangi birinde (bildirim/talep) rozet varsa true — hamburger butonunda gösterilir. */
+  hasBadge: boolean;
 }
 
 const Ctx = createContext<DrawerCtx | null>(null);

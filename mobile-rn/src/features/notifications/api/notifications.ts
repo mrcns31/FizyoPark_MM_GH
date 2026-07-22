@@ -100,6 +100,7 @@ export async function listNotifications(opts: {
   page?: number;
   perPage?: number;
   types?: string;
+  q?: string;
 } = {}): Promise<NotificationsResult> {
   const { page = 1, perPage = 20 } = opts;
   let since: number;
@@ -114,6 +115,7 @@ export async function listNotifications(opts: {
   }
   const params: Record<string, any> = { since, until, page, per_page: perPage };
   if (opts.types) params.types = opts.types;
+  if (opts.q) params.q = opts.q;
   const { data } = await apiClient.get('/sessions/notifications', { params });
   // Geriye dönük uyumluluk: backend eski format dönerse dizi olabilir
   if (Array.isArray(data)) {
