@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -8,6 +8,7 @@ export const notificationKeys = {
   list: (since: number, until: number, page: number) => ['notifications', since, until, page] as const,
   recent: ['notifications', 'recent'] as const,
   latest: ['notifications', 'latest'] as const,
+  lastSeen: ['notifications', 'lastSeen'] as const,
 };
 
 export function useNotifications(since: number, until: number, page: number, perPage = 20, types?: string, q?: string) {
@@ -29,26 +30,27 @@ async function getLastSeenAt(): Promise<number> {
   }
 }
 
-async function setLastSeenAt(ts: number): Promise<void> {
+async function persistLastSeenAt(ts: number): Promise<void> {
   try {
     await AsyncStorage.setItem(LAST_SEEN_KEY, String(ts));
   } catch {}
 }
 
-/** Sidebar badge: AsyncStorage'daki lastSeenAt'ten sonraki (son 30 gün içindeki) bildirim sayısı. */
+/**
+ * lastSeenAt'i React Query cache'inde tutar — böylece markSeen() her yerde anında
+ * (uygulama yeniden başlatılmadan) yansır. AsyncStorage sadece kalıcılık içindir.
+ */
+function useLastSeenAt() {
+  return useQuery({
+    queryKey: notificationKeys.lastSeen,
+    queryFn: getLastSeenAt,
+    staleTime: Infinity,
+  });
+}
+
+/** Sidebar badge: lastSeenAt'ten sonraki (son 30 gün içindeki) bildirim sayısı. */
 export function useUnreadCount() {
-  const [lastSeenAt, setLastSeenAtState] = useState<number | null>(null);
-
-  useEffect(() => {
-    let alive = true;
-    getLastSeenAt().then((v) => {
-      if (alive) setLastSeenAtState(v);
-    });
-    return () => {
-      alive = false;
-    };
-  }, []);
-
+  const { data: lastSeenAt } = useLastSeenAt();
   const now = Date.now();
   const since = now - 30 * 24 * 3600 * 1000;
   const q = useQuery({
@@ -61,16 +63,17 @@ export function useUnreadCount() {
   return { ...q, count };
 }
 
-/** Bildirimler ekranı açıldığında en son bildirimi "görüldü" olarak işaretler — sidebar badge'i temizler. */
+/** Bildirimler ekranı açıldığında en son bildirimi "görüldü" olarak işaretler — sidebar badge'i anında temizler. */
 export function useMarkNotificationsSeen() {
   const qc = useQueryClient();
   return useCallback(
     (ts: number) => {
       if (!ts) return;
-      getLastSeenAt().then((current) => {
-        if (ts > current) {
-          setLastSeenAt(ts).then(() => qc.invalidateQueries({ queryKey: notificationKeys.recent }));
-        }
+      const cached = qc.getQueryData<number>(notificationKeys.lastSeen);
+      (cached != null ? Promise.resolve(cached) : getLastSeenAt()).then((current) => {
+        if (ts <= current) return;
+        qc.setQueryData(notificationKeys.lastSeen, ts);
+        persistLastSeenAt(ts).catch(() => {});
       });
     },
     [qc],
