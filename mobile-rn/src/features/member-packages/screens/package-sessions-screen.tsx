@@ -45,7 +45,7 @@ function badgeFor(s: {
   checkedInAt: string | null;
   status: string;
 }): { label: string; tone: 'green' | 'red' | 'orange' | 'neutral' | 'accent' } {
-  if (s.isCancelled) return { label: 'İptal edildi', tone: 'red' };
+  if (s.isCancelled) return { label: s.approvalLabel || 'İptal edildi', tone: 'red' };
 
   const lbl = s.approvalLabel;
   const kind = s.approvalKind;
