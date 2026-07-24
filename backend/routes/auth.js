@@ -771,7 +771,9 @@ router.post('/password-reset-requests/:id/reset', verifyToken, async (req, res) 
     const email = requestRes.rows[0].email;
 
     const userRes = await db.query(
-      `SELECT u.id, u.phone, s.phone AS staff_phone, m.phone AS member_phone
+      `SELECT u.id, u.phone, s.phone AS staff_phone, m.phone AS member_phone,
+              m.name AS member_name, m.first_name AS member_first_name, m.last_name AS member_last_name,
+              s.first_name AS staff_first_name, s.last_name AS staff_last_name
        FROM users u
        LEFT JOIN staff s ON s.user_id = u.id
        LEFT JOIN members m ON m.user_id = u.id AND m.deleted_at IS NULL
@@ -785,6 +787,10 @@ router.post('/password-reset-requests/:id/reset', verifyToken, async (req, res) 
 
     // Geçici şifre: telefon son 4 hane, yoksa rastgele 4 rakam
     const phone = user.phone || user.staff_phone || user.member_phone || '';
+    // WhatsApp bildirimi için görünen ad (üye → personel → boş).
+    const memberName = user.member_name || [user.member_first_name, user.member_last_name].filter(Boolean).join(' ').trim();
+    const staffName = [user.staff_first_name, user.staff_last_name].filter(Boolean).join(' ').trim();
+    const displayName = memberName || staffName || '';
     const digits = phone.replace(/\D/g, '');
     const tempPassword = digits.length >= 4 ? digits.slice(-4) : String(Math.floor(1000 + Math.random() * 9000));
 
@@ -812,6 +818,8 @@ router.post('/password-reset-requests/:id/reset', verifyToken, async (req, res) 
       message: 'Şifre sıfırlandı',
       loginEmail: email,
       temporaryPassword: tempPassword,
+      phone,
+      name: displayName,
     });
   } catch (error) {
     console.error('Password reset request handle error:', error);

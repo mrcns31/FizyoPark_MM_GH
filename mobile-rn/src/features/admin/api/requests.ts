@@ -99,9 +99,16 @@ export async function getPasswordResetRequests(): Promise<PasswordResetRequest[]
 export interface ResetPasswordResult {
   loginEmail: string;
   temporaryPassword: string;
+  phone: string;
+  name: string;
 }
 
 export async function handlePasswordResetRequest(id: number): Promise<ResetPasswordResult> {
   const { data } = await apiClient.post(`/auth/password-reset-requests/${id}/reset`, {});
-  return { loginEmail: data.loginEmail, temporaryPassword: data.temporaryPassword };
+  return {
+    loginEmail: data.loginEmail,
+    temporaryPassword: data.temporaryPassword,
+    phone: data.phone || '',
+    name: data.name || '',
+  };
 }

@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,6 +18,36 @@ import {
   usePasswordResetRequests,
   useRejectDeletion,
 } from '../api/hooks';
+
+// ── WhatsApp bildirim yardımcıları ────────────────────────────────────────
+
+/** Kayıtlı telefonu wa.me formatına çevirir: sadece rakam, ülke kodlu (90...). */
+function toWhatsAppNumber(raw: string): string {
+  let d = (raw || '').replace(/\D/g, '');
+  if (!d) return '';
+  if (d.startsWith('90')) return d;
+  if (d.startsWith('0')) d = d.slice(1);
+  return '90' + d;
+}
+
+/** Şifre sıfırlama bildirimini üyeye WhatsApp'tan iletmek için wa.me linkini açar. */
+function sendResetWhatsApp(result: { name: string; phone: string; temporaryPassword: string }) {
+  const num = toWhatsAppNumber(result.phone);
+  if (!num) {
+    Alert.alert(
+      'Telefon bulunamadı',
+      'Bu üyenin kayıtlı telefon numarası olmadığı için WhatsApp mesajı hazırlanamadı. Geçici şifreyi elle iletin.'
+    );
+    return;
+  }
+  const greeting = result.name ? `Merhaba ${result.name}` : 'Merhaba';
+  const msg =
+    `${greeting}, FizyoPark uygulama şifreniz sıfırlandı. Geçici şifreniz: ${result.temporaryPassword}. ` +
+    `Girmeden önce telefonunuzdaki eski kayıtlı şifreyi silmeniz gerekmektedir, sonra geçici şifre ile girip yeni şifrenizi belirleyebilirsiniz 🙏`;
+  Linking.openURL(`https://wa.me/${num}?text=${encodeURIComponent(msg)}`).catch(() => {
+    Alert.alert('WhatsApp açılamadı', 'WhatsApp uygulaması açılamadı. Geçici şifreyi elle iletin.');
+  });
+}
 
 // ── Tip tanımları ─────────────────────────────────────────────────────────
 
@@ -211,7 +241,11 @@ export function AdminRequestsScreen() {
                         onSuccess: (result) =>
                           Alert.alert(
                             'Şifre Sıfırlandı',
-                            `Giriş: ${result.loginEmail}\nGeçici şifre: ${result.temporaryPassword}\n\nKullanıcıyla paylaşın. İlk girişte şifre değiştirilecektir.`
+                            `Giriş: ${result.loginEmail}\nGeçici şifre: ${result.temporaryPassword}\n\nÜyeye WhatsApp'tan iletmek için aşağıdaki butonu kullanın. İlk girişte şifre değiştirilecektir.`,
+                            [
+                              { text: 'Kapat', style: 'cancel' },
+                              { text: "📲 WhatsApp'tan Bildir", onPress: () => sendResetWhatsApp(result) },
+                            ]
                           ),
                       })
                   )
