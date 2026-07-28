@@ -2767,6 +2767,9 @@ function renderPackageSessionsTableRows(container, sessions, options) {
         '<span class="package-session-approval package-session-approval--' + escapeHtml(approvalKind) + '">' +
         escapeHtml(approvalLabel) + "</span>" +
         moveSel +
+        "</td>" +
+        '<td class="package-sessions-table__cell package-sessions-table__note" data-label="Not">' +
+        (s.note ? escapeHtml(s.note) : '<span class="package-sessions-table__note-empty">—</span>') +
         "</td>";
     } else {
       html =
@@ -2862,6 +2865,11 @@ function renderPackageSessionsCards(container, sessions, options) {
           s.checkInTimeStr && s.checkInTimeStr !== "—"
             ? '<div class="package-session-card__meta">Giriş: ' + escapeHtml(s.checkInTimeStr) + "</div>"
             : "";
+        var noteLine = s.note
+          ? '<div class="package-session-card__note"><span class="package-session-card__note-label">Not:</span> ' +
+            escapeHtml(s.note) +
+            "</div>"
+          : "";
         var clickable = options.clickable !== false;
         var otherPkgsCard = (packageSessionsCurrent && packageSessionsCurrent.otherPackages) || [];
         var moveHtml = "";
@@ -2898,6 +2906,7 @@ function renderPackageSessionsCards(container, sessions, options) {
           escapeHtml(approvalLabel) +
           "</span></div>" +
           checkInLine +
+          noteLine +
           moveHtml +
           (clickable ? '<div class="package-session-card__hint hint">Düzenlemek için dokunun</div>' : "") +
           "</article>"

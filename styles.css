@@ -4170,6 +4170,18 @@ body.body--sidebar-open{
   color:var(--muted);
   line-height:1.4;
 }
+.package-session-card__note{
+  margin-top:4px;
+  font-size:12px;
+  line-height:1.4;
+  color:var(--text);
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+}
+.package-session-card__note-label{
+  color:var(--muted);
+  font-weight:650;
+}
 .package-session-card__hint{
   margin-top:8px;
   font-size:11px;
@@ -4209,6 +4221,19 @@ body.body--sidebar-open{
 .package-sessions-table__cell:last-child{
   white-space:normal;
   min-width:96px;
+}
+.package-sessions-table__note{
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+}
+@media (min-width:768px){
+  .package-sessions-table__note{
+    min-width:120px;
+    max-width:260px;
+  }
+}
+.package-sessions-table__note-empty{
+  color:var(--muted);
 }
 .package-sessions-table th{
   font-size:10px;
