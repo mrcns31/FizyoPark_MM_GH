@@ -279,7 +279,7 @@ function NotificationList({ items, isLoading, totalPages, page, setPage, wide }:
               <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
               <Text style={styles.time}>{fmtAt(item.at)}</Text>
             </View>
-            {item.body ? <Text style={styles.body} numberOfLines={2}>{item.body}</Text> : null}
+            {item.body ? <Text style={styles.body} numberOfLines={isMemberCancel ? 6 : 2}>{item.body}</Text> : null}
           </View>
         );
       }}

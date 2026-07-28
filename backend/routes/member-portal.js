@@ -82,7 +82,7 @@ async function sendDeletionRequestPush(memberName, memberId) {
   }
 }
 
-async function sendCancellationPush(memberName, startTs, staffName, staffId) {
+async function sendCancellationPush(memberName, startTs, staffName, staffId, cancelReason) {
   try {
     const TZ = 3 * 60 * 60 * 1000;
     const d = new Date(Number(startTs) + TZ);
@@ -98,7 +98,9 @@ async function sendCancellationPush(memberName, startTs, staffName, staffId) {
     const staffPart = staffName ? ` ${staffName} ile olan` : '';
 
     const title = 'Üye Randevu İptali';
-    const bodyText = `${memberName} - ${dateStr} ${dayName} ${timeStr}${staffPart} randevusunu iptal etmiştir.`;
+    const reasonText = typeof cancelReason === 'string' ? cancelReason.trim() : '';
+    const reasonPart = reasonText ? ` Notu: "${reasonText}"` : '';
+    const bodyText = `${memberName} - ${dateStr} ${dayName} ${timeStr}${staffPart} randevusunu iptal etmiştir.${reasonPart}`;
 
     // Admin/Manager: push token olmayan kullanıcılar da bildirim listesinde görsün (LEFT JOIN)
     const { rows: adminRows } = await db.query(
@@ -126,7 +128,7 @@ async function sendCancellationPush(memberName, startTs, staffName, staffId) {
     }
 
     // staff_notifications tablosuna kaydet → tablet sidebar'ında "İptaller" filtresinde görünür
-    const payload = JSON.stringify({ startTs: Number(startTs), memberName });
+    const payload = JSON.stringify({ startTs: Number(startTs), memberName, cancelReason: reasonText || null });
     const seenUsers = new Set();
     for (const r of [...adminRows, ...staffRows]) {
       if (!r.user_id || seenUsers.has(r.user_id)) continue;
@@ -877,7 +879,7 @@ router.post('/sessions/:id/cancel', requireMember, async (req, res) => {
       .then(({ rows }) => {
         const r = rows[0];
         const memberName = r ? (r.name || `${r.first_name || ''} ${r.last_name || ''}`.trim() || 'Üye') : 'Üye';
-        sendCancellationPush(memberName, session.start_ts, staffName, session.staff_id).catch(() => {});
+        sendCancellationPush(memberName, session.start_ts, staffName, session.staff_id, cancelReasonText).catch(() => {});
       })
       .catch(() => {});
 
