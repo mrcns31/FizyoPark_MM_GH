@@ -6810,10 +6810,18 @@ body.splash-screen-open{
   border-left:2px solid rgba(255,149,0,.5);
 }
 .notifications-table__detail{
-  max-width:260px;
+  max-width:460px;
   color:var(--muted);
   font-size:12px;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
+  white-space:normal;
+  overflow-wrap:anywhere;
+}
+/* Üyenin iptal sırasında yazdığı not — ayrı "Not" sütunu */
+.notifications-table__note{
+  max-width:300px;
+  color:var(--danger);
+  font-size:12px;
+  font-weight:600;
+  white-space:normal;
+  overflow-wrap:anywhere;
 }

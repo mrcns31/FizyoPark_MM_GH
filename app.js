@@ -6296,7 +6296,7 @@ function renderNotificationsTable() {
   var table = document.createElement('table');
   table.className = 'expired-memberships-table notifications-table';
   table.innerHTML =
-    '<thead><tr><th>Zaman</th><th>Tür</th><th>Üye / Başlık</th><th>Personel / Detay</th></tr></thead><tbody></tbody>';
+    '<thead><tr><th>Zaman</th><th>Tür</th><th>Üye / Başlık</th><th>Personel / Detay</th><th>Not</th></tr></thead><tbody></tbody>';
   var tbody = table.querySelector('tbody');
 
   var notifFmt = new Intl.DateTimeFormat('tr-TR', {
@@ -6337,9 +6337,18 @@ function renderNotificationsTable() {
     var atStr = n.at ? notifFmt.format(new Date(n.at)) : '—';
 
     var memberOrTitle, staffOrDetail;
+    var detailNote = ''; // üye iptalinde üyenin yazdığı not (ayrı "Not" sütununda gösterilir)
     if (n.type === 'shift_reminder' || n.type === 'member_cancel') {
       memberOrTitle = n.title || (n.type === 'member_cancel' ? 'Üye Randevu İptali' : 'Onay bekleyen seanslar');
       staffOrDetail = n.body || '';
+      if (n.type === 'member_cancel') {
+        var NOTE_MARK = ' Notu: "';
+        var noteIdx = staffOrDetail.indexOf(NOTE_MARK);
+        if (noteIdx >= 0) {
+          detailNote = staffOrDetail.slice(noteIdx + NOTE_MARK.length).replace(/"$/, '');
+          staffOrDetail = staffOrDetail.slice(0, noteIdx);
+        }
+      }
     } else if (n.type === 'admin_cancel') {
       memberOrTitle = n.title || 'Admin Randevu İptali';
       var parts = [];
@@ -6358,7 +6367,8 @@ function renderNotificationsTable() {
       '<td>' + escapeHtml(atStr) + '</td>' +
       '<td><span class="' + typeCls + '">' + escapeHtml(typeLabel) + '</span></td>' +
       '<td>' + escapeHtml(memberOrTitle) + '</td>' +
-      '<td class="notifications-table__detail">' + escapeHtml(staffOrDetail) + '</td>';
+      '<td class="notifications-table__detail">' + escapeHtml(staffOrDetail) + '</td>' +
+      '<td class="notifications-table__note">' + (detailNote ? escapeHtml(detailNote) : '—') + '</td>';
     tbody.appendChild(row);
   });
 

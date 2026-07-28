@@ -268,6 +268,12 @@ function NotificationList({ items, isLoading, totalPages, page, setPage, wide }:
           ? colors.danger
           : (isMemberCancel || isReminder) ? colors.fpOrange
           : colors.ok;
+        // Üye iptalinde üyenin yazdığı not gövdeye "... Notu: "..."" olarak ekleniyor;
+        // ayırıp alt satırda vurgulu gösteriyoruz
+        const rawBody = item.body || '';
+        const noteIdx = isMemberCancel ? rawBody.indexOf(' Notu: "') : -1;
+        const bodyText = noteIdx >= 0 ? rawBody.slice(0, noteIdx) : rawBody;
+        const noteText = noteIdx >= 0 ? rawBody.slice(noteIdx + 1) : '';
         return (
           <View style={[
             styles.item,
@@ -279,7 +285,8 @@ function NotificationList({ items, isLoading, totalPages, page, setPage, wide }:
               <Text style={styles.title} numberOfLines={1}>{item.title}</Text>
               <Text style={styles.time}>{fmtAt(item.at)}</Text>
             </View>
-            {item.body ? <Text style={styles.body} numberOfLines={isMemberCancel ? 6 : 2}>{item.body}</Text> : null}
+            {bodyText ? <Text style={styles.body} numberOfLines={2}>{bodyText}</Text> : null}
+            {noteText ? <Text style={styles.bodyNote} numberOfLines={4}>{noteText}</Text> : null}
           </View>
         );
       }}
@@ -365,6 +372,7 @@ function makeStyles(colors: AppColors, theme: ResolvedTheme) {
     title: { flex: 1, fontSize: 14, fontWeight: '700', color: colors.text },
     time: { color: colors.muted, fontSize: 11, flexShrink: 0 },
     body: { color: colors.textSecondary, fontSize: 13, paddingLeft: 26 },
+    bodyNote: { color: colors.danger, fontSize: 13, fontWeight: '700', paddingLeft: 26, marginTop: 2 },
 
     pager: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12, gap: 10 },
     pageBtn: {
