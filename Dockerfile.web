@@ -9,7 +9,6 @@ WORKDIR /usr/share/nginx/html
 COPY index.html app.js api.js styles.css manifest.json sw.js pwa-register.js ./
 COPY kiosk.html kiosk.js activity-logs.html activity-logs.js ./
 COPY consent-status.html consent-status.js broadcasts.html broadcasts.js ./
-COPY indir.html ./
 COPY icons/ ./icons/
 COPY fonts/ ./fonts/
 
