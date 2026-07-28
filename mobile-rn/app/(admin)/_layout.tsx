@@ -3,7 +3,12 @@ import { Stack, usePathname, useRouter } from 'expo-router';
 
 import { RoleShell, type NavSection } from '../../src/components/drawer/role-shell';
 import { useAuth } from '../../src/features/auth';
-import { useDeletionRequests, useOpenDoor, usePackageRequests } from '../../src/features/admin/api/hooks';
+import {
+  useDeletionRequests,
+  useOpenDoor,
+  usePackageRequests,
+  usePasswordResetRequests,
+} from '../../src/features/admin/api/hooks';
 import { useUnreadCount } from '../../src/features/notifications/api/hooks';
 import { NotificationToaster } from '../../src/features/notifications/components/notification-toaster';
 
@@ -19,7 +24,9 @@ export default function AdminLayout() {
   const { count: unread } = useUnreadCount();
   const pkgReqs = usePackageRequests();
   const delReqs = useDeletionRequests();
-  const reqCount = (pkgReqs.data?.length ?? 0) + (delReqs.data?.length ?? 0);
+  const pwReqs = usePasswordResetRequests();
+  const reqCount =
+    (pkgReqs.data?.length ?? 0) + (delReqs.data?.length ?? 0) + (pwReqs.data?.length ?? 0);
 
   const go = (path: string) => router.navigate(path as never);
   const active = (seg: string) => pathname.startsWith(seg);

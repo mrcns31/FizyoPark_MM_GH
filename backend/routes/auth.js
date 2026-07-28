@@ -168,6 +168,10 @@ router.post('/login', loginRateLimiter, [
       return res.status(401).json({ error: 'Üyelik kaydı bulunamadı. Yönetici ile iletişime geçin.' });
     }
 
+    // Kullanıcı zaten girebildiyse bekleyen şifre sıfırlama talebini otomatik kapat
+    // (admin, üye kendi çözmüşken gereksiz sıfırlama yapmasın). Girişi yavaşlatmasın diye beklemeden.
+    closePendingResetRequestsByUserId(user.id, null).catch(() => {});
+
     // Token oluştur
     const token = generateToken(user.id, user.role, !!rememberMe);
     // "Beni hatırla" seçildiyse, çıkışa kadar sessiz yenileme için refresh token ver
@@ -297,6 +301,9 @@ router.post('/set-password', verifyToken, [
       actorType: 'user'
     }).catch(() => {});
 
+    // Kendi şifresini belirledi → bekleyen talebi kapat
+    closePendingResetRequestsByUserId(req.user.userId, null).catch(() => {});
+
     res.json({ message: 'Şifreniz kaydedildi', mustChangePassword: false });
   } catch (error) {
     console.error('Set password error:', error);
@@ -357,6 +364,9 @@ router.post('/change-password', verifyToken, [
       actorId: user.id,
       actorType: 'user'
     }).catch(() => {});
+
+    // Kendi şifresini değiştirdi → bekleyen talebi kapat
+    closePendingResetRequestsByUserId(user.id, null).catch(() => {});
 
     res.json({ message: 'Şifreniz güncellendi' });
   } catch (error) {
@@ -732,6 +742,24 @@ router.post('/forgot-password', [
   }
 });
 
+/**
+ * Bir kullanıcının bekleyen şifre sıfırlama taleplerini kapatır.
+ * Kullanıcı zaten giriş yapabildiğinde veya kendi şifresini değiştirdiğinde
+ * çağrılır; böylece admin gereksiz yere şifre sıfırlamaz.
+ * handledByUserId = null → sistem tarafından otomatik çözüldü.
+ */
+async function closePendingResetRequestsByUserId(userId, handledByUserId = null) {
+  if (!userId) return 0;
+  const r = await db.query(
+    `UPDATE password_reset_requests p
+     SET status = 'handled', handled_at = CURRENT_TIMESTAMP, handled_by_user_id = $2
+     FROM users u
+     WHERE u.id = $1 AND LOWER(p.email) = LOWER(u.email) AND p.status = 'pending'`,
+    [userId, handledByUserId]
+  );
+  return r.rowCount || 0;
+}
+
 // Şifre sıfırlama taleplerini listele — sadece admin/manager
 router.get('/password-reset-requests', verifyToken, async (req, res) => {
   try {
@@ -824,6 +852,37 @@ router.post('/password-reset-requests/:id/reset', verifyToken, async (req, res) 
   } catch (error) {
     console.error('Password reset request handle error:', error);
     res.status(500).json({ error: 'Şifre sıfırlanırken hata oluştu' });
+  }
+});
+
+// Şifre sıfırlama talebini SIFIRLAMADAN kaldır (vazgeç) — sadece admin/manager.
+// Şifreye dokunmaz; sadece talebi listeden düşürür (örn. üye kendi çözmüşse).
+router.post('/password-reset-requests/:id/dismiss', verifyToken, async (req, res) => {
+  try {
+    if (req.user.role !== 'admin' && req.user.role !== 'manager') {
+      return res.status(403).json({ error: 'Yetki yok' });
+    }
+    const { id } = req.params;
+    const r = await db.query(
+      `UPDATE password_reset_requests
+       SET status = 'handled', handled_at = CURRENT_TIMESTAMP, handled_by_user_id = $1
+       WHERE id = $2 AND status = 'pending'
+       RETURNING id, email`,
+      [req.user.userId, id]
+    );
+    if (r.rows.length === 0) {
+      return res.status(404).json({ error: 'Talep bulunamadı veya zaten işlendi' });
+    }
+    await activityLog(req, {
+      action: 'auth.reset_password_request_dismissed',
+      entityType: 'password_reset_request',
+      entityId: Number(id),
+      details: { email: r.rows[0].email },
+    }).catch(() => {});
+    res.json({ message: 'Talep kaldırıldı' });
+  } catch (error) {
+    console.error('Password reset request dismiss error:', error);
+    res.status(500).json({ error: 'Talep kaldırılırken hata oluştu' });
   }
 });
 

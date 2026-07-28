@@ -465,6 +465,10 @@
     return apiFetch('/auth/password-reset-requests/' + id + '/reset', { method: 'POST', body: JSON.stringify({}) });
   }
 
+  async function dismissPasswordResetRequest(id) {
+    return apiFetch('/auth/password-reset-requests/' + id + '/dismiss', { method: 'POST', body: JSON.stringify({}) });
+  }
+
   // Nadiren değişen veriler (personel, oda, paket tanımları, çalışma saatleri) — localStorage, 24 saat
   var RARE_CACHE_KEY  = 'fp_rare_v1';
   var RARE_CACHE_TTL  = 24 * 60 * 60 * 1000;
@@ -1097,6 +1101,7 @@
     forgotPassword,
     getPasswordResetRequests,
     handlePasswordResetRequest,
+    dismissPasswordResetRequest,
     createMember,
     getFormerMembers,
     getFormerMemberPackages,

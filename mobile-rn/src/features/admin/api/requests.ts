@@ -112,3 +112,8 @@ export async function handlePasswordResetRequest(id: number): Promise<ResetPassw
     name: data.name || '',
   };
 }
+
+/** Talebi şifreyi sıfırlamadan kaldırır (vazgeç) — POST /auth/password-reset-requests/:id/dismiss. */
+export async function dismissPasswordResetRequest(id: number): Promise<void> {
+  await apiClient.post(`/auth/password-reset-requests/${id}/dismiss`, {});
+}

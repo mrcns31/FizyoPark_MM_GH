@@ -14,6 +14,7 @@ import {
   useApproveDeletion,
   useDeletionRequests,
   useDismissPackageRequest,
+  useDismissPasswordResetRequest,
   useHandlePasswordResetRequest,
   usePackageRequests,
   usePasswordResetRequests,
@@ -111,6 +112,7 @@ export function AdminRequestsScreen() {
   const approve = useApproveDeletion();
   const reject = useRejectDeletion();
   const handlePwReset = useHandlePasswordResetRequest();
+  const dismissPw = useDismissPasswordResetRequest();
   const router = useRouter();
   const { contentMaxWidth, gutter } = useResponsive();
 
@@ -199,29 +201,47 @@ export function AdminRequestsScreen() {
                   hour: '2-digit', minute: '2-digit',
                 })}
               </Text>
-              <Button
-                title="Şifreyi Sıfırla"
-                variant="primary"
-                loading={handlePwReset.isPending}
-                onPress={() =>
-                  confirm(
-                    'Şifreyi Sıfırla',
-                    `${r.email} kullanıcısının şifresi sıfırlansın mı? Geçici şifre size gösterilecektir.`,
-                    () =>
-                      handlePwReset.mutate(r.id, {
-                        onSuccess: (result) =>
-                          Alert.alert(
-                            'Şifre Sıfırlandı',
-                            `Giriş: ${result.loginEmail}\nGeçici şifre: ${result.temporaryPassword}\n\nÜyeye WhatsApp'tan iletmek için aşağıdaki butonu kullanın. İlk girişte şifre değiştirilecektir.`,
-                            [
-                              { text: 'Kapat', style: 'cancel' },
-                              { text: "📲 WhatsApp'tan Bildir", onPress: () => sendResetWhatsApp(result) },
-                            ]
-                          ),
-                      })
-                  )
-                }
-              />
+              <View style={styles.actions}>
+                <View style={{ flex: 1 }}>
+                  <Button
+                    title="Şifreyi Sıfırla"
+                    variant="primary"
+                    loading={handlePwReset.isPending}
+                    onPress={() =>
+                      confirm(
+                        'Şifreyi Sıfırla',
+                        `${r.email} kullanıcısının şifresi sıfırlansın mı? Geçici şifre size gösterilecektir.`,
+                        () =>
+                          handlePwReset.mutate(r.id, {
+                            onSuccess: (result) =>
+                              Alert.alert(
+                                'Şifre Sıfırlandı',
+                                `Giriş: ${result.loginEmail}\nGeçici şifre: ${result.temporaryPassword}\n\nÜyeye WhatsApp'tan iletmek için aşağıdaki butonu kullanın. İlk girişte şifre değiştirilecektir.`,
+                                [
+                                  { text: 'Kapat', style: 'cancel' },
+                                  { text: "📲 WhatsApp'tan Bildir", onPress: () => sendResetWhatsApp(result) },
+                                ]
+                              ),
+                          })
+                      )
+                    }
+                  />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Button
+                    title="Kaldır"
+                    variant="ghost"
+                    loading={dismissPw.isPending}
+                    onPress={() =>
+                      confirm(
+                        'Talebi kaldır',
+                        `${r.email} için şifre talebi, şifre SIFIRLANMADAN kaldırılsın mı? (Üye kendi çözdüyse kullanın.)`,
+                        () => dismissPw.mutate(r.id)
+                      )
+                    }
+                  />
+                </View>
+              </View>
             </View>
           ))}
         </RequestSection>

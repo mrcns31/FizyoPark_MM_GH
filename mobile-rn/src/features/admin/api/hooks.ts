@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   approveDeletion,
   dismissPackageRequest,
+  dismissPasswordResetRequest,
   getDeletionRequests,
   getPackageRequests,
   getPasswordResetRequests,
@@ -73,6 +74,14 @@ export function useHandlePasswordResetRequest() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => handlePasswordResetRequest(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: adminKeys.passwordResetRequests }),
+  });
+}
+
+export function useDismissPasswordResetRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => dismissPasswordResetRequest(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: adminKeys.passwordResetRequests }),
   });
 }

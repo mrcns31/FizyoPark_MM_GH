@@ -5980,6 +5980,7 @@ function renderPasswordResetRequestsSidebar() {
       (when ? '<p class="package-request-card__meta">Talep: ' + when + "</p>" : "") +
       '<div class="package-request-card__actions">' +
       '<button type="button" class="btn btn--primary btn--xs" data-pw-reset-handle="' + r.id + '">Şifreyi Sıfırla</button>' +
+      '<button type="button" class="btn btn--ghost btn--xs" data-pw-reset-dismiss="' + r.id + '">Kaldır</button>' +
       "</div></div>"
     );
   }).join("");
@@ -5989,6 +5990,28 @@ function renderPasswordResetRequestsSidebar() {
       handlePasswordResetRequestAction(id, btn);
     });
   });
+  els.passwordResetRequestsList.querySelectorAll("[data-pw-reset-dismiss]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      var id = parseInt(btn.getAttribute("data-pw-reset-dismiss"), 10);
+      dismissPasswordResetRequestAction(id, btn);
+    });
+  });
+}
+
+async function dismissPasswordResetRequestAction(id, btn) {
+  if (!window.API || !window.API.dismissPasswordResetRequest) return;
+  if (!(await showAppConfirm(
+    "Bu talep şifre SIFIRLANMADAN kaldırılsın mı? (Üye kendi çözdüyse kullanın.)",
+    { title: "Talebi Kaldır", okLabel: "Kaldır", cancelLabel: "Vazgeç" }
+  ))) return;
+  if (btn) btn.disabled = true;
+  try {
+    await window.API.dismissPasswordResetRequest(id);
+    await refreshPasswordResetRequests();
+  } catch (e) {
+    await showAppAlert((e.data && e.data.error) || e.message || "Talep kaldırılamadı.");
+    if (btn) btn.disabled = false;
+  }
 }
 
 /** Kayıtlı telefonu wa.me formatına çevirir: sadece rakam, ülke kodlu (90...). */
