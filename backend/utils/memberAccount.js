@@ -70,7 +70,7 @@ export async function ensureMemberUserAccount(client, member) {
 /** Şifreyi telefon son 4 haneye sıfırla; hesap yoksa önce oluşturur (admin işlemi). */
 export async function resetMemberPassword(client, memberId) {
   const res = await client.query(
-    `SELECT m.id, m.email, m.phone, m.user_id FROM members m WHERE m.id = $1`,
+    `SELECT m.id, m.email, m.phone, m.user_id, m.name, m.first_name, m.last_name FROM members m WHERE m.id = $1`,
     [memberId]
   );
   if (res.rows.length === 0) return null;
@@ -92,8 +92,14 @@ export async function resetMemberPassword(client, memberId) {
     `UPDATE users SET password_hash = $1, must_change_password = true, updated_at = CURRENT_TIMESTAMP WHERE id = $2`,
     [passwordHash, userId]
   );
+  const displayName =
+    member.name || [member.first_name, member.last_name].filter(Boolean).join(' ').trim();
   return {
     loginUsername: (await client.query('SELECT email FROM users WHERE id = $1', [userId])).rows[0]?.email,
     temporaryPassword: initialPassword,
+    userId,
+    email: resolvedEmail.toLowerCase(),
+    phone: member.phone || '',
+    name: displayName || '',
   };
 }

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import type { Member } from '../../../types/api';
+import { adminKeys } from '../../admin/api/hooks';
 import {
   createMember,
   deleteMember,
@@ -61,7 +62,13 @@ export function useUpdateMember() {
 }
 
 export function useResetMemberPassword() {
-  return useMutation({ mutationFn: (id: number) => resetMemberPassword(id) });
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => resetMemberPassword(id),
+    // Üye kartından sıfırlama, o üyenin bekleyen şifre talebini de kapatır;
+    // talep listesi güncellensin.
+    onSuccess: () => qc.invalidateQueries({ queryKey: adminKeys.passwordResetRequests }),
+  });
 }
 
 export function useDeleteMember() {

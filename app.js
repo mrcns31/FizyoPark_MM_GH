@@ -5991,16 +5991,43 @@ function renderPasswordResetRequestsSidebar() {
   });
 }
 
+/** Kayıtlı telefonu wa.me formatına çevirir: sadece rakam, ülke kodlu (90...). */
+function whatsAppNumberFromPhone(raw) {
+  var d = String(raw || "").replace(/\D/g, "");
+  if (!d) return "";
+  if (d.indexOf("90") === 0) return d;
+  if (d.charAt(0) === "0") d = d.slice(1);
+  return "90" + d;
+}
+
+/** Şifre sıfırlama bildirimini üyeye WhatsApp'tan iletmek için wa.me linkini açar. */
+function openResetWhatsApp(result) {
+  var num = whatsAppNumberFromPhone(result && result.phone);
+  if (!num) {
+    showAppAlert("Bu üyenin kayıtlı telefon numarası olmadığı için WhatsApp mesajı hazırlanamadı. Geçici şifreyi elle iletin.");
+    return;
+  }
+  var greeting = result.name ? ("Merhaba " + result.name) : "Merhaba";
+  var msg =
+    greeting + ", FizyoPark uygulama şifreniz sıfırlandı. Geçici şifreniz: " + (result.temporaryPassword || "") + ". " +
+    "Girmeden önce telefonunuzdaki eski kayıtlı şifreyi silmeniz gerekmektedir, sonra geçici şifre ile girip yeni şifrenizi belirleyebilirsiniz 🙏";
+  window.open("https://wa.me/" + num + "?text=" + encodeURIComponent(msg), "_blank");
+}
+
 async function handlePasswordResetRequestAction(id, btn) {
   if (!window.API || !window.API.handlePasswordResetRequest) return;
-  if (!confirm("Bu kullanıcının şifresi sıfırlansın mı? Geçici şifre size gösterilecektir.")) return;
+  if (!(await showAppConfirm("Bu kullanıcının şifresi sıfırlansın mı? Geçici şifre size gösterilecektir.", { title: "Şifreyi Sıfırla" }))) return;
   if (btn) btn.disabled = true;
   try {
     var result = await window.API.handlePasswordResetRequest(id);
-    alert("Şifre sıfırlandı.\n\nGiriş e-postası: " + (result.loginEmail || "") + "\nGeçici şifre: " + (result.temporaryPassword || "") + "\n\nKullanıcıyla paylaşın. İlk girişte yeni şifre belirleyecektir.");
+    var notify = await showAppConfirm(
+      "Şifre sıfırlandı.\n\nGiriş e-postası: " + (result.loginEmail || "") + "\nGeçici şifre: " + (result.temporaryPassword || "") + "\n\nÜyeye WhatsApp'tan iletmek için aşağıdaki butonu kullanın. İlk girişte yeni şifre belirleyecektir.",
+      { title: "Şifre Sıfırlandı", okLabel: "📲 WhatsApp'tan Bildir", cancelLabel: "Kapat" }
+    );
+    if (notify) openResetWhatsApp(result);
     await refreshPasswordResetRequests();
   } catch (e) {
-    alert((e.data && e.data.error) || e.message || "Şifre sıfırlanamadı.");
+    await showAppAlert((e.data && e.data.error) || e.message || "Şifre sıfırlanamadı.");
     if (btn) btn.disabled = false;
   }
 }
@@ -9644,13 +9671,18 @@ async function resetMemberPasswordForCard(memberId) {
   if (window.API && window.API.getToken() && window.API.resetMemberPassword) {
     try {
       const result = await window.API.resetMemberPassword(memberId);
-      const loginUser = result.loginUsername || "";
-      await showAppAlert(
+      const loginUser = result.loginUsername || result.loginEmail || "";
+      const tempPw = result.temporaryPassword || "";
+      const notify = await showAppConfirm(
         "Şifre sıfırlandı.\n" +
         "E-posta: " + loginUser + "\n" +
-        "Geçici şifre: telefonun son 4 hanesi\n" +
-        "Üye ilk girişte yeni şifre belirleyecek."
+        "Geçici şifre: " + (tempPw || "telefonun son 4 hanesi") + "\n\n" +
+        "Üyeye WhatsApp'tan iletmek için aşağıdaki butonu kullanın. Üye ilk girişte yeni şifre belirleyecek.",
+        { title: "Şifre Sıfırlandı", okLabel: "📲 WhatsApp'tan Bildir", cancelLabel: "Kapat" }
       );
+      if (notify) openResetWhatsApp(result);
+      // Bu üyenin bekleyen şifre talebi backend'de kapatıldı; panel/rozet güncellensin.
+      refreshPasswordResetRequests();
     } catch (e) {
       await showAppAlert((e.data && e.data.error) || e.message || "Şifre sıfırlanamadı.");
     }

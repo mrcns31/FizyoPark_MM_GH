@@ -7,6 +7,7 @@ import { DateField } from '../../../components/date-field';
 import { FormField } from '../../../components/form';
 import { Button, Card } from '../../../components/ui';
 import { ApiError } from '../../../lib/api-client';
+import { sendResetWhatsApp } from '../../../lib/reset-whatsapp';
 import { useResponsive } from '../../../lib/responsive';
 import { useTheme } from '../../theme';
 import { type AppColors } from '../../../theme/colors';
@@ -78,7 +79,20 @@ export function MemberFormScreen() {
               onSuccess: (r) =>
                 Alert.alert(
                   'Şifre sıfırlandı',
-                  `${r.loginUsername ?? 'Üye'} girişi için yeni geçici şifre telefonun son 4 hanesidir. Üye ilk girişte şifresini değiştirmelidir.`,
+                  `${r.loginUsername ?? 'Üye'} girişi için yeni geçici şifre telefonun son 4 hanesidir. ` +
+                    "Üyeye WhatsApp'tan iletmek için aşağıdaki butonu kullanın. İlk girişte şifre değiştirilecektir.",
+                  [
+                    { text: 'Kapat', style: 'cancel' },
+                    {
+                      text: "📲 WhatsApp'tan Bildir",
+                      onPress: () =>
+                        sendResetWhatsApp({
+                          name: r.name || `${editing.firstName} ${editing.lastName}`.trim(),
+                          phone: r.phone || editing.phone,
+                          temporaryPassword: r.temporaryPassword,
+                        }),
+                    },
+                  ],
                 ),
               onError: (e) => Alert.alert('Hata', e instanceof ApiError ? e.message : 'Şifre sıfırlanamadı'),
             }),

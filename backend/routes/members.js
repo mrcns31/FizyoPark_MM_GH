@@ -525,13 +525,26 @@ router.post('/:id/reset-password', async (req, res) => {
         await client.query('ROLLBACK');
         return res.status(400).json({ error: 'Giriş hesabı oluşturulamadı. E-posta ve telefon (10 hane) kayıtlı olmalı.' });
       }
+      // Bu üyenin bekleyen şifre sıfırlama talebini de kapat (talep panelinden
+      // sıfırlamayla aynı davranış): talep listeden düşsün.
+      if (result.email) {
+        await client.query(
+          `UPDATE password_reset_requests
+           SET status = 'handled', handled_at = CURRENT_TIMESTAMP, handled_by_user_id = $1
+           WHERE LOWER(email) = LOWER($2) AND status = 'pending'`,
+          [req.user.userId, result.email]
+        );
+      }
       await client.query('COMMIT');
       await activityLog(req, { action: 'member.reset_password', entityType: 'member', entityId: id }).catch(() => {});
       res.json({
         message: 'Üye şifresi sıfırlandı',
         loginUsername: result.loginUsername,
+        loginEmail: result.email,
         temporaryPassword: result.temporaryPassword,
         temporaryPasswordHint: 'Telefon numarasının son 4 hanesi',
+        phone: result.phone,
+        name: result.name,
       });
     } catch (err) {
       await client.query('ROLLBACK');
