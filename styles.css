@@ -5869,6 +5869,11 @@ select option:checked{
 .pw-change.hidden{
   display:none;
 }
+/* "Şifremi unuttum" ekranı login overlay'in (z-index:9999) üstünde açılmalı,
+   aksi halde arkada kalıp görünmez oluyor. */
+#forgotPasswordScreen{
+  z-index:10000;
+}
 .pw-change__header{
   flex:0 0 auto;
   display:grid;
