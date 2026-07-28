@@ -4002,7 +4002,7 @@ body.body--sidebar-open{
 }
 
 .package-sessions-modal.modal__card--member-sheet{
-  width:min(920px, calc(100vw - 32px));
+  width:min(1180px, calc(100vw - 32px));
 }
 .package-sessions-modal .modal__title{
   font-size:15px;
@@ -4222,18 +4222,20 @@ body.body--sidebar-open{
   white-space:normal;
   min-width:96px;
 }
-.package-sessions-table__note{
-  white-space:pre-wrap;
-  overflow-wrap:anywhere;
-}
-@media (min-width:768px){
-  .package-sessions-table__note{
-    min-width:120px;
-    max-width:260px;
-  }
-}
 .package-sessions-table__note-empty{
   color:var(--muted);
+}
+/* Not sütunu satırı büyütmesin: tek satır + taşarsa "…" (tam metin title'da) */
+.package-sessions-table__note-text{
+  display:block;
+  max-width:280px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+}
+/* Onay etiketi tabloda alt satıra kaymasın */
+.package-sessions-table .package-session-approval{
+  white-space:nowrap;
 }
 .package-sessions-table th{
   font-size:10px;

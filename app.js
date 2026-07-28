@@ -2763,13 +2763,15 @@ function renderPackageSessionsTableRows(container, sessions, options) {
         '<td' + PACKAGE_SESSIONS_TD + ' data-label="Personel">' + escapeHtml(staffStr) + "</td>" +
         '<td' + PACKAGE_SESSIONS_TD + ' data-label="Ders Saati">' + escapeHtml(s.timeStr) + "</td>" +
         '<td' + PACKAGE_SESSIONS_TD + ' data-label="Giriş Saati">' + escapeHtml(s.checkInTimeStr) + "</td>" +
-        '<td' + PACKAGE_SESSIONS_TD + ' data-label="Onay" style="white-space:normal">' +
+        '<td' + PACKAGE_SESSIONS_TD + ' data-label="Onay">' +
         '<span class="package-session-approval package-session-approval--' + escapeHtml(approvalKind) + '">' +
         escapeHtml(approvalLabel) + "</span>" +
         moveSel +
         "</td>" +
         '<td class="package-sessions-table__cell package-sessions-table__note" data-label="Not">' +
-        (s.note ? escapeHtml(s.note) : '<span class="package-sessions-table__note-empty">—</span>') +
+        (s.note
+          ? '<span class="package-sessions-table__note-text" title="' + escapeHtml(s.note) + '">' + escapeHtml(s.note) + "</span>"
+          : '<span class="package-sessions-table__note-empty">—</span>') +
         "</td>";
     } else {
       html =
