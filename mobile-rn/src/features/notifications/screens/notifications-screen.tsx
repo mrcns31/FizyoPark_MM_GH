@@ -49,11 +49,11 @@ const PERIODS: { key: PeriodKey; label: string }[] = [
   { key: 'month', label: 'Ay' },
   { key: 'year', label: 'Yıl' },
 ];
+// Aç/kapa filtreler: seçili olan yeniden basılınca kalkar, liste tüm bildirimlere döner
 const TYPE_FILTERS = [
-  { key: 'all', label: 'Tümü' },
   { key: 'member_cancel', label: 'Üye İptali' },
   { key: 'admin_cancel', label: 'Admin İptali' },
-  { key: 'shift_reminder', label: 'Hatırlatmalar' },
+  { key: 'rating', label: 'Puanlar' },
 ] as const;
 type TypeFilter = (typeof TYPE_FILTERS)[number]['key'];
 
@@ -117,7 +117,7 @@ function AdminNotifications({ wide }: { wide: object }) {
   const [period, setPeriod] = useState<PeriodKey>('day');
   const [anchor, setAnchor] = useState(() => Date.now());
   const [anchorReady, setAnchorReady] = useState(false);
-  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
+  const [typeFilter, setTypeFilter] = useState<TypeFilter | null>(null); // null = tüm bildirimler
   const [page, setPage] = useState(1);
   const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
@@ -143,12 +143,13 @@ function AdminNotifications({ wide }: { wide: object }) {
   }, [searchInput]);
 
   const { since, until } = useMemo(() => anchorRange(period, anchor), [period, anchor]);
-  const types = typeFilter === 'all' ? undefined : typeFilter;
+  const types = typeFilter ?? undefined;
   const { data, isLoading, isFetching } = useNotifications(since, until, page, PER_PAGE, types, search || undefined);
   const items = data?.items ?? [];
 
   function changePeriod(p: PeriodKey) { setPeriod(p); setAnchor(Date.now()); setPage(1); }
-  function changeType(t: TypeFilter) { setTypeFilter(t); setPage(1); }
+  /** Aynı filtreye tekrar basmak seçimi kaldırır → tüm bildirimler listelenir */
+  function changeType(t: TypeFilter) { setTypeFilter((prev) => (prev === t ? null : t)); setPage(1); }
   function nav(dir: 1 | -1) { setAnchor((a) => stepAnchor(period, a, dir)); setPage(1); }
 
   return (
@@ -168,10 +169,10 @@ function AdminNotifications({ wide }: { wide: object }) {
         <Pressable onPress={() => nav(1)} style={styles.navBtn} hitSlop={10}><Ionicons name="chevron-forward" size={20} color={colors.text} /></Pressable>
         {isFetching ? <ActivityIndicator color={colors.accent} size="small" style={{ marginLeft: 6 }} /> : null}
       </View>
-      <View style={[styles.row, wide as any, { marginBottom: 2, flexWrap: 'wrap' }]}>
+      <View style={[styles.row, wide as any, { marginBottom: 2 }]}>
         {TYPE_FILTERS.map((f) => (
           <Pressable key={f.key} style={[styles.chip, typeFilter === f.key && styles.chipOn]} onPress={() => changeType(f.key)}>
-            <Text style={[styles.chipText, typeFilter === f.key && styles.chipTextOn]}>{f.label}</Text>
+            <Text style={[styles.chipText, typeFilter === f.key && styles.chipTextOn]} numberOfLines={1}>{f.label}</Text>
           </Pressable>
         ))}
       </View>
@@ -260,12 +261,17 @@ function NotificationList({ items, isLoading, totalPages, page, setPage, wide }:
         const isAdminCancel  = item.type === 'admin_cancel';
         const isMemberCancel = item.type === 'member_cancel';
         const isReminder     = item.type === 'shift_reminder';
+        const isRating       = item.type === 'rating';
+        const isLowRating    = isRating && (item.rating ?? 5) <= 2;
         const iconName = isAdminCancel
           ? 'close-circle-outline'
+          : isRating ? (isLowRating ? 'star' : 'star-outline')
           : (isMemberCancel || isReminder) ? 'alert-circle-outline'
           : 'checkmark-circle-outline';
         const iconColor = isAdminCancel
           ? colors.danger
+          : isLowRating ? colors.danger
+          : isRating ? colors.fpOrange
           : (isMemberCancel || isReminder) ? colors.fpOrange
           : colors.ok;
         // Üye iptalinde üyenin yazdığı not gövdeye "... Notu: "..."" olarak ekleniyor;
@@ -277,8 +283,8 @@ function NotificationList({ items, isLoading, totalPages, page, setPage, wide }:
         return (
           <View style={[
             styles.item,
-            (isMemberCancel || isReminder) && styles.itemReminder,
-            isAdminCancel && styles.itemCancel,
+            (isMemberCancel || isReminder || (isRating && !isLowRating)) && styles.itemReminder,
+            (isAdminCancel || isLowRating) && styles.itemCancel,
           ]}>
             <View style={styles.itemHead}>
               <Ionicons name={iconName} size={18} color={iconColor} />
@@ -341,8 +347,10 @@ function makeStyles(colors: AppColors, theme: ResolvedTheme) {
     navLabel: { flex: 1, alignItems: 'center' },
     navLabelText: { color: colors.text, fontSize: 14, fontWeight: '700' },
 
+    // flex: 1 → üç filtre satırı soldan sağa tam doldurur, sağda boşluk kalmaz
     chip: {
-      paddingHorizontal: 14, paddingVertical: 7, borderRadius: 10, borderWidth: 1,
+      flex: 1, paddingHorizontal: 8, paddingVertical: 7, borderRadius: 10, borderWidth: 1,
+      alignItems: 'center',
       borderColor: colors.border, backgroundColor: surfaceTint(theme, 0.03),
     },
     chipOn: { backgroundColor: 'rgba(124,92,255,0.20)', borderColor: 'rgba(124,92,255,0.5)' },

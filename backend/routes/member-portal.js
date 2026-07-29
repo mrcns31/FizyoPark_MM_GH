@@ -15,7 +15,12 @@ import { createMemberAccessToken, verifyMemberAccessToken } from '../utils/membe
 import { normalizePhoneFlexible } from '../utils/phone.js';
 import { logWalkInQrAccess, logStaffAccess } from '../utils/facilityAccess.js';
 import { resolveLocalDateRangeMs } from '../utils/staffWorkingHours.js';
-import { getInstitutionWhatsApp } from '../utils/appSettings.js';
+import { getInstitutionWhatsApp, getRatingsGoLiveTs } from '../utils/appSettings.js';
+import {
+  LOW_RATING_THRESHOLD,
+  RATING_WINDOW_MS,
+  ratableSessionSql,
+} from '../utils/sessionRatings.js';
 import QRCode from 'qrcode';
 
 const router = express.Router();
@@ -79,6 +84,64 @@ async function sendDeletionRequestPush(memberName, memberId) {
     await expoPush(messages);
   } catch {
     // push hatası talebi engellemesin
+  }
+}
+
+/**
+ * Puan bildirimi — iki durumda gider:
+ *   1. Puan ≤2 (yorum olsun olmasın)
+ *   2. Üye yorum yazdıysa, kaç yıldız verdiğinden bağımsız olarak
+ * Yorum yazmak opsiyonel olduğu için yazılan her yorum bilinçli bir geri bildirimdir;
+ * 5 yıldızın yanına yazılan "salon soğuktu" notu raporun içinde kaybolmamalı.
+ */
+async function sendRatingPush(memberName, staffName, rating, startTs, sessionId, comment) {
+  try {
+    const TZ = 3 * 60 * 60 * 1000;
+    const d = new Date(Number(startTs) + TZ);
+    const dateStr = `${String(d.getUTCDate()).padStart(2, '0')}.${String(d.getUTCMonth() + 1).padStart(2, '0')}.${d.getUTCFullYear()}`;
+    const timeStr = `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
+
+    const trimmed = (comment || '').trim();
+    const title = rating <= LOW_RATING_THRESHOLD ? 'Düşük Seans Puanı' : 'Seans Yorumu';
+    const staffPart = staffName ? ` ${staffName} ile olan` : '';
+    const commentPart = trimmed ? ` — "${trimmed}"` : '';
+    const bodyText = `${memberName}, ${dateStr} ${timeStr}${staffPart} seansına ${rating} puan verdi${commentPart}`;
+
+    const { rows: adminRows } = await db.query(
+      `SELECT u.id AS user_id, pt.token
+       FROM users u
+       LEFT JOIN push_tokens pt ON pt.user_id = u.id
+       WHERE u.role IN ('admin', 'manager')`
+    );
+
+    // memberName/startTs bildirim listesindeki arama ve tarih sütunu için gerekli
+    const payload = JSON.stringify({
+      sessionId, rating, memberName, startTs: Number(startTs),
+      comment: trimmed || undefined,
+    });
+    const seenUsers = new Set();
+    for (const r of adminRows) {
+      if (!r.user_id || seenUsers.has(r.user_id)) continue;
+      seenUsers.add(r.user_id);
+      db.query(
+        `INSERT INTO staff_notifications (user_id, type, title, body, payload) VALUES ($1, $2, $3, $4, $5)`,
+        [r.user_id, 'rating', title, bodyText, payload]
+      ).catch(() => {});
+    }
+
+    const seenTokens = new Set();
+    const messages = adminRows
+      .filter((r) => {
+        if (!r.token) return false;
+        if (seenTokens.has(r.token)) return false;
+        seenTokens.add(r.token);
+        return true;
+      })
+      .map((r) => ({ to: r.token, title, body: bodyText, sound: 'natification.caf', priority: 'high', channelId: 'fizyopark', interruptionLevel: 'active' }));
+
+    await expoPush(messages);
+  } catch {
+    // bildirim hatası puanlamayı engellemesin
   }
 }
 
@@ -586,6 +649,41 @@ function requireMember(req, res, next) {
   next();
 }
 
+/**
+ * Puanlanmayı bekleyen seanslar: tamamlanmış, henüz puanlanmamış ve 7 günlük pencere içinde.
+ * Paket bazlı değil üye bazlı bakılır — biten pakette kalan bir seans da puanlanabilmeli.
+ */
+async function loadPendingRatings(memberId, staffMap, ratingsGoLiveTs) {
+  if (!Number.isFinite(ratingsGoLiveTs)) return [];
+  const now = Date.now();
+  try {
+    const res = await db.query(
+      `SELECT s.id, s.staff_id, s.start_ts, s.end_ts
+       FROM sessions s
+       LEFT JOIN session_ratings sr ON sr.session_id = s.id
+       WHERE s.member_id = $1
+         AND ${ratableSessionSql(2, 3)}
+         AND s.end_ts >= $4
+         AND sr.id IS NULL
+       ORDER BY s.end_ts DESC`,
+      [memberId, now, ratingsGoLiveTs, now - RATING_WINDOW_MS]
+    );
+    return res.rows.map((row) => {
+      const staff = staffMap[row.staff_id];
+      return {
+        sessionId: row.id,
+        staffId: row.staff_id,
+        staffName: staff ? `${staff.first_name || ''} ${staff.last_name || ''}`.trim() : '',
+        startTs: Number(row.start_ts),
+        endTs: Number(row.end_ts),
+      };
+    });
+  } catch (err) {
+    if (err.code === '42P01') return [];
+    throw err;
+  }
+}
+
 async function getMemberIdForUser(userId) {
   const res = await db.query(
     'SELECT id FROM members WHERE user_id = $1 AND (deleted_at IS NULL)',
@@ -675,14 +773,19 @@ router.get('/dashboard', requireMember, async (req, res) => {
     const activeRows = packagesRes.rows.filter((r) => isMemberPackageActive(r, todayStr));
     const pastRows = packagesRes.rows.filter((r) => !isMemberPackageActive(r, todayStr));
 
+    const ratingsGoLiveTs = await getRatingsGoLiveTs();
+    const pkgOpts = { ratingsGoLiveTs };
+
     const activePackage = activeRows.length > 0
-      ? await buildPackageWithSessions(activeRows[0], memberId, staffMap)
+      ? await buildPackageWithSessions(activeRows[0], memberId, staffMap, pkgOpts)
       : null;
 
     const pastPackages = [];
     for (const row of pastRows) {
-      pastPackages.push(await buildPackageWithSessions(row, memberId, staffMap));
+      pastPackages.push(await buildPackageWithSessions(row, memberId, staffMap, pkgOpts));
     }
+
+    const pendingRatings = await loadPendingRatings(memberId, staffMap, ratingsGoLiveTs);
 
     const notifications = [];
     if (activePackage) {
@@ -799,10 +902,102 @@ router.get('/dashboard', requireMember, async (req, res) => {
       contactWhatsApp: await getInstitutionWhatsApp(),
       pendingPackageRequest,
       catalogPackages,
+      pendingRatings,
     });
   } catch (error) {
     console.error('Member dashboard error:', error);
     res.status(500).json({ error: 'Üye bilgileri alınırken hata oluştu' });
+  }
+});
+
+// Seans puanlama (1-5) — tamamlanmış seans, 7 günlük pencere, 24 saat düzenleme hakkı
+router.post('/sessions/:id/rating', requireMember, [
+  body('rating').isInt({ min: 1, max: 5 }).withMessage('Puan 1 ile 5 arasında olmalıdır'),
+  body('comment').optional({ nullable: true }).isLength({ max: 1000 }),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const memberId = await getMemberIdForUser(req.user.userId);
+    if (!memberId) {
+      return res.status(404).json({ error: 'Üye kaydı bulunamadı' });
+    }
+
+    const sessionId = Number(req.params.id);
+    if (!Number.isInteger(sessionId)) {
+      return res.status(400).json({ error: 'Geçersiz seans' });
+    }
+
+    const rating = Number(req.body.rating);
+    const comment = typeof req.body.comment === 'string' ? req.body.comment.trim() : '';
+
+    const now = Date.now();
+    const ratingsGoLiveTs = await getRatingsGoLiveTs();
+    if (!Number.isFinite(ratingsGoLiveTs)) {
+      return res.status(503).json({
+        error: 'Puanlama henüz etkin değil. migration_session_ratings.sql çalıştırın.',
+      });
+    }
+
+    const sessionRes = await db.query(
+      `SELECT s.id, s.staff_id, s.start_ts, s.end_ts,
+              m.name AS member_name,
+              st.first_name || ' ' || st.last_name AS staff_name
+       FROM sessions s
+       LEFT JOIN members m ON m.id = s.member_id
+       LEFT JOIN staff st ON st.id = s.staff_id
+       WHERE s.id = $1 AND s.member_id = $2
+         AND ${ratableSessionSql(3, 4)}
+         AND s.end_ts >= $5`,
+      [sessionId, memberId, now, ratingsGoLiveTs, now - RATING_WINDOW_MS]
+    );
+    if (sessionRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Bu seans puanlanamaz.' });
+    }
+    const session = sessionRes.rows[0];
+
+    // Puan bir kez verilir. ON CONFLICT DO NOTHING, eşzamanlı iki isteği de tek kayda indirger.
+    let inserted;
+    try {
+      inserted = await db.query(
+        `INSERT INTO session_ratings (session_id, member_id, rating, comment)
+         VALUES ($1, $2, $3, $4)
+         ON CONFLICT (session_id) DO NOTHING
+         RETURNING id`,
+        [sessionId, memberId, rating, comment || null]
+      );
+    } catch (err) {
+      if (err.code === '42P01') {
+        return res.status(503).json({
+          error: 'Puanlama henüz etkin değil. migration_session_ratings.sql çalıştırın.',
+        });
+      }
+      throw err;
+    }
+
+    if (inserted.rowCount === 0) {
+      return res.status(409).json({ error: 'Bu seansı zaten puanladınız.' });
+    }
+
+    // Düşük puan veya yorum yazılmışsa yönetime bildir
+    if (rating <= LOW_RATING_THRESHOLD || comment) {
+      sendRatingPush(
+        session.member_name || 'Üye',
+        (session.staff_name || '').trim(),
+        rating,
+        session.start_ts,
+        sessionId,
+        comment
+      ).catch(() => {});
+    }
+
+    res.json({ success: true, sessionId, rating, comment });
+  } catch (error) {
+    console.error('Session rating error:', error);
+    res.status(500).json({ error: 'Puan kaydedilirken hata oluştu' });
   }
 });
 

@@ -840,7 +840,7 @@ let ui = {
   deletionRequests: [], // admin: bekleyen üyelik iptal talepleri
   passwordResetRequests: [], // admin: bekleyen şifre sıfırlama talepleri
   notifications: [], // admin: iptal/giriş bildirimleri
-  notificationsTypeFilter: "all", // all | admin_cancel | member_cancel | checkin | shift_reminder | broadcast
+  notificationsTypeFilter: "all", // all (filtre yok) | admin_cancel | member_cancel | rating | checkin | broadcast
   notificationsSearchQuery: "",
   sidebarPackageRequestsOpen: false,
   sidebarCancellationRequestsOpen: false,
@@ -1372,9 +1372,11 @@ function cacheEls() {
     "reportsPrevYearBtn",
     "reportsNextYearBtn",
     "reportsToggleFormerBtn",
-    "notificationsFilterAll",
+    "reportsTabCountsBtn",
+    "reportsTabRatingsBtn",
     "notificationsFilterAdminCancel",
     "notificationsFilterMemberCancel",
+    "notificationsFilterRating",
     "notificationsFilterCheckin",
     "notifSearchInput",
     "memberPackageRequestCta",
@@ -6158,6 +6160,7 @@ function formatNotificationTypeLabel(type, source) {
   if (type === 'admin_cancel') return 'Admin İptali';
   if (type === 'member_cancel') return 'Üye İptali';
   if (type === 'shift_reminder') return 'Hatırlatma';
+  if (type === 'rating') return 'Puan';
   if (type === 'checkin') {
     if (source === 'phone') return 'Giriş (Telefon)';
     if (source === 'card') return 'Giriş (Kart)';
@@ -6248,7 +6251,7 @@ function updateNotifPeriodUI() {
 function notifTypeFilterToTypes(typeFilter) {
   if (typeFilter === 'admin_cancel') return 'admin_cancel';
   if (typeFilter === 'member_cancel') return 'member_cancel';
-  if (typeFilter === 'shift_reminder') return 'shift_reminder';
+  if (typeFilter === 'rating') return 'rating';
   return null; // 'all' → filtre yok
 }
 
@@ -6293,15 +6296,19 @@ async function loadNotifPeriodData() {
 var notificationsPage = 1;
 var notificationsPageSize = 20;
 
+/** Aç/kapa: seçili filtreye tekrar basmak filtreyi kaldırır → tüm bildirimler listelenir. */
+function toggleNotificationsTypeFilter(type) {
+  setNotificationsTypeFilter(ui.notificationsTypeFilter === type ? 'all' : type);
+}
+
 function setNotificationsTypeFilter(type) {
   ui.notificationsTypeFilter = type;
   notifViewPage = 1;
   var tabDefs = [
-    { key: 'all', id: 'notificationsFilterAll' },
     { key: 'admin_cancel', id: 'notificationsFilterAdminCancel' },
     { key: 'member_cancel', id: 'notificationsFilterMemberCancel' },
+    { key: 'rating', id: 'notificationsFilterRating' },
     { key: 'checkin', id: 'notificationsFilterCheckin' },
-    { key: 'shift_reminder', id: 'notificationsFilterReminder' },
     { key: 'broadcast', id: 'notificationsFilterBroadcast' },
   ];
   tabDefs.forEach(function (t) {
@@ -6377,6 +6384,11 @@ function renderNotificationsTable() {
       typeLabel = 'Hatırlatma';
       typeCls = 'notif-type-badge notif-type-badge--reminder';
       rowCls = 'notifications-table__row--reminder';
+    } else if (n.type === 'rating') {
+      var isLow = n.rating != null && n.rating <= 2;
+      typeLabel = n.rating != null ? n.rating + ' ★' : 'Puan';
+      typeCls = 'notif-type-badge ' + (isLow ? 'notif-type-badge--rating' : 'notif-type-badge--reminder');
+      rowCls = isLow ? 'notifications-table__row--cancel' : 'notifications-table__row--reminder';
     } else {
       typeLabel = n.type || '—';
       typeCls = 'notif-type-badge';
@@ -6388,8 +6400,10 @@ function renderNotificationsTable() {
 
     var memberOrTitle, staffOrDetail;
     var detailNote = ''; // üye iptalinde üyenin yazdığı not (ayrı "Not" sütununda gösterilir)
-    if (n.type === 'shift_reminder' || n.type === 'member_cancel') {
-      memberOrTitle = n.title || (n.type === 'member_cancel' ? 'Üye Randevu İptali' : 'Onay bekleyen seanslar');
+    if (n.type === 'shift_reminder' || n.type === 'member_cancel' || n.type === 'rating') {
+      memberOrTitle = n.title || (n.type === 'member_cancel' ? 'Üye Randevu İptali'
+        : n.type === 'rating' ? 'Seans Puanı'
+        : 'Onay bekleyen seanslar');
       staffOrDetail = n.body || '';
       if (n.type === 'member_cancel') {
         var NOTE_MARK = ' Notu: "';
@@ -6514,14 +6528,7 @@ function openNotificationsView() {
   if (broadcastTab && !broadcastTab._bound) {
     broadcastTab._bound = true;
     broadcastTab.addEventListener('click', function () {
-      setNotificationsTypeFilter('broadcast');
-    });
-  }
-  var reminderTab = document.getElementById('notificationsFilterReminder');
-  if (reminderTab && !reminderTab._bound) {
-    reminderTab._bound = true;
-    reminderTab.addEventListener('click', function () {
-      setNotificationsTypeFilter('shift_reminder');
+      toggleNotificationsTypeFilter('broadcast');
     });
   }
 }
@@ -6664,21 +6671,54 @@ var reportsYear = new Date().getFullYear();
 var reportsShowFormer = false;
 var reportsAllStaffMap = new Map(); // normId → { id, name } — aktif + silinmiş tüm personel
 
+var reportsTab = "counts"; // counts | ratings — yıl navigasyonu iki sekmede ortak
+var reportsRatingsData = null;
+
 function openReportsView() {
   showAdminMainView("reports");
   if (els.reportsYearLabel) els.reportsYearLabel.textContent = reportsYear;
   updateReportsFormerToggleUI();
+  updateReportsTabUI();
   loadAndRenderReports();
 }
 
 function updateReportsFormerToggleUI() {
   if (!els.reportsToggleFormerBtn) return;
   els.reportsToggleFormerBtn.classList.toggle("reports-toggle-former-btn--on", reportsShowFormer);
+  // Eski personel kolonu yalnızca seans sayısı tablosunda anlamlı
+  els.reportsToggleFormerBtn.hidden = reportsTab === "ratings";
+}
+
+function updateReportsTabUI() {
+  if (els.reportsTabCountsBtn) els.reportsTabCountsBtn.classList.toggle("reports-tab--on", reportsTab === "counts");
+  if (els.reportsTabRatingsBtn) els.reportsTabRatingsBtn.classList.toggle("reports-tab--on", reportsTab === "ratings");
+  updateReportsFormerToggleUI();
+}
+
+function setReportsTab(tab) {
+  if (reportsTab === tab) return;
+  reportsTab = tab;
+  updateReportsTabUI();
+  loadAndRenderReports();
 }
 
 async function loadAndRenderReports() {
   if (!els.reportsContent) return;
   els.reportsContent.innerHTML = '<p class="hint">Yükleniyor…</p>';
+
+  if (reportsTab === "ratings") {
+    try {
+      reportsRatingsData = window.API && window.API.getStaffRatingSummary
+        ? await window.API.getStaffRatingSummary(reportsYear)
+        : null;
+    } catch (e) {
+      els.reportsContent.innerHTML = '<p class="hint">Puan raporu alınamadı.</p>';
+      return;
+    }
+    renderRatingsTable();
+    return;
+  }
+
   var startDate = reportsYear + "-01-01";
   var endDate = reportsYear + "-12-31";
   try {
@@ -6826,6 +6866,131 @@ function renderReportsTable() {
   html += "</tr></tbody></table></div>";
 
   els.reportsContent.innerHTML = html;
+}
+
+// ── Puan raporu ────────────────────────────────────────────────────────────
+
+/** Ortalamaya göre hücre sınıfı — kolon kimliği değil, değer önemli. */
+function ratingAvgClass(avg) {
+  if (avg == null) return "";
+  if (avg >= 4.5) return " reports-td--rating-good";
+  if (avg >= 4.0) return "";
+  return " reports-td--rating-low";
+}
+
+function ratingCellHtml(bucket, staffId, month, extraClass) {
+  var avg = bucket.avg;
+  var clickable = bucket.count > 0 && staffId != null;
+  var cls = "reports-td reports-td--rating" + (extraClass || "") + ratingAvgClass(avg) +
+    (bucket.count === 0 ? " reports-td--zero" : "") + (clickable ? " reports-td--clickable" : "");
+  var attrs = clickable
+    ? ' data-rating-staff="' + staffId + '"' + (month == null ? '' : ' data-rating-month="' + (month + 1) + '"')
+    : "";
+  var value = avg != null ? avg.toFixed(1) + " ★" : "–";
+  var sub = bucket.count > 0 ? '<span class="reports-rating-n">n=' + bucket.count + "</span>" : "";
+  return "<td class=\"" + cls + "\"" + attrs + "><span class=\"reports-rating-value\">" + value + "</span>" + sub + "</td>";
+}
+
+function renderRatingsTable() {
+  if (!els.reportsContent) return;
+  var data = reportsRatingsData;
+  var rows = (data && data.staff) || [];
+
+  if (!rows.length) {
+    els.reportsContent.innerHTML = '<p class="hint">' + reportsYear + " yılına ait puan bulunamadı.</p>";
+    return;
+  }
+
+  var monthNames = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
+
+  var summary = "Kurum ortalaması: " + (data.globalMean != null ? data.globalMean.toFixed(2) + " ★" : "–") +
+    " · " + (data.globalCount || 0) + " puan";
+  if (data.grand && data.grand.responseRate != null) {
+    summary += " · Yanıt oranı %" + Math.round(data.grand.responseRate * 100);
+  }
+
+  var html = '<div class="reports-rating-summary">' + escapeHtml(summary) +
+    '<span class="reports-rating-hint">' + (data.minSample || 5) +
+    " puandan az olan hücrelerde ortalama gösterilmez.</span></div>";
+
+  html += '<div class="reports-table-wrap"><table class="reports-table"><thead><tr>';
+  html += "<th class=\"reports-th reports-th--month\">Ay</th>";
+  rows.forEach(function (s) {
+    html += "<th class=\"reports-th" + (s.isFormer ? " reports-th--former" : "") + "\">" + escapeHtml(s.staffName) + "</th>";
+  });
+  html += "</tr></thead><tbody>";
+
+  for (var m = 0; m < 12; m++) {
+    var empty = rows.every(function (s) { return s.months[m].count === 0; });
+    html += "<tr class=\"reports-tr" + (empty ? " reports-tr--empty" : "") + "\">";
+    html += "<td class=\"reports-td reports-td--month\">" + monthNames[m] + " " + reportsYear + "</td>";
+    rows.forEach(function (s) {
+      html += ratingCellHtml(s.months[m], s.staffId, m, "");
+    });
+    html += "</tr>";
+  }
+
+  // Yıllık satır: ağırlıklı ortalama (Σpuan / Σn), ayların basit ortalaması değil
+  html += "<tr class=\"reports-tr reports-tr--grand\">";
+  html += "<td class=\"reports-td reports-td--month\"><strong>Yıllık</strong></td>";
+  rows.forEach(function (s) {
+    html += ratingCellHtml(s.total, s.staffId, null, " reports-td--grand");
+  });
+  html += "</tr></tbody></table></div>";
+
+  html += '<div id="reportsRatingDetail" class="reports-rating-detail"></div>';
+
+  els.reportsContent.innerHTML = html;
+}
+
+async function openRatingDetail(staffId, month) {
+  var panel = document.getElementById("reportsRatingDetail");
+  if (!panel || !window.API || !window.API.getRatingList) return;
+  panel.innerHTML = '<p class="hint">Yükleniyor…</p>';
+
+  var data;
+  try {
+    data = await window.API.getRatingList(staffId, reportsYear, month);
+  } catch (e) {
+    panel.innerHTML = '<p class="hint">Puan detayı alınamadı.</p>';
+    return;
+  }
+
+  var monthNames = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
+  var staffRow = (reportsRatingsData.staff || []).find(function (s) { return Number(s.staffId) === Number(staffId); });
+  var title = (staffRow ? staffRow.staffName : "Personel") + " — " +
+    (month ? monthNames[month - 1] : "Yıllık") + " " + reportsYear;
+
+  var total = 0;
+  [1, 2, 3, 4, 5].forEach(function (n) { total += Number(data.distribution[n] || 0); });
+
+  var html = '<h3 class="reports-rating-detail__title">' + escapeHtml(title) + "</h3>";
+  html += '<div class="reports-rating-dist">';
+  [5, 4, 3, 2, 1].forEach(function (n) {
+    var c = Number(data.distribution[n] || 0);
+    var pct = total > 0 ? (c / total) * 100 : 0;
+    html += '<div class="reports-rating-dist__row"><span class="reports-rating-dist__label">' + n +
+      ' ★</span><span class="reports-rating-dist__track"><span class="reports-rating-dist__fill" style="width:' +
+      pct.toFixed(1) + '%"></span></span><span class="reports-rating-dist__count">' + c + "</span></div>";
+  });
+  html += "</div>";
+
+  var withComments = (data.items || []).filter(function (i) { return i.comment; });
+  if (withComments.length) {
+    html += '<h4 class="reports-rating-detail__subtitle">Yorumlar</h4>';
+    withComments.forEach(function (i) {
+      var d = new Date(Number(i.sessionStartTs));
+      var dateStr = String(d.getDate()).padStart(2, "0") + "." + String(d.getMonth() + 1).padStart(2, "0") + "." + d.getFullYear();
+      html += '<div class="reports-rating-comment"><div class="reports-rating-comment__head">' +
+        escapeHtml("★".repeat(i.rating)) + " · " + escapeHtml(i.memberName || "") + " · " + dateStr +
+        '</div><div class="reports-rating-comment__body">' + escapeHtml(i.comment) + "</div></div>";
+    });
+  } else {
+    html += '<p class="hint">Yorum yazılmamış.</p>';
+  }
+
+  panel.innerHTML = html;
+  panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
 async function assignPackageFromRequest(requestId) {
@@ -14080,10 +14245,18 @@ function bindEvents() {
   if (els.reportsPrevYearBtn) els.reportsPrevYearBtn.addEventListener("click", function () { reportsYear--; if (els.reportsYearLabel) els.reportsYearLabel.textContent = reportsYear; loadAndRenderReports(); });
   if (els.reportsNextYearBtn) els.reportsNextYearBtn.addEventListener("click", function () { reportsYear++; if (els.reportsYearLabel) els.reportsYearLabel.textContent = reportsYear; loadAndRenderReports(); });
   if (els.reportsToggleFormerBtn) els.reportsToggleFormerBtn.addEventListener("click", function () { reportsShowFormer = !reportsShowFormer; updateReportsFormerToggleUI(); renderReportsTable(); });
-  if (els.notificationsFilterAll) els.notificationsFilterAll.addEventListener('click', function () { setNotificationsTypeFilter('all'); });
-  if (els.notificationsFilterAdminCancel) els.notificationsFilterAdminCancel.addEventListener('click', function () { setNotificationsTypeFilter('admin_cancel'); });
-  if (els.notificationsFilterMemberCancel) els.notificationsFilterMemberCancel.addEventListener('click', function () { setNotificationsTypeFilter('member_cancel'); });
-  if (els.notificationsFilterCheckin) els.notificationsFilterCheckin.addEventListener('click', function () { setNotificationsTypeFilter('checkin'); });
+  if (els.reportsTabCountsBtn) els.reportsTabCountsBtn.addEventListener("click", function () { setReportsTab("counts"); });
+  if (els.reportsTabRatingsBtn) els.reportsTabRatingsBtn.addEventListener("click", function () { setReportsTab("ratings"); });
+  if (els.reportsContent) els.reportsContent.addEventListener("click", function (e) {
+    var cell = e.target.closest ? e.target.closest("[data-rating-staff]") : null;
+    if (!cell) return;
+    var month = cell.getAttribute("data-rating-month");
+    openRatingDetail(Number(cell.getAttribute("data-rating-staff")), month ? Number(month) : undefined);
+  });
+  if (els.notificationsFilterAdminCancel) els.notificationsFilterAdminCancel.addEventListener('click', function () { toggleNotificationsTypeFilter('admin_cancel'); });
+  if (els.notificationsFilterMemberCancel) els.notificationsFilterMemberCancel.addEventListener('click', function () { toggleNotificationsTypeFilter('member_cancel'); });
+  if (els.notificationsFilterRating) els.notificationsFilterRating.addEventListener('click', function () { toggleNotificationsTypeFilter('rating'); });
+  if (els.notificationsFilterCheckin) els.notificationsFilterCheckin.addEventListener('click', function () { toggleNotificationsTypeFilter('checkin'); });
   if (els.notifSearchInput) {
     var notifSearchDebounce = null;
     els.notifSearchInput.addEventListener('input', function () {

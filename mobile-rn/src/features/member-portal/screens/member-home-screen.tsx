@@ -6,13 +6,24 @@ import { useFocusEffect } from 'expo-router';
 
 import { Badge, Button, Card, Muted, SectionTitle } from '../../../components/ui';
 import { BottomSheet } from '../../../components/bottom-sheet';
-import { formatDayLabel, formatSessionRange, formatTime, weekdayLong, dayOfWeekOfTs } from '../../../lib/datetime';
+import { formatDayLabel, formatSessionRange, formatShortDate, formatTime, weekdayLong, dayOfWeekOfTs } from '../../../lib/datetime';
 import { useResponsive } from '../../../lib/responsive';
 import { useTheme } from '../../theme';
 import { surfaceTint, type AppColors, type ResolvedTheme } from '../../../theme/colors';
 import { useAuth } from '../../auth';
-import { useCancelMemberSession, useMarkBroadcastSeen, useMemberDashboard, useMyBroadcasts } from '../api/hooks';
+import { useCancelMemberSession, useMarkBroadcastSeen, useMemberDashboard, useMyBroadcasts, useRateMemberSession } from '../api/hooks';
 import type { MemberBroadcast, MemberNotification, MemberSession } from '../api/member-portal';
+import { StarRating } from '../../../components/star-rating';
+
+/**
+ * Puanlama sheet'inin hedefi — hem seans kartından hem bekleyen puan listesinden doldurulur.
+ * Puan bir kez verildiği için hedef her zaman puanlanmamış bir seanstır.
+ */
+type RatingTarget = {
+  sessionId: number;
+  startTs: number;
+  staffName: string;
+};
 
 const TZ = 3 * 3600 * 1000;
 function nowIst() { return Date.now(); }
@@ -53,6 +64,21 @@ export function MemberHomeScreen() {
   const [cancelError, setCancelError] = useState<string | null>(null);
   const allSessions = data?.activePackage?.sessions ?? [];
 
+  // Puanlama
+  const rateMutation = useRateMemberSession();
+  const [ratingTarget, setRatingTarget] = useState<RatingTarget | null>(null);
+  const [ratingValue, setRatingValue] = useState(0);
+  const [ratingComment, setRatingComment] = useState('');
+  const [ratingError, setRatingError] = useState<string | null>(null);
+
+  // Toplu puanlama: açılışta puanlanmamış tüm seanslar tek sayfada sorulur
+  const [batchOpen, setBatchOpen] = useState(false);
+  const [batchValues, setBatchValues] = useState<Record<number, number>>({});
+  const [batchComments, setBatchComments] = useState<Record<number, string>>({});
+  const [batchCommentOpen, setBatchCommentOpen] = useState<Record<number, boolean>>({});
+  const [batchError, setBatchError] = useState<string | null>(null);
+  const batchShownRef = useRef(false);
+
   // Okunmamış broadcast bildirimi modal
   const { data: broadcasts } = useMyBroadcasts();
   const markSeen = useMarkBroadcastSeen();
@@ -72,6 +98,97 @@ export function MemberHomeScreen() {
     () => allSessions.filter((s) => !s.isCancelled).sort((a, b) => a.startTs - b.startTs),
     [allSessions],
   );
+
+  function openRating(t: RatingTarget) {
+    setRatingTarget(t);
+    setRatingValue(0);
+    setRatingComment('');
+    setRatingError(null);
+  }
+
+  /** Puan geri alınamadığı için gönderimden önce onay istenir. */
+  function confirmRating() {
+    if (!ratingTarget || ratingValue < 1) return;
+    Alert.alert(
+      'Puanınızı onaylıyor musunuz?',
+      `${ratingValue} yıldız vereceksiniz. Puanınızı daha sonra değiştiremezsiniz.`,
+      [
+        { text: 'Vazgeç', style: 'cancel' },
+        { text: 'Onayla', onPress: submitRating },
+      ],
+    );
+  }
+
+  async function submitRating() {
+    if (!ratingTarget || ratingValue < 1) return;
+    setRatingError(null);
+    try {
+      await rateMutation.mutateAsync({
+        sessionId: ratingTarget.sessionId,
+        rating: ratingValue,
+        comment: ratingComment.trim(),
+      });
+      setRatingTarget(null);
+      await refetch();
+    } catch (e) {
+      setRatingError((e as Error).message || 'Puan kaydedilemedi');
+    }
+  }
+
+  const pendingRatings = data?.pendingRatings ?? [];
+  const batchRatedCount = Object.values(batchValues).filter((v) => v >= 1).length;
+
+  /**
+   * Puanlanmamış seanslar açılışta TEK sayfada sorulur — birikmiş seanslar için
+   * arka arkaya sayfa açmak üyeyi puanlamaktan soğutur. Zorunlu değil, kapatılabilir.
+   */
+  useEffect(() => {
+    if (!pendingRatings.length || batchShownRef.current || ratingTarget || notifModal) return;
+    batchShownRef.current = true;
+    setBatchValues({});
+    setBatchComments({});
+    setBatchCommentOpen({});
+    setBatchError(null);
+    setBatchOpen(true);
+  }, [pendingRatings.length, ratingTarget, notifModal]);
+
+  function confirmBatch() {
+    if (batchRatedCount < 1) return;
+    Alert.alert(
+      'Puanlarınızı onaylıyor musunuz?',
+      `${batchRatedCount} seansı puanlayacaksınız. Puanlarınızı daha sonra değiştiremezsiniz.`,
+      [
+        { text: 'Vazgeç', style: 'cancel' },
+        { text: 'Onayla', onPress: submitBatch },
+      ],
+    );
+  }
+
+  async function submitBatch() {
+    const entries = Object.entries(batchValues).filter(([, v]) => v >= 1);
+    if (!entries.length) return;
+    setBatchError(null);
+    const failed: number[] = [];
+    // Sırayla gönderilir: biri hata verirse diğerleri yine de kaydedilir
+    for (const [sessionId, rating] of entries) {
+      try {
+        await rateMutation.mutateAsync({
+          sessionId: Number(sessionId),
+          rating,
+          comment: (batchComments[Number(sessionId)] || '').trim(),
+        });
+      } catch {
+        failed.push(Number(sessionId));
+      }
+    }
+    await refetch();
+    if (failed.length) {
+      setBatchValues({});
+      setBatchError(`${failed.length} seansın puanı kaydedilemedi. Lütfen tekrar deneyin.`);
+      return;
+    }
+    setBatchOpen(false);
+  }
 
   function openCancel(s: MemberSession) {
     setCancelTarget(s);
@@ -184,11 +301,15 @@ export function MemberHomeScreen() {
                 <View style={styles.rowBetween}>
                   <View style={styles.rowLeft}>
                     <Text style={[styles.seqNo, isPast && styles.seqNoPast]}>{index + 1}.</Text>
-                    <View>
-                      <Text style={[styles.dateText, isPast && styles.dateTextPast]}>
-                        {formatDayLabel(s.startTs)} / {formatTime(s.startTs)}
+                    <View style={styles.dateWrap}>
+                      <Text
+                        style={[styles.dateText, isPast && styles.dateTextPast]}
+                        numberOfLines={1}
+                        adjustsFontSizeToFit
+                        minimumFontScale={0.85}
+                      >
+                        {formatDayLabel(s.startTs)} {dayName} {formatTime(s.startTs)}
                       </Text>
-                      <Text style={styles.dayName}>{dayName}</Text>
                     </View>
                   </View>
                   {s.canCancel && !s.checkedIn ? (
@@ -201,14 +322,36 @@ export function MemberHomeScreen() {
                     </View>
                   ) : null}
                 </View>
-                {/* Satır 2: Durum (tamamlanmış/iptal/otomatik düşen ve giriş yapılmış gelecek seans) */}
+                {/* Satır 2: Durum rozeti + puanlama (yıldızlar aynı satırda, sağa yaslı) */}
                 {(isPast || s.isCancelled || s.checkedIn) ? (
                   <View style={styles.badgeRow}>
                     <Badge label={lbl} tone={tone} />
+                    {s.canRate || s.rating != null ? (
+                      <Pressable
+                        style={styles.ratingInline}
+                        onPress={() => s.canRate && openRating({
+                          sessionId: s.id,
+                          startTs: s.startTs,
+                          staffName: s.staffName,
+                        })}
+                        disabled={!s.canRate}
+                        hitSlop={6}
+                      >
+                        {/* Puan verilmemişse boş yıldızların ne işe yaradığı belli olsun */}
+                        {s.rating == null ? (
+                          <Text style={styles.ratingHint}>Puanlayın</Text>
+                        ) : null}
+                        <StarRating value={s.rating} size={18} />
+                      </Pressable>
+                    ) : null}
                   </View>
                 ) : null}
                 {showLocked ? (
-                  <Text style={styles.lockedInfo}>Randevular 2 saat kala iptal edilebilmektedir.</Text>
+                  <Text style={styles.lockedInfo}>
+                    {ap?.packageType === 'flexible'
+                      ? 'Randevular 2 saat kala iptal edilebilmektedir.'
+                      : 'Sabit paketlerde randevu iptali yapılamamaktadır.'}
+                  </Text>
                 ) : null}
               </View>
             );
@@ -279,6 +422,129 @@ export function MemberHomeScreen() {
           </View>
         ) : null}
       </BottomSheet>
+
+      {/* PUANLAMA SHEET */}
+      <BottomSheet
+        visible={!!ratingTarget}
+        onClose={() => setRatingTarget(null)}
+        title="Seansınızı puanlayın"
+      >
+        {ratingTarget ? (
+          <View style={styles.cancelSheet}>
+            <Text style={styles.cancelSheetDate}>
+              {formatDayLabel(ratingTarget.startTs)} / {formatTime(ratingTarget.startTs)}
+            </Text>
+            {ratingTarget.staffName ? (
+              <Muted>{ratingTarget.staffName}</Muted>
+            ) : null}
+
+            <View style={styles.ratingStarsBox}>
+              <StarRating value={ratingValue} onChange={setRatingValue} size={38} showLabel />
+            </View>
+            <Text style={styles.ratingOnceInfo}>Puanınızı daha sonra değiştiremezsiniz.</Text>
+
+            <Text style={styles.cancelLabel}>Yorumunuz (opsiyonel)</Text>
+            <TextInput
+              style={styles.cancelInput}
+              value={ratingComment}
+              onChangeText={(t) => setRatingComment(t.slice(0, 1000))}
+              placeholder="Görüşlerinizi paylaşabilirsiniz"
+              placeholderTextColor={colors.textMuted}
+              multiline
+              maxLength={1000}
+            />
+            {ratingError ? <Text style={styles.cancelErrorText}>{ratingError}</Text> : null}
+            <Button
+              title="Puanı gönder"
+              onPress={confirmRating}
+              disabled={ratingValue < 1}
+              loading={rateMutation.isPending}
+            />
+            <Pressable onPress={() => setRatingTarget(null)} hitSlop={8}>
+              <Text style={styles.ratingSkip}>Şimdi değil</Text>
+            </Pressable>
+          </View>
+        ) : null}
+      </BottomSheet>
+
+      {/* TOPLU PUANLAMA SHEET — açılışta puanlanmamış tüm seanslar tek sayfada */}
+      <BottomSheet
+        visible={batchOpen}
+        onClose={() => setBatchOpen(false)}
+        title={pendingRatings.length > 1 ? 'Seanslarınızı puanlayın' : 'Seansınızı puanlayın'}
+      >
+        <View style={styles.cancelSheet}>
+          <Muted>
+            {pendingRatings.length > 1
+              ? `Puanlanmayı bekleyen ${pendingRatings.length} seansınız var. Dilediğinizi boş bırakabilirsiniz.`
+              : 'Görüşleriniz bizim için değerli.'}
+          </Muted>
+
+          {pendingRatings.map((p) => {
+            const rated = (batchValues[p.sessionId] ?? 0) >= 1;
+            const commentOpen = !!batchCommentOpen[p.sessionId];
+            const comment = batchComments[p.sessionId] || '';
+            return (
+              <View key={p.sessionId} style={styles.batchItem}>
+                <View style={styles.batchItemRow}>
+                  <View style={styles.batchItemHead}>
+                    <Text style={styles.batchItemDate}>
+                      {formatShortDate(p.startTs)} / {weekdayLong(dayOfWeekOfTs(p.startTs))} {formatTime(p.startTs)}
+                    </Text>
+                    {p.staffName ? <Text style={styles.batchItemStaff}>{p.staffName}</Text> : null}
+                  </View>
+                  <StarRating
+                    value={batchValues[p.sessionId] ?? null}
+                    onChange={(v) => setBatchValues((prev) => ({ ...prev, [p.sessionId]: v }))}
+                    size={30}
+                  />
+                </View>
+
+                {/* Yorum alanı yalnızca puan verildikten sonra ve istenirse açılır —
+                    üç seans için üç kutu birden açık dursaydı sayfa kullanılamaz olurdu */}
+                {rated && !commentOpen ? (
+                  <Pressable
+                    onPress={() => setBatchCommentOpen((prev) => ({ ...prev, [p.sessionId]: true }))}
+                    hitSlop={6}
+                  >
+                    <Text style={styles.batchCommentLink}>
+                      {comment ? '✎ Yorumu düzenle' : '+ Yorum ekle (opsiyonel)'}
+                    </Text>
+                  </Pressable>
+                ) : null}
+
+                {rated && commentOpen ? (
+                  <TextInput
+                    style={styles.batchCommentInput}
+                    value={comment}
+                    onChangeText={(t) =>
+                      setBatchComments((prev) => ({ ...prev, [p.sessionId]: t.slice(0, 1000) }))
+                    }
+                    placeholder="Bu seansla ilgili görüşleriniz"
+                    placeholderTextColor={colors.textMuted}
+                    multiline
+                    maxLength={1000}
+                    autoFocus
+                  />
+                ) : null}
+              </View>
+            );
+          })}
+
+          <Text style={styles.ratingOnceInfo}>Puanlarınızı daha sonra değiştiremezsiniz.</Text>
+          {batchError ? <Text style={styles.cancelErrorText}>{batchError}</Text> : null}
+
+          <Button
+            title={batchRatedCount > 1 ? `${batchRatedCount} puanı gönder` : 'Puanı gönder'}
+            onPress={confirmBatch}
+            disabled={batchRatedCount < 1}
+            loading={rateMutation.isPending}
+          />
+          <Pressable onPress={() => setBatchOpen(false)} hitSlop={8}>
+            <Text style={styles.ratingSkip}>Şimdi değil</Text>
+          </Pressable>
+        </View>
+      </BottomSheet>
     </SafeAreaView>
   );
 }
@@ -342,9 +608,10 @@ function makeStyles(colors: AppColors, theme: ResolvedTheme) {
     rowLeft: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, flex: 1 },
     seqNo: { color: colors.muted, fontSize: 13, fontWeight: '700', minWidth: 22, paddingTop: 2 },
     seqNoPast: { color: surfaceTint(theme, 0.3) },
+    // Tarih tek satırda: "26 Temmuz 2026 Pazar 10:00" — dar ekranda yazı küçülerek sığar
+    dateWrap: { flex: 1 },
     dateText: { fontSize: 14, fontWeight: '700', color: colors.text },
     dateTextPast: { color: colors.muted },
-    dayName: { fontSize: 11, color: colors.muted, marginTop: 1 },
 
     cancelBtn: {
       paddingHorizontal: 12, paddingVertical: 5,
@@ -363,7 +630,7 @@ function makeStyles(colors: AppColors, theme: ResolvedTheme) {
     },
     lockedBtnText: { color: colors.fpOrange, fontSize: 11, fontWeight: '600' },
 
-    badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+    badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     cancelReasonText: { color: colors.muted, fontSize: 12, flex: 1 },
 
     notifOverlay: {
@@ -383,6 +650,46 @@ function makeStyles(colors: AppColors, theme: ResolvedTheme) {
     },
     notifCloseBtnText: { color: colors.white, fontWeight: '800', fontSize: 15 },
     lockedInfo: { color: colors.muted, fontSize: 11, marginTop: 2 },
+
+    // Durum rozetiyle aynı satırda, sağa yaslı — marginLeft:'auto' rozeti solda tutar
+    ratingInline: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      marginLeft: 'auto',
+    },
+    ratingHint: { color: colors.muted, fontSize: 12, fontWeight: '600' },
+    ratingStarsBox: { alignItems: 'center', gap: 6, paddingVertical: 8 },
+    batchItem: {
+      gap: 8,
+      paddingVertical: 10,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: surfaceTint(theme, 0.1),
+    },
+    batchItemRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 10,
+    },
+    batchItemHead: { flex: 1, gap: 2 },
+    batchItemDate: { color: colors.text, fontSize: 14, fontWeight: '700' },
+    batchItemStaff: { color: colors.muted, fontSize: 12 },
+    batchCommentLink: { color: colors.accent, fontSize: 12, fontWeight: '600' },
+    batchCommentInput: {
+      borderWidth: 1,
+      borderColor: colors.border,
+      borderRadius: 10,
+      backgroundColor: surfaceTint(theme, 0.03),
+      color: colors.text,
+      fontSize: 14,
+      paddingHorizontal: 10,
+      paddingVertical: 8,
+      minHeight: 60,
+      textAlignVertical: 'top',
+    },
+    ratingOnceInfo: { color: colors.muted, fontSize: 12, textAlign: 'center', marginTop: -6 },
+    ratingSkip: { color: colors.muted, fontSize: 13, textAlign: 'center', paddingVertical: 6 },
     flexibleInfo: { color: colors.muted, fontSize: 12, lineHeight: 17 },
     cancelErrorText: { color: colors.danger, fontSize: 13 },
     cancelSheet: { gap: 12 },

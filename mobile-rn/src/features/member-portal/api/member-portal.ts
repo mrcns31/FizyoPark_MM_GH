@@ -40,6 +40,11 @@ export interface MemberSession {
   cancelReason?: string;
   status: string;
   statusLabel: string;
+  /** Üyenin verdiği puan (1-5), henüz puanlanmadıysa null */
+  rating: number | null;
+  ratingComment: string;
+  /** Puan verilebilir veya 24 saatlik düzenleme penceresi hâlâ açık */
+  canRate: boolean;
 }
 
 export interface MemberPackageDto {
@@ -78,6 +83,14 @@ export interface PendingPackageRequest {
   requestedAt: string | null;
 }
 
+export interface PendingRating {
+  sessionId: number;
+  staffId: number | null;
+  staffName: string;
+  startTs: number;
+  endTs: number;
+}
+
 export interface MemberDashboard {
   profile: MemberDashboardProfile;
   activePackage: MemberPackageDto | null;
@@ -87,6 +100,7 @@ export interface MemberDashboard {
   contactWhatsApp: string | null;
   pendingPackageRequest: PendingPackageRequest | null;
   catalogPackages: CatalogPackage[];
+  pendingRatings: PendingRating[];
 }
 
 export interface MemberBroadcast {
@@ -107,6 +121,18 @@ export async function cancelMemberSession(
   body?: Record<string, unknown>
 ): Promise<unknown> {
   const { data } = await apiClient.post(`/member-portal/sessions/${sessionId}/cancel`, body || {});
+  return data;
+}
+
+export async function rateMemberSession(
+  sessionId: number,
+  rating: number,
+  comment?: string
+): Promise<unknown> {
+  const { data } = await apiClient.post(`/member-portal/sessions/${sessionId}/rating`, {
+    rating,
+    comment: comment?.trim() || undefined,
+  });
   return data;
 }
 

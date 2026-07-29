@@ -202,7 +202,8 @@ export function AdminMembersScreen() {
           onChangeText={setQ}
         />
         <AlphaFilter value={letter} onChange={setLetter} />
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.sortRow}>
+        {/* Sabit satır: yatay kaydırma yok, sıralama butonları genişliği eşit paylaşır */}
+        <View style={styles.sortRow}>
           {([
             { col: 'name',      label: 'Ad/Soyad' },
             { col: 'start',     label: 'Başlangıç' },
@@ -212,14 +213,15 @@ export function AdminMembersScreen() {
             const isActive = sortCol === col;
             return (
               <Pressable key={col} style={[styles.sortChip, isActive && styles.sortChipOn]} onPress={() => onSort(col)}>
-                <Text style={[styles.sortChipText, isActive && styles.sortChipTextOn]}>
+                <Text style={[styles.sortChipText, isActive && styles.sortChipTextOn]} numberOfLines={1}>
                   {label}{isActive ? (sortDir === 'asc' ? ' ▲' : ' ▼') : ''}
                 </Text>
               </Pressable>
             );
           })}
-          <Text style={styles.countText}>{withActive.length} üye</Text>
-        </ScrollView>
+          {/* Sabit genişlik: üye sayısı 7 → 70 → 700 olurken butonlar kaymasın */}
+          <Text style={styles.countText} numberOfLines={1}>{withActive.length} üye</Text>
+        </View>
       </View>
 
       {isLoading ? (
@@ -339,18 +341,26 @@ function makeStyles(colors: AppColors, theme: ResolvedTheme) {
     metaText: { fontSize: 12, color: colors.muted },
     remainingText: { fontSize: 12, fontWeight: '700' },
     dates: { flexDirection: 'row', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 },
-    sortRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+    sortRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
     sortChip: {
-      paddingHorizontal: 10,
+      flex: 1,
+      paddingHorizontal: 4,
       paddingVertical: 6,
       borderRadius: 8,
       borderWidth: 1,
+      alignItems: 'center',
       borderColor: colors.border,
       backgroundColor: surfaceTint(theme, 0.03),
     },
     sortChipOn: { borderColor: 'rgba(124,92,255,0.5)', backgroundColor: 'rgba(124,92,255,0.15)' },
-    sortChipText: { fontSize: 12, color: colors.muted, fontWeight: '600' },
+    sortChipText: { fontSize: 11, color: colors.muted, fontWeight: '600' },
     sortChipTextOn: { color: colors.text },
-    countText: { fontSize: 12, color: colors.muted, paddingHorizontal: 6, alignSelf: 'center' },
+    countText: {
+      width: 52,
+      flexShrink: 0,
+      textAlign: 'right',
+      fontSize: 11,
+      color: colors.muted,
+    },
   });
 }

@@ -246,7 +246,7 @@ router.get('/notifications', [
     const offset = (page - 1) * perPage;
 
     // types=admin_cancel,member_cancel gibi virgülle ayrılmış tip filtresi
-    const ALLOWED_TYPES = new Set(['admin_cancel', 'member_cancel', 'shift_reminder', 'checkin']);
+    const ALLOWED_TYPES = new Set(['admin_cancel', 'member_cancel', 'shift_reminder', 'checkin', 'rating']);
     const typeFilter = req.query.types
       ? String(req.query.types).split(',').map(t => t.trim()).filter(t => ALLOWED_TYPES.has(t))
       : [];
@@ -275,7 +275,14 @@ router.get('/notifications', [
       shiftReminderSql = `
       UNION ALL
 
-      SELECT sn.id, CASE WHEN sn.type = 'cancel' THEN 'member_cancel' ELSE 'shift_reminder' END AS type,
+      SELECT sn.id,
+             CASE sn.type
+               WHEN 'cancel' THEN 'member_cancel'
+               WHEN 'member_cancel' THEN 'member_cancel'
+               WHEN 'rating' THEN 'rating'
+               WHEN 'low_rating' THEN 'rating'  -- eski kayıtlar da Puanlar filtresine düşsün
+               ELSE 'shift_reminder'
+             END AS type,
              EXTRACT(EPOCH FROM sn.created_at AT TIME ZONE 'Europe/Istanbul') * 1000 AS at_ts,
              NULL::int AS staff_id,
              (sn.payload->>'startTs')::bigint AS start_ts,
@@ -284,7 +291,8 @@ router.get('/notifications', [
              NULL AS source,
              sn.title AS notif_title,
              sn.body AS notif_body,
-             sn.read_at
+             sn.read_at,
+             (sn.payload->>'rating')::int AS rating
       FROM staff_notifications sn
       WHERE sn.user_id = $${userIdParam}
         AND sn.created_at AT TIME ZONE 'Europe/Istanbul' > to_timestamp($1 / 1000.0)
@@ -299,7 +307,8 @@ router.get('/notifications', [
              COALESCE(NULLIF(TRIM(m.first_name || ' ' || m.last_name), ''), NULLIF(TRIM(m.name), '')) AS member_name,
              TRIM(st.first_name || ' ' || st.last_name) AS staff_name,
              NULL AS source,
-             'Admin Randevu İptali' AS notif_title, NULL AS notif_body, NULL::timestamptz AS read_at
+             'Admin Randevu İptali' AS notif_title, NULL AS notif_body, NULL::timestamptz AS read_at,
+             NULL::int AS rating
       FROM activity_logs al
       JOIN sessions s ON s.id::text = al.entity_id
       LEFT JOIN members m ON m.id = s.member_id
@@ -352,10 +361,11 @@ router.get('/notifications', [
       memberName: r.member_name,
       startTs: r.start_ts ? Number(r.start_ts) : null,
       source: r.source || null,
-      // shift_reminder özel alanları
+      // shift_reminder / rating özel alanları
       title: r.notif_title || null,
       body: r.notif_body || null,
       readAt: r.read_at || null,
+      rating: r.rating != null ? Number(r.rating) : null,
     }));
 
     res.json({ items, total, page, perPage, totalPages: Math.ceil(total / perPage) });

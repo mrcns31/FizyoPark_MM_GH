@@ -2,6 +2,7 @@ import db from '../config/database.js';
 
 const INSTITUTION_WHATSAPP_KEY = 'institution_whatsapp';
 const STAFF_CALENDAR_RANGE_KEY = 'staff_calendar_range';
+const RATINGS_GO_LIVE_KEY = 'ratings_go_live_ts';
 
 export async function getInstitutionWhatsApp() {
   try {
@@ -46,6 +47,21 @@ export async function setStaffCalendarRange(daysBefore, daysAfter) {
 
 export async function clearStaffCalendarRange() {
   await db.query('DELETE FROM app_settings WHERE key = $1', [STAFF_CALENDAR_RANGE_KEY]);
+}
+
+/**
+ * Puanlama sisteminin devreye alındığı an (ms). Bu tarihten önce biten seanslar puanlanamaz.
+ * Kayıt yoksa (migration henüz uygulanmamış) Infinity döner → hiçbir seans puanlanabilir sayılmaz.
+ */
+export async function getRatingsGoLiveTs() {
+  try {
+    const res = await db.query('SELECT value FROM app_settings WHERE key = $1', [RATINGS_GO_LIVE_KEY]);
+    const v = Number(res.rows[0]?.value);
+    if (Number.isFinite(v)) return v;
+  } catch (err) {
+    if (err.code !== '42P01') throw err;
+  }
+  return Infinity;
 }
 
 export async function setInstitutionWhatsApp(raw) {

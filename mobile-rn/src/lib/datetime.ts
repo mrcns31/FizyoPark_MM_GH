@@ -28,6 +28,18 @@ export function formatDayLabel(ts: number): string {
   return dayFmt.format(new Date(ts));
 }
 
+const shortDateFmt = new Intl.DateTimeFormat('tr-TR', {
+  timeZone: TZ,
+  day: '2-digit',
+  month: '2-digit',
+  year: '2-digit',
+});
+
+/** Kısa tarih: 28.07.26 */
+export function formatShortDate(ts: number): string {
+  return shortDateFmt.format(new Date(ts));
+}
+
 const isoDateFmt = new Intl.DateTimeFormat('en-CA', {
   timeZone: TZ,
   year: 'numeric',

@@ -9,6 +9,7 @@ import {
   buildAttendanceLabel,
   buildPackageSessionApprovalInfo,
 } from './sessionAttendance.js';
+import { isSessionRatable } from './sessionRatings.js';
 
 export const PACKAGE_CANCELLED_LABEL = 'Paket iptal edildi';
 
@@ -169,7 +170,29 @@ export function toDateOnlyString(val) {
   return String(val).slice(0, 10);
 }
 
-export async function buildPackageWithSessions(mpRow, memberId, staffMap) {
+/**
+ * Üyenin verdiği puanları seans id → kayıt olarak döner.
+ * Tablo henüz yoksa (migration uygulanmamış) boş harita döner.
+ */
+export async function loadMemberRatings(memberId, sessionIds) {
+  const map = new Map();
+  if (!sessionIds.length) return map;
+  try {
+    const res = await db.query(
+      `SELECT session_id, rating, comment, created_at
+       FROM session_ratings
+       WHERE member_id = $1 AND session_id = ANY($2::int[])`,
+      [memberId, sessionIds]
+    );
+    for (const row of res.rows) map.set(row.session_id, row);
+  } catch (err) {
+    if (err.code !== '42P01') throw err;
+  }
+  return map;
+}
+
+export async function buildPackageWithSessions(mpRow, memberId, staffMap, options = {}) {
+  const ratingsGoLiveTs = options.ratingsGoLiveTs ?? Infinity;
   const sessionsRes = await db.query(
     `SELECT s.*, r.name AS room_name
      FROM sessions s
@@ -209,10 +232,20 @@ export async function buildPackageWithSessions(mpRow, memberId, staffMap) {
     }
   }
 
+  const ratings = await loadMemberRatings(memberId, sessionsRes.rows.map((s) => s.id));
+  const now = Date.now();
+
   const packageType = mpRow.package_type || 'fixed';
   const sessions = sessionsRes.rows.map((s) => {
     const dto = sessionToDto(s, staffMap, packageType, mpRow.status);
     dto.cancelledByMember = dto.isCancelled ? memberCancelledIds.has(s.id) : false;
+
+    const r = ratings.get(s.id);
+    dto.rating = r ? Number(r.rating) : null;
+    dto.ratingComment = r?.comment || '';
+    // Puan bir kez verilir; verildikten sonra seans yeniden puanlanamaz
+    dto.canRate = r ? false : isSessionRatable(s, ratingsGoLiveTs, now);
+
     return dto;
   });
   const counts = computePackageSessionCounts(sessionsRes.rows, mpRow.lesson_count);

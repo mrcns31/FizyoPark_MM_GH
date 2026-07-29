@@ -676,6 +676,18 @@
     invalidateRareCache();
     return staffFromApi(row);
   }
+  /** Yıllık ay × personel puan matrisi (admin/manager) */
+  async function getStaffRatingSummary(year) {
+    return apiFetch('/ratings/staff-summary?year=' + encodeURIComponent(year));
+  }
+
+  /** Bir personelin ay/yıl puan dağılımı ve yorumları (admin/manager) */
+  async function getRatingList(staffId, year, month) {
+    var q = '/ratings/list?staffId=' + encodeURIComponent(staffId) + '&year=' + encodeURIComponent(year);
+    if (month) q += '&month=' + encodeURIComponent(month);
+    return apiFetch(q);
+  }
+
   async function getAllStaffIncludingDeleted() {
     const rows = await apiFetch('/staff?includeDeleted=true');
     return (rows || []).map(staffFromApi);
@@ -1163,6 +1175,8 @@
     sendBroadcast,
     getBroadcasts,
     getBroadcastRecipients,
+    getStaffRatingSummary,
+    getRatingList,
   };
   window.__API_BASE__ = API_BASE;
 })();

@@ -4829,6 +4829,134 @@ select option:checked{
 .reports-table tbody .reports-tr:hover .reports-td{
   background:rgba(255,255,255,.03);
 }
+
+/* ── Rapor sekmeleri ────────────────────────────────────────────── */
+.reports-tabs{
+  display:flex;
+  gap:6px;
+  margin-left:16px;
+}
+.reports-tab{
+  padding:6px 14px;
+  border-radius:10px;
+  border:1px solid var(--border);
+  background:rgba(255,255,255,.03);
+  color:var(--muted);
+  font-size:12px;
+  font-weight:700;
+  cursor:pointer;
+}
+.reports-tab--on{
+  color:var(--text);
+  border-color:rgba(124,92,255,.5);
+  background:rgba(124,92,255,.2);
+}
+
+/* ── Puan tablosu ───────────────────────────────────────────────── */
+.reports-rating-summary{
+  display:flex;
+  flex-wrap:wrap;
+  align-items:baseline;
+  gap:10px;
+  padding:0 0 10px;
+  font-size:13px;
+  font-weight:700;
+  color:var(--text);
+}
+.reports-rating-hint{
+  font-size:11px;
+  font-weight:500;
+  color:var(--muted);
+}
+.reports-td--rating{
+  line-height:1.25;
+}
+.reports-rating-value{
+  display:block;
+}
+.reports-rating-n{
+  display:block;
+  font-size:10px;
+  font-weight:600;
+  color:rgba(255,255,255,.35);
+}
+.reports-td--rating-good .reports-rating-value{ color:var(--ok); }
+.reports-td--rating-low .reports-rating-value{ color:#ff9500; }
+.reports-td--clickable{ cursor:pointer; }
+.reports-td--clickable:hover{ background:rgba(124,92,255,.12); }
+
+/* ── Puan detay paneli ──────────────────────────────────────────── */
+.reports-rating-detail{
+  margin-top:16px;
+}
+.reports-rating-detail__title{
+  font-size:14px;
+  font-weight:800;
+  color:var(--text);
+  margin:0 0 10px;
+}
+.reports-rating-detail__subtitle{
+  font-size:13px;
+  font-weight:700;
+  color:var(--text);
+  margin:14px 0 8px;
+}
+.reports-rating-dist{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+  max-width:420px;
+}
+.reports-rating-dist__row{
+  display:flex;
+  align-items:center;
+  gap:8px;
+}
+.reports-rating-dist__label{
+  width:30px;
+  font-size:12px;
+  font-weight:600;
+  color:var(--muted);
+}
+.reports-rating-dist__track{
+  flex:1;
+  height:8px;
+  border-radius:4px;
+  background:rgba(255,255,255,.08);
+  overflow:hidden;
+}
+.reports-rating-dist__fill{
+  display:block;
+  height:100%;
+  border-radius:4px;
+  background:var(--accent);
+}
+.reports-rating-dist__count{
+  width:26px;
+  text-align:right;
+  font-size:12px;
+  color:var(--muted);
+  font-variant-numeric:tabular-nums;
+}
+.reports-rating-comment{
+  border:1px solid var(--border);
+  border-radius:10px;
+  background:rgba(255,255,255,.03);
+  padding:10px 12px;
+  margin-bottom:8px;
+  max-width:640px;
+}
+.reports-rating-comment__head{
+  font-size:11px;
+  font-weight:700;
+  color:var(--muted);
+  margin-bottom:4px;
+}
+.reports-rating-comment__body{
+  font-size:13px;
+  line-height:1.45;
+  color:var(--text);
+}
 .admin-main-panel__head--tabs{
   padding:0;
   border-bottom:1px solid var(--border);
@@ -6799,6 +6927,21 @@ body.splash-screen-open{
 .notif-type-badge--reminder{
   color:#ff9500;
   background:rgba(255,149,0,.12);
+}
+.notif-type-badge--rating{
+  color:var(--danger,#ff4d6d);
+  background:rgba(255,77,109,.12);
+}
+
+/* Bildirim tür filtreleri satırı tam doldursun, sağda boşluk kalmasın.
+   Yalnızca bildirimler panelini hedefler — .entry-list-tabs başka görünümlerde de kullanılıyor. */
+#adminNotificationsView .entry-list-tabs{
+  display:flex;
+  width:100%;
+}
+#adminNotificationsView .entry-list-tabs .entry-list-tab{
+  flex:1;
+  text-align:center;
 }
 
 /* ── Bildirim satır renkleri ───────────────────────────────────────────── */

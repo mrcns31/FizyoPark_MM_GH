@@ -28,7 +28,8 @@ import packageRequestsRoutes from './routes/package-requests.js';
 import closurePeriodsRoutes from './routes/closure-periods.js';
 import doorRoutes from './routes/door.js';
 import adminBroadcastRoutes from './routes/admin-broadcast.js';
-import { run24hReminders } from './utils/sessionReminders.js';
+import ratingsRoutes from './routes/ratings.js';
+import { run24hReminders, runRatingPrompts } from './utils/sessionReminders.js';
 import { runAutoCompletePackages, runPackageNotifications } from './utils/packageNotifications.js';
 import { runAllShiftEndReminders } from './utils/sessionAttendance.js';
 import db from './config/database.js';
@@ -112,6 +113,7 @@ app.use('/api/package-requests', packageRequestsRoutes);
 app.use('/api/closure-periods', closurePeriodsRoutes);
 app.use('/api/door', doorRoutes);
 app.use('/api/admin/broadcast', adminBroadcastRoutes);
+app.use('/api/ratings', ratingsRoutes);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -143,6 +145,9 @@ setInterval(async () => {
 
   // Mesai sonu personel bildirimi: tüm personel kontrol edilir, günde bir kez gönderilir
   try { await runAllShiftEndReminders(db, now); } catch (err) { console.error('[shiftReminder] hata:', err.message); }
+
+  // Seans puanlama daveti: bitişinden 1-3 saat sonra, 09:00-22:00 arasında
+  try { await runRatingPrompts(now); } catch (err) { console.error('[sessionReminders] rating hata:', err.message); }
 
   // Günlük (saat 09:xx Istanbul): paket expire + paket bildirim taraması
   if (istanbulHour === 9) {

@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { Badge, Button, Card, Muted, SectionTitle } from '../../../components/ui';
 import { BottomSheet } from '../../../components/bottom-sheet';
+import { NavRow } from '../../../components/nav-row';
 import { ThemeToggle } from '../../../components/theme-toggle';
 import { ChangePasswordForm } from '../../auth/components/change-password-form';
 import { useResponsive } from '../../../lib/responsive';
@@ -245,23 +246,6 @@ function Row({ label, value }: { label: string; value?: string | null }) {
   );
 }
 
-function NavRow({ icon, label, onPress, badge }: { icon: keyof typeof Ionicons.glyphMap; label: string; onPress: () => void; badge?: number }) {
-  const { colors, resolvedTheme } = useTheme();
-  const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
-  return (
-    <Pressable style={styles.navRow} onPress={onPress}>
-      <Ionicons name={icon} size={20} color={colors.muted} />
-      <Text style={styles.navLabel}>{label}</Text>
-      {badge && badge > 0 ? (
-        <View style={styles.navBadge}>
-          <Text style={styles.navBadgeText}>{badge}</Text>
-        </View>
-      ) : null}
-      <Ionicons name="chevron-forward" size={18} color={colors.muted} />
-    </Pressable>
-  );
-}
-
 function makeStyles(colors: AppColors, theme: ResolvedTheme) {
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: colors.bg },
@@ -272,27 +256,9 @@ function makeStyles(colors: AppColors, theme: ResolvedTheme) {
     rowLabel: { color: colors.muted, fontSize: 14 },
     rowValue: { color: colors.text, fontSize: 14, fontWeight: '600' },
     warn: { backgroundColor: 'rgba(255,149,0,0.1)', borderColor: 'rgba(255,149,0,0.3)' },
-    navRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 12,
-      paddingHorizontal: 14,
-      paddingVertical: 14,
-      borderRadius: 12,
-      borderWidth: 1,
-      borderColor: colors.border,
-      backgroundColor: surfaceTint(theme, 0.03),
-    },
-    navLabel: { flex: 1, color: colors.text, fontSize: 15, fontWeight: '600' },
     rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
     pending: { backgroundColor: 'rgba(255,149,0,0.1)', borderColor: 'rgba(255,149,0,0.3)' },
     pkgName: { fontSize: 16, fontWeight: '700', color: colors.text },
-    navBadge: {
-      minWidth: 20, height: 20, borderRadius: 10,
-      backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center',
-      paddingHorizontal: 5, marginRight: 4,
-    },
-    navBadgeText: { color: colors.white, fontSize: 11, fontWeight: '800' },
     // Bildirim listesi
     notifList: { gap: 8 },
     notifItem: {

@@ -8,6 +8,8 @@ export interface StaffNotification {
   at: number;     // ms timestamp
   createdAt: string;
   readAt: string | null;
+  /** Yalnızca 'rating' bildirimlerinde dolu — düşük puanı yorumdan ayırmak için */
+  rating: number | null;
 }
 
 export interface NotificationsResult {
@@ -52,6 +54,9 @@ function fromApi(row: any): StaffNotification {
     // staff_notifications'dan hazır title/body gelir
     title = row.title || 'Üye Randevu İptali';
     body  = row.body  || '';
+  } else if (type === 'rating') {
+    title = row.title || 'Seans Puanı';
+    body  = row.body  || '';
   } else if (type === 'admin_cancel') {
     const startTs = row.startTs ?? row.start_ts;
     let datePart = '';
@@ -69,6 +74,11 @@ function fromApi(row: any): StaffNotification {
     title = 'Admin Randevu İptali';
     const parts = [memberName, datePart].filter(Boolean);
     body = parts.join(', ') + (staffName ? ` - ${staffName} ile olan randevusu iptal edildi` : ' iptal edildi');
+  } else if (type !== 'checkin' && (row.title || row.body)) {
+    // Tanımadığımız ama sunucudan başlık/gövde ile gelen tipler (staff_notifications kaynaklı).
+    // Bu dal olmazsa yeni bir bildirim tipi sessizce "QR ile giriş yaptı" diye gösterilir.
+    title = row.title || '';
+    body  = row.body  || '';
   } else {
     const methodLabel = source === 'card' ? 'Kart' : source === 'phone' ? 'Telefon' : 'QR';
     const timeLabel = at ? (() => {
@@ -90,6 +100,7 @@ function fromApi(row: any): StaffNotification {
     at,
     createdAt: at ? new Date(at).toISOString() : '',
     readAt: null,
+    rating: row.rating != null ? Number(row.rating) : null,
   };
 }
 

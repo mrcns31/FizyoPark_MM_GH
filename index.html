@@ -799,10 +799,9 @@
               <span class="notif-nav-loading hidden" id="notifNavLoading">yükleniyor…</span>
             </div>
             <div class="entry-list-tabs" role="tablist" aria-label="Bildirim türü">
-              <button type="button" id="notificationsFilterAll" class="entry-list-tab is-active" role="tab" aria-selected="true" data-notification-filter="all">Tümü</button>
-              <button type="button" id="notificationsFilterAdminCancel" class="entry-list-tab" role="tab" aria-selected="false" data-notification-filter="admin_cancel">Admin İptali</button>
               <button type="button" id="notificationsFilterMemberCancel" class="entry-list-tab" role="tab" aria-selected="false" data-notification-filter="member_cancel">Üye İptali</button>
-              <button type="button" id="notificationsFilterReminder" class="entry-list-tab" role="tab" aria-selected="false" data-notification-filter="shift_reminder">Hatırlatmalar</button>
+              <button type="button" id="notificationsFilterAdminCancel" class="entry-list-tab" role="tab" aria-selected="false" data-notification-filter="admin_cancel">Admin İptali</button>
+              <button type="button" id="notificationsFilterRating" class="entry-list-tab" role="tab" aria-selected="false" data-notification-filter="rating">Puanlar</button>
               <button type="button" id="notificationsFilterBroadcast" class="entry-list-tab" role="tab" aria-selected="false" data-notification-filter="broadcast">Gönderilmiş</button>
             </div>
             <div class="notif-search-row">
@@ -816,6 +815,10 @@
           <header class="admin-main-panel__head">
             <div class="admin-main-panel__head-row">
               <h2 class="admin-main-panel__title">Raporlar</h2>
+              <div class="reports-tabs" id="reportsTabs" role="tablist">
+                <button id="reportsTabCountsBtn" class="reports-tab reports-tab--on" type="button" role="tab">Seans Sayıları</button>
+                <button id="reportsTabRatingsBtn" class="reports-tab" type="button" role="tab">Puanlar</button>
+              </div>
               <div class="reports-year-nav" id="reportsYearNav">
                 <button id="reportsToggleFormerBtn" class="btn btn--ghost btn--sm reports-toggle-former-btn" type="button" title="Eski personelleri göster/gizle">Eski Personel</button>
                 <button id="reportsPrevYearBtn" class="btn btn--ghost btn--icon" type="button" aria-label="Önceki yıl">&#8249;</button>

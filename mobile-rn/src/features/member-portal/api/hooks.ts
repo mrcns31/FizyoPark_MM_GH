@@ -7,6 +7,7 @@ import {
   getMemberDashboard,
   getMyBroadcasts,
   markBroadcastSeen,
+  rateMemberSession,
   requestMemberAccountDeletion,
 } from './member-portal';
 
@@ -50,6 +51,15 @@ export function useCancelMemberSession() {
   return useMutation({
     mutationFn: (vars: { sessionId: number; body?: Record<string, unknown> }) =>
       cancelMemberSession(vars.sessionId, vars.body),
+    onSuccess: () => qc.invalidateQueries({ queryKey: memberPortalKeys.dashboard }),
+  });
+}
+
+export function useRateMemberSession() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { sessionId: number; rating: number; comment?: string }) =>
+      rateMemberSession(vars.sessionId, vars.rating, vars.comment),
     onSuccess: () => qc.invalidateQueries({ queryKey: memberPortalKeys.dashboard }),
   });
 }

@@ -12,6 +12,7 @@ import { surfaceTint, type AppColors, type ResolvedTheme } from '../../../theme/
 import { useAuth } from '../../auth';
 import { useConfirmAttendance, useSessions } from '../../sessions/api/hooks';
 import { StaffDateBar, useStaffDate } from '../context/staff-date-context';
+import { MyRatingsBadge } from '../../ratings/components/my-ratings-card';
 import type { PlannerSession } from '../../sessions/api/sessions';
 
 type AttState = 'qr' | 'present' | 'no_show' | 'future' | 'pending';
@@ -70,7 +71,7 @@ export function StaffPlannerScreen() {
 
   return (
     <SafeAreaView style={styles.safe} edges={['top', 'left', 'right']}>
-      <ScreenHeader title="Takvim" />
+      <ScreenHeader title="Takvim" right={<MyRatingsBadge />} />
       <StaffDateBar wide={wide} />
 
       {isLoading ? (
