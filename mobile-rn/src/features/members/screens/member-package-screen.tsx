@@ -279,7 +279,13 @@ export function MemberPackageScreen() {
       {
         text: 'Sonlandır',
         style: 'destructive',
-        onPress: () => endPkg.mutate({ id }, { onError: (e) => Alert.alert('Hata', (e as Error).message) }),
+        // Bitiş tarihi cihazdan gönderilir (web ile aynı): sunucunun saat dilimi
+        // farklıysa gün kaymasın.
+        onPress: () =>
+          endPkg.mutate(
+            { id, endDate: todayStr() },
+            { onError: (e) => Alert.alert('Hata', (e as Error).message) },
+          ),
       },
     ]);
   }

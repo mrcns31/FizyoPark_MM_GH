@@ -5,7 +5,7 @@ import { verifyToken } from './auth.js';
 import { validateAndPickRoom, validateRoomForSession, placeSessionWithRebalance, getDemandByStaff, matchStaffToRooms } from '../utils/sessionSlot.js';
 import { log as activityLog } from '../utils/activityLogger.js';
 import { ATTENDANCE_JOIN_SQL } from '../utils/sessionAttendance.js';
-import { loadStaffMap, sessionToDto } from '../utils/memberPackageDto.js';
+import { loadStaffMap, sessionToDto, toDateOnlyString } from '../utils/memberPackageDto.js';
 import { fulfillPendingPackageRequestsForMember } from './package-requests.js';
 import { localDateStrFromTs } from '../utils/staffWorkingHours.js';
 import { autoCompletePackageIfExhausted } from '../utils/packageSessionCounts.js';
@@ -1244,7 +1244,7 @@ router.put('/:id', [
 router.post('/:id/end', async (req, res) => {
   try {
     const { id } = req.params;
-    const mpCheck = await db.query('SELECT id FROM member_packages WHERE id = $1 AND status = $2', [id, 'active']);
+    const mpCheck = await db.query('SELECT id, start_date FROM member_packages WHERE id = $1 AND status = $2', [id, 'active']);
     if (mpCheck.rows.length === 0) {
       return res.status(404).json({ error: 'Üye paketi bulunamadı veya zaten sonlandırılmış' });
     }
@@ -1254,6 +1254,11 @@ router.post('/:id/end', async (req, res) => {
     if (!endDateStr) {
       endDateStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
     }
+    // Henüz başlamamış (ileri tarihli) paket sonlandırılırsa bitiş tarihi başlangıçtan
+    // önceye düşer ve valid_date_range kısıtı patlar. Böyle bir paket "hiç kullanılmadan
+    // kapatıldı" demektir: bitiş = başlangıç yapılır, tüm seansları iptal edilir.
+    const startDateStr = toDateOnlyString(mpCheck.rows[0].start_date);
+    if (startDateStr && endDateStr < startDateStr) endDateStr = startDateStr;
     const cutoffStart = new Date(endDateStr + 'T00:00:00').getTime();
     await db.query(
       'UPDATE sessions SET deleted_at = CURRENT_TIMESTAMP WHERE member_package_id = $1 AND start_ts >= $2',
