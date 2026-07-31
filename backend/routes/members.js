@@ -62,7 +62,8 @@ router.get('/former', async (req, res) => {
     }
     const { name, phone } = req.query;
     const params = [];
-    const conditions = ['m.deleted_at IS NOT NULL'];
+    // purged_at dolu olanlar kalıcı silinmiştir: eski üyeler listesinde de görünmezler
+    const conditions = ['m.deleted_at IS NOT NULL', 'm.purged_at IS NULL'];
 
     if (name && name.trim()) {
       params.push(`%${name.trim().toLowerCase()}%`);
@@ -108,7 +109,10 @@ router.get('/former/:id/packages', async (req, res) => {
       return res.status(403).json({ error: 'Bu işlem için yetkiniz yok' });
     }
     const { id } = req.params;
-    const memberRes = await db.query('SELECT * FROM members WHERE id = $1 AND deleted_at IS NOT NULL', [id]);
+    const memberRes = await db.query(
+      'SELECT * FROM members WHERE id = $1 AND deleted_at IS NOT NULL AND purged_at IS NULL',
+      [id]
+    );
     if (memberRes.rows.length === 0) {
       return res.status(404).json({ error: 'Eski üye kaydı bulunamadı' });
     }
@@ -234,8 +238,9 @@ router.post('/', [
       }
     }
 
+    // Kalıcı silinmiş (purged) kayıtlar yok sayılır: telefonları yeni üye için serbesttir
     const dup = await db.query(
-      'SELECT id, deleted_at, member_no, first_name, last_name, name FROM members WHERE trim(phone) = $1',
+      'SELECT id, deleted_at, member_no, first_name, last_name, name FROM members WHERE trim(phone) = $1 AND purged_at IS NULL',
       [phone]
     );
     if (dup.rows.length > 0) {
@@ -604,28 +609,73 @@ router.delete('/:id', [
       return res.status(401).json({ error: 'Admin şifresi hatalı.' });
     }
 
-    const memberCheck = await db.query('SELECT id, user_id FROM members WHERE id = $1', [id]);
+    const memberCheck = await db.query('SELECT id, user_id, member_no, name, card_no FROM members WHERE id = $1', [id]);
     if (memberCheck.rows.length === 0) {
       return res.status(404).json({ error: 'Üye bulunamadı' });
     }
     const memberUserId = memberCheck.rows[0].user_id;
 
     if (deleteHistory === true) {
-      // Tam silme: üye kaydı + giriş hesabı silinir; seanslar soft delete (veritabanında kalır, log için)
-      await db.query('UPDATE sessions SET deleted_at = CURRENT_TIMESTAMP WHERE member_id = $1', [id]);
-      await db.query('DELETE FROM member_cards WHERE member_id = $1', [id]);
-      await db.query('DELETE FROM members WHERE id = $1', [id]);
-      if (memberUserId) {
-        await db.query("DELETE FROM users WHERE id = $1 AND role = 'member'", [memberUserId]);
+      // Kalıcı gizleme: kayıt (üye + paketler + seanslar) log bütünlüğü için veritabanında
+      // kalır, ama hiçbir ekranda görünmez — takvimde de yok, "Eski Üyeler"de de yok.
+      // Geri açılamaz (reactivate purged kayıtları kabul etmez).
+      const client = await db.pool.connect();
+      try {
+        await client.query('BEGIN');
+        // Geçmiş dahil tüm seanslar takvimden kalkar
+        await client.query(
+          'UPDATE sessions SET deleted_at = CURRENT_TIMESTAMP WHERE member_id = $1 AND deleted_at IS NULL',
+          [id]
+        );
+        await client.query('DELETE FROM member_cards WHERE member_id = $1', [id]);
+        // card_no serbest bırakılır: unique index yüzünden aynı kart yeni üyeye tanımlanamaz kalmasın
+        await client.query(
+          `UPDATE members
+           SET deleted_at = COALESCE(deleted_at, CURRENT_TIMESTAMP),
+               purged_at = CURRENT_TIMESTAMP,
+               card_no = NULL
+           WHERE id = $1`,
+          [id]
+        );
+        if (memberUserId) {
+          // Giriş hesabı kapatılır; e-posta/kullanıcı adı serbest bırakılır ki aynı telefonla
+          // yeni üye açılırken users.email UNIQUE kısıtı engellemesin.
+          await client.query(
+            `UPDATE users
+             SET is_active = false,
+                 username = 'silinmis-' || id,
+                 email = 'silinmis-' || id || '@fizyopark.local',
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $1 AND role = 'member'`,
+            [memberUserId]
+          );
+        }
+        await client.query('COMMIT');
+      } catch (txErr) {
+        await client.query('ROLLBACK').catch(() => {});
+        throw txErr;
+      } finally {
+        client.release();
       }
-      await activityLog(req, { action: 'member.delete_permanent', entityType: 'member', entityId: id, details: { deleteHistory: true } }).catch(() => {});
-      return res.json({ message: 'Üye ve geçmiş bilgileri silindi' });
+      await activityLog(req, {
+        action: 'member.delete_permanent',
+        entityType: 'member',
+        entityId: id,
+        details: {
+          deleteHistory: true,
+          member_no: memberCheck.rows[0].member_no,
+          name: memberCheck.rows[0].name,
+          card_no: memberCheck.rows[0].card_no || null,
+        },
+      }).catch(() => {});
+      return res.json({ message: 'Üye kalıcı olarak silindi (hiçbir listede görünmeyecek)' });
     }
 
     // Soft delete: listede görünmez, kart numaraları çakışmasın diye temizlenir
     await db.query('DELETE FROM member_cards WHERE member_id = $1', [id]);
     // Gelecek randevular da silinir: aksi halde hatırlatma cron'u ve personel takvimi
-    // silinmiş üyenin randevusunu görmeye devam eder
+    // silinmiş üyenin randevusunu görmeye devam eder.
+    // Geçmiş randevulara dokunulmaz — takvimde ve "Eski Üyeler" seans geçmişinde kalırlar.
     await db.query(
       'UPDATE sessions SET deleted_at = CURRENT_TIMESTAMP WHERE member_id = $1 AND deleted_at IS NULL AND start_ts > $2',
       [id, Date.now()]
@@ -774,7 +824,10 @@ router.post('/:id/reactivate', async (req, res) => {
     const client = await db.pool.connect();
     try {
       await client.query('BEGIN');
-      const memberRes = await client.query('SELECT * FROM members WHERE id = $1 AND deleted_at IS NOT NULL', [id]);
+      const memberRes = await client.query(
+        'SELECT * FROM members WHERE id = $1 AND deleted_at IS NOT NULL AND purged_at IS NULL',
+        [id]
+      );
       if (memberRes.rows.length === 0) {
         await client.query('ROLLBACK');
         return res.status(404).json({ error: 'Eski üye kaydı bulunamadı veya zaten aktif' });

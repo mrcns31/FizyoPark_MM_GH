@@ -165,7 +165,17 @@ async function sendRatingPush(memberName, staffName, rating, startTs, sessionId,
         seenTokens.add(r.token);
         return true;
       })
-      .map((r) => ({ to: r.token, title, body: bodyText, sound: 'natification.caf', priority: 'high', channelId: 'fizyopark', interruptionLevel: 'active' }));
+      .map((r) => ({
+        to: r.token,
+        title,
+        body: bodyText,
+        // data.type → mobilde bildirime tıklanınca bildirim ekranını açar
+        data: { type: 'rating', sessionId },
+        sound: 'natification.caf',
+        priority: 'high',
+        channelId: 'fizyopark',
+        interruptionLevel: 'active',
+      }));
 
     await expoPush(messages);
   } catch {
@@ -239,7 +249,17 @@ async function sendCancellationPush(memberName, startTs, staffName, staffId, can
         seenTokens.add(r.token);
         return true;
       })
-      .map((r) => ({ to: r.token, title, body: bodyText, sound: 'natification.caf', priority: 'high', channelId: 'fizyopark', interruptionLevel: 'active' }));
+      .map((r) => ({
+        to: r.token,
+        title,
+        body: bodyText,
+        // data.type → mobilde bildirime tıklanınca bildirim ekranını açar
+        data: { type: 'cancel' },
+        sound: 'natification.caf',
+        priority: 'high',
+        channelId: 'fizyopark',
+        interruptionLevel: 'active',
+      }));
 
     await expoPush(messages);
   } catch {

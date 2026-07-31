@@ -16,17 +16,28 @@ Notifications.setNotificationHandler({
  * Bildirime tıklanınca açılacak ekran. Backend yalnızca `data.type` gönderir;
  * route eşlemesi burada durur, böylece ekran yolu değişince backend'e dokunmak gerekmez.
  */
-type PushTarget = { route: string; roles: readonly string[] };
+/** Rol → o rolün göreceği ekran. Rol listede yoksa yönlendirme yapılmaz. */
+type PushTarget = Record<string, string>;
 
+/** Talepler ekranı — yalnızca yönetim görür */
 const ADMIN_REQUESTS: PushTarget = {
-  route: '/(admin)/more/requests',
-  roles: ['admin', 'manager'],
+  admin: '/(admin)/more/requests',
+  manager: '/(admin)/more/requests',
+};
+
+/** Bildirim listesi — personelin kendi sekmesi ayrı route'ta */
+const NOTIFICATIONS: PushTarget = {
+  admin: '/(admin)/notifications',
+  manager: '/(admin)/notifications',
+  staff: '/(staff)/notifications',
 };
 
 const PUSH_TARGETS: Record<string, PushTarget> = {
   password_reset_request: ADMIN_REQUESTS,
   package_request: ADMIN_REQUESTS,
   deletion_request: ADMIN_REQUESTS,
+  cancel: NOTIFICATIONS,
+  rating: NOTIFICATIONS,
 };
 
 /**
@@ -36,13 +47,9 @@ const PUSH_TARGETS: Record<string, PushTarget> = {
 export function resolveNotificationRoute(data: unknown, role: string | null): string | null {
   if (!data || typeof data !== 'object') return null;
   const type = (data as { type?: unknown }).type;
-  if (typeof type !== 'string') return null;
+  if (typeof type !== 'string' || !role) return null;
 
-  const target = PUSH_TARGETS[type];
-  if (!target) return null;
-  if (!role || !target.roles.includes(role)) return null;
-
-  return target.route;
+  return PUSH_TARGETS[type]?.[role] ?? null;
 }
 
 export async function getExpoPushToken(): Promise<string | null> {

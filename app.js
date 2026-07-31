@@ -11584,7 +11584,18 @@ async function confirmDeleteMember() {
   }
   state.members = state.members.filter((x) => x.id !== normId(id));
   if (state.memberPackages) state.memberPackages = state.memberPackages.filter((mp) => normId(mp.memberId) !== normId(id));
-  if (state.sessions) state.sessions = state.sessions.filter((s) => normId(s.memberId) !== normId(id));
+  if (state.sessions) {
+    // Kalıcı silmede tüm seanslar takvimden kalkar; normal silmede yalnızca gelecek
+    // randevular iptal olur, geçmiş randevular takvimde kalmaya devam eder.
+    const nowTs = Date.now();
+    state.sessions = state.sessions.filter((s) => {
+      if (normId(s.memberId) !== normId(id)) return true;
+      if (deleteHistoryYes) return false;
+      if (Number(s.startTs) > nowTs) return false;
+      s.memberDeleted = true;
+      return true;
+    });
+  }
   closeDeleteMemberModal();
   if (els.memberCardModal && !els.memberCardModal.classList.contains("hidden")) closeMemberCardModal();
   render();
@@ -11790,6 +11801,12 @@ async function openSessionModal({ mode, date, time, sessionId, packageOverride =
     if (!s) {
       await showAppAlert(STALE_SESSION_MSG);
       render();
+      return;
+    }
+    // Silinmiş üyenin geçmiş seansı takvimde görünür ama salt okunurdur: üye artık
+    // listede olmadığı için form üyeyi doğru eşleyemez.
+    if (s.memberDeleted) {
+      await showAppAlert("Bu üye silinmiş. Geçmiş randevu kaydı görüntülenebilir ama düzenlenemez.");
       return;
     }
     ui.editingSessionId = s.id;

@@ -142,6 +142,7 @@
       staffName: row.staff_name || '',
       memberId: row.member_id,
       memberName: memberName,
+      memberDeleted: row.member_deleted === true,
       roomId: row.room_id || null,
       memberPackageId: row.member_package_id || null,
       startTs: Number(row.start_ts),

@@ -126,19 +126,23 @@ router.get('/', [
       SELECT s.*,
              st.first_name || ' ' || st.last_name as staff_name,
              COALESCE(NULLIF(TRIM(m.first_name || ' ' || m.last_name), ''), NULLIF(TRIM(m.name), '')) as member_name,
+             (m.deleted_at IS NOT NULL) AS member_deleted,
              r.name as room_name,
              cs.first_name AS confirmer_first_name,
              cs.last_name AS confirmer_last_name,
              cu.role AS confirmer_role
       FROM sessions s
       LEFT JOIN staff st ON s.staff_id = st.id
-      LEFT JOIN members m ON s.member_id = m.id AND m.deleted_at IS NULL
+      LEFT JOIN members m ON s.member_id = m.id
       LEFT JOIN rooms r ON s.room_id = r.id
       LEFT JOIN users cu ON cu.id = s.attendance_confirmed_by
       LEFT JOIN staff cs ON cs.user_id = cu.id
       WHERE (s.deleted_at IS NULL)
-        AND (s.member_id IS NULL OR m.id IS NOT NULL)
+        AND (s.member_id IS NULL OR (m.id IS NOT NULL AND m.purged_at IS NULL))
     `;
+    // Not: soft delete edilmiş üyenin GEÇMİŞ seansları takvimde kalır (gelecek olanlar
+    // silme anında deleted_at aldığı için zaten düşer). Kalıcı silinen (purged) üyenin
+    // hiçbir seansı görünmez.
     const params = [];
     let paramIndex = 1;
 
@@ -201,8 +205,13 @@ router.get('/', [
       result = await db.query(query, params);
     } catch (colErr) {
       if (colErr.code === '42703') {
+        // Eksik sütun (ör. purged_at migration'ı henüz uygulanmamış): purged/member_deleted
+        // koşulları olmadan, silinmiş üyeleri tümüyle gizleyen eski davranışa düş.
+        const tail = query
+          .split('WHERE (s.deleted_at IS NULL)')[1]
+          .replace('AND (s.member_id IS NULL OR (m.id IS NOT NULL AND m.purged_at IS NULL))', '');
         const fallback = `
-      SELECT s.*, 
+      SELECT s.*,
              st.first_name || ' ' || st.last_name as staff_name,
              COALESCE(NULLIF(TRIM(m.first_name || ' ' || m.last_name), ''), NULLIF(TRIM(m.name), '')) as member_name,
              r.name as room_name
@@ -212,7 +221,7 @@ router.get('/', [
       LEFT JOIN rooms r ON s.room_id = r.id
       WHERE (s.deleted_at IS NULL)
         AND (s.member_id IS NULL OR m.id IS NOT NULL)
-    ` + query.split('WHERE (s.deleted_at IS NULL)')[1];
+    ` + tail;
         result = await db.query(fallback.replace('WHERE (s.deleted_at IS NULL)', 'WHERE 1=1'), params);
       } else throw colErr;
     }
@@ -401,6 +410,16 @@ router.post('/', [
     const skipStaffHoursCheck = !!req.body.skipStaffHoursCheck && ['admin', 'manager'].includes(req.user.role);
     const skipTrim = !!req.body.skipTrim && ['admin', 'manager'].includes(req.user.role);
 
+    // Silinmiş üyeye yeni randevu açılamaz: aksi halde takvimde silinmiş üyenin
+    // gelecek randevusu belirir (geçmiş randevular görünür, gelecek olanlar değil).
+    const memberRes = await db.query('SELECT deleted_at FROM members WHERE id = $1', [memberId]);
+    if (memberRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Üye bulunamadı' });
+    }
+    if (memberRes.rows[0].deleted_at != null) {
+      return res.status(409).json({ error: 'Bu üye silinmiş. Silinmiş üyeye yeni randevu oluşturulamaz.' });
+    }
+
     if (memberPackageId == null || memberPackageId === '') {
       memberPackageId = await resolveMemberPackageId(db, memberId, startTs);
     }
@@ -498,6 +517,14 @@ router.put('/:id', [
     const existing = await db.query('SELECT * FROM sessions WHERE id = $1', [id]);
     if (existing.rows.length === 0 || existing.rows[0].deleted_at != null) {
       return res.status(404).json({ error: 'Seans bulunamadı' });
+    }
+
+    // Silinmiş üyenin geçmiş seansı takvimde görünür ama salt okunurdur: kayıt olduğu gibi kalmalı
+    if (existing.rows[0].member_id) {
+      const ownerRes = await db.query('SELECT deleted_at FROM members WHERE id = $1', [existing.rows[0].member_id]);
+      if (ownerRes.rows.length > 0 && ownerRes.rows[0].deleted_at != null) {
+        return res.status(409).json({ error: 'Bu üye silinmiş. Geçmiş randevu kaydı değiştirilemez.' });
+      }
     }
 
     const pwErr = await requireAdminPasswordIfSessionConfirmed(existing.rows[0], adminPassword);
