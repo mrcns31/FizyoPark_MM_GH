@@ -14,6 +14,12 @@ interface Toast {
 }
 
 /**
+ * Balon olarak gösterilmeyen tipler. Admin iptalini yönetici zaten kendisi yapıyor;
+ * kendi işlemini balon olarak geri görmesin. Bildirim listesinde kayıt durmaya devam eder.
+ */
+const TOAST_EXCLUDED_TYPES = new Set(['admin_cancel']);
+
+/**
  * Yeni bildirim geldiğinde üstte beliren geçici balon (web showTopNotification paritesi).
  * useTodayNotifications 20 sn'de bir polluyor; ilk yüklemedeki mevcutlar toast'lanmaz.
  */
@@ -27,7 +33,7 @@ export function NotificationToaster() {
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    const items = data?.items;
+    const items = data?.items?.filter((n) => !TOAST_EXCLUDED_TYPES.has(n.type));
     if (!items) return;
     if (seen.current === null) {
       seen.current = new Set(items.map((n) => n.id));
