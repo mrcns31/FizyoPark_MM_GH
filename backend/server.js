@@ -30,7 +30,11 @@ import doorRoutes from './routes/door.js';
 import adminBroadcastRoutes from './routes/admin-broadcast.js';
 import ratingsRoutes from './routes/ratings.js';
 import { run24hReminders, runRatingPrompts } from './utils/sessionReminders.js';
-import { runAutoCompletePackages, runPackageNotifications } from './utils/packageNotifications.js';
+import {
+  runAutoCompletePackages,
+  runPackageExhaustedPrompts,
+  runPackageNotifications,
+} from './utils/packageNotifications.js';
 import { runAllShiftEndReminders } from './utils/sessionAttendance.js';
 import db from './config/database.js';
 
@@ -148,6 +152,9 @@ setInterval(async () => {
 
   // Seans puanlama daveti: bitişinden 1-3 saat sonra, 09:00-22:00 arasında
   try { await runRatingPrompts(now); } catch (err) { console.error('[sessionReminders] rating hata:', err.message); }
+
+  // Paket bitti → yeni paket talebi daveti: son seanstan 1 saat sonra, 09:00-22:00 arasında
+  try { await runPackageExhaustedPrompts(now); } catch (err) { console.error('[packageNotifications] exhausted hata:', err.message); }
 
   // Günlük (saat 09:xx Istanbul): paket expire + paket bildirim taraması
   if (istanbulHour === 9) {

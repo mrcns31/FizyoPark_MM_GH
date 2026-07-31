@@ -3,6 +3,7 @@ import db from '../config/database.js';
 const INSTITUTION_WHATSAPP_KEY = 'institution_whatsapp';
 const STAFF_CALENDAR_RANGE_KEY = 'staff_calendar_range';
 const RATINGS_GO_LIVE_KEY = 'ratings_go_live_ts';
+const PACKAGE_NOTIFY_GO_LIVE_KEY = 'package_notify_go_live_ts';
 
 export async function getInstitutionWhatsApp() {
   try {
@@ -62,6 +63,35 @@ export async function getRatingsGoLiveTs() {
     if (err.code !== '42P01') throw err;
   }
   return Infinity;
+}
+
+/**
+ * Paket bildirimlerinin devreye alındığı an (ms).
+ * Bu andan ÖNCEKİ durumlar bildirim tetiklemez — sistem açıldığında geçmişteki
+ * tüm paketlere toplu bildirim gitmesini önler.
+ * Kayıt yoksa ilk çağrıda `now` yazılır; o turda hiçbir bildirim gönderilmez.
+ * Tablo yoksa Infinity döner → hiçbir bildirim gönderilmez.
+ */
+export async function getOrInitPackageNotifyGoLiveTs(now = Date.now()) {
+  try {
+    const res = await db.query('SELECT value FROM app_settings WHERE key = $1', [
+      PACKAGE_NOTIFY_GO_LIVE_KEY,
+    ]);
+    const v = Number(res.rows[0]?.value);
+    if (Number.isFinite(v)) return v;
+
+    await db.query(
+      `INSERT INTO app_settings (key, value, updated_at)
+       VALUES ($1, $2, CURRENT_TIMESTAMP)
+       ON CONFLICT (key) DO NOTHING`,
+      [PACKAGE_NOTIFY_GO_LIVE_KEY, String(now)]
+    );
+    console.log(`[appSettings] paket bildirimleri devreye alındı: ${new Date(now).toISOString()}`);
+    return now;
+  } catch (err) {
+    if (err.code === '42P01') return Infinity;
+    throw err;
+  }
 }
 
 export async function setInstitutionWhatsApp(raw) {
