@@ -2,11 +2,12 @@ import { useCallback } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-import { listNotifications, markNotificationRead } from './notifications';
+import { listNotifications, markNotificationRead, periodToRange } from './notifications';
 
 export const notificationKeys = {
   list: (since: number, until: number, page: number) => ['notifications', since, until, page] as const,
   recent: ['notifications', 'recent'] as const,
+  today: ['notifications', 'today'] as const,
   latest: ['notifications', 'latest'] as const,
   lastSeen: ['notifications', 'lastSeen'] as const,
 };
@@ -15,6 +16,23 @@ export function useNotifications(since: number, until: number, page: number, per
   return useQuery({
     queryKey: [...notificationKeys.list(since, until, page), types ?? 'all', q ?? ''],
     queryFn: () => listNotifications({ since, until, page, perPage, types, q }),
+    staleTime: 15_000,
+  });
+}
+
+/**
+ * Toaster için bugünün bildirimleri — 20 sn'de bir yenilenir.
+ * queryKey SABİT: since/until queryFn içinde hesaplanır. Bunlar key'e girerse her render
+ * yeni bir sorgu açar, cache boş olduğu için anında fetch eder ve sonsuz döngü oluşur.
+ */
+export function useTodayNotifications() {
+  return useQuery({
+    queryKey: notificationKeys.today,
+    queryFn: () => {
+      const { since, until } = periodToRange('day');
+      return listNotifications({ since, until, page: 1, perPage: 30 });
+    },
+    refetchInterval: 20_000,
     staleTime: 15_000,
   });
 }

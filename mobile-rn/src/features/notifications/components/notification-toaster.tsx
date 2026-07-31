@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useTheme } from '../../theme';
 import type { AppColors, ResolvedTheme } from '../../../theme/colors';
-import { useNotifications } from '../api/hooks';
+import { useTodayNotifications } from '../api/hooks';
 
 interface Toast {
   id: number;
@@ -15,13 +15,12 @@ interface Toast {
 
 /**
  * Yeni bildirim geldiğinde üstte beliren geçici balon (web showTopNotification paritesi).
- * useNotifications zaten 20 sn'de bir polluyor; ilk yüklemedeki mevcutlar toast'lanmaz.
+ * useTodayNotifications 20 sn'de bir polluyor; ilk yüklemedeki mevcutlar toast'lanmaz.
  */
 export function NotificationToaster() {
   const { colors, resolvedTheme } = useTheme();
   const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
-  const todayStart = Math.floor((Date.now() + 3 * 3600 * 1000) / 86400000) * 86400000 - 3 * 3600 * 1000;
-  const { data } = useNotifications(todayStart, Date.now(), 1, 30);
+  const { data } = useTodayNotifications();
   const seen = useRef<Set<number> | null>(null);
   const [toast, setToast] = useState<Toast | null>(null);
   const anim = useRef(new Animated.Value(0)).current;
