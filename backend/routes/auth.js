@@ -729,7 +729,14 @@ router.post('/forgot-password', [
         );
         if (adminRes.rows.length > 0) {
           const adminIds = adminRes.rows.map((r) => r.id);
-          sendExpoPushBulk(db, adminIds, 'Şifre Talebi', `${fullName} şifre sıfırlama talebi göndermiştir.`).catch(() => {});
+          // data.type → mobilde bildirime tıklanınca talepler ekranına yönlendirir
+          sendExpoPushBulk(
+            db,
+            adminIds,
+            'Şifre Talebi',
+            `${fullName} şifre sıfırlama talebi göndermiştir.`,
+            { type: 'password_reset_request' }
+          ).catch(() => {});
         }
       }
     }

@@ -16,6 +16,7 @@ import { AuthProvider, useAuth } from '../src/features/auth';
 import { ThemeProvider, useTheme } from '../src/features/theme';
 import { AdminPasswordModal } from '../src/components/admin-password-modal';
 import { queryClient } from '../src/lib/react-query';
+import { useNotificationRouting } from '../src/lib/use-notification-routing';
 
 /**
  * Kök layout (Expo Router). Tüm provider'lar burada; ekranlar features/'ta,
@@ -50,6 +51,7 @@ function ThemedApp() {
 
 function RootNavigator() {
   useAuthRedirect();
+  useNotificationRouting();
   const { colors } = useTheme();
   return (
     <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.backgroundTop } }}>

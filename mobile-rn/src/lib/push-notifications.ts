@@ -12,6 +12,35 @@ Notifications.setNotificationHandler({
   }),
 });
 
+/**
+ * Bildirime tıklanınca açılacak ekran. Backend yalnızca `data.type` gönderir;
+ * route eşlemesi burada durur, böylece ekran yolu değişince backend'e dokunmak gerekmez.
+ */
+type PushTarget = { route: string; roles: readonly string[] };
+
+const PUSH_TARGETS: Record<string, PushTarget> = {
+  password_reset_request: {
+    route: '/(admin)/more/requests',
+    roles: ['admin', 'manager'],
+  },
+};
+
+/**
+ * Bildirimin data alanından hedef ekranı çözer.
+ * Rol uymuyorsa veya tip tanınmıyorsa null döner — yanlış role ait ekran açılmaz.
+ */
+export function resolveNotificationRoute(data: unknown, role: string | null): string | null {
+  if (!data || typeof data !== 'object') return null;
+  const type = (data as { type?: unknown }).type;
+  if (typeof type !== 'string') return null;
+
+  const target = PUSH_TARGETS[type];
+  if (!target) return null;
+  if (!role || !target.roles.includes(role)) return null;
+
+  return target.route;
+}
+
 export async function getExpoPushToken(): Promise<string | null> {
   if (Platform.OS === 'web') return null;
 

@@ -16,7 +16,7 @@ async function purgeInvalidTokens(db, tokens) {
   }
 }
 
-export async function sendExpoPush(db, userId, title, body) {
+export async function sendExpoPush(db, userId, title, body, data = null) {
   try {
     const { rows } = await db.query('SELECT token FROM push_tokens WHERE user_id = $1', [userId]);
     if (!rows.length) return false;
@@ -24,6 +24,7 @@ export async function sendExpoPush(db, userId, title, body) {
       to: r.token,
       title,
       body,
+      ...(data ? { data } : {}),
       sound: 'natification.caf',
       priority: 'high',
       channelId: 'fizyopark',
@@ -49,9 +50,10 @@ export async function sendExpoPush(db, userId, title, body) {
 
 /**
  * Birden fazla user_id'ye toplu push gönderir.
+ * @param {object|null} data - bildirime tıklanınca yönlendirme için ek veri (ör. { type: 'password_reset_request' })
  * @returns {Promise<{sent: number, noToken: number}>}
  */
-export async function sendExpoPushBulk(db, userIds, title, body) {
+export async function sendExpoPushBulk(db, userIds, title, body, data = null) {
   if (!userIds.length) return { sent: 0, noToken: 0 };
 
   const { rows } = await db.query(
@@ -68,7 +70,16 @@ export async function sendExpoPushBulk(db, userIds, title, body) {
   const messages = [];
   for (const [, tokens] of tokensByUser) {
     for (const token of tokens) {
-      messages.push({ to: token, title, body, sound: 'natification.caf', priority: 'high', channelId: 'fizyopark', interruptionLevel: 'active' });
+      messages.push({
+        to: token,
+        title,
+        body,
+        ...(data ? { data } : {}),
+        sound: 'natification.caf',
+        priority: 'high',
+        channelId: 'fizyopark',
+        interruptionLevel: 'active',
+      });
     }
   }
 
