@@ -18,11 +18,15 @@ Notifications.setNotificationHandler({
  */
 type PushTarget = { route: string; roles: readonly string[] };
 
+const ADMIN_REQUESTS: PushTarget = {
+  route: '/(admin)/more/requests',
+  roles: ['admin', 'manager'],
+};
+
 const PUSH_TARGETS: Record<string, PushTarget> = {
-  password_reset_request: {
-    route: '/(admin)/more/requests',
-    roles: ['admin', 'manager'],
-  },
+  password_reset_request: ADMIN_REQUESTS,
+  package_request: ADMIN_REQUESTS,
+  deletion_request: ADMIN_REQUESTS,
 };
 
 /**

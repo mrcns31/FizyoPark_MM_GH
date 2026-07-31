@@ -48,11 +48,12 @@ async function expoPush(messages) {
   }
 }
 
-async function sendDeletionRequestPush(memberName, memberId) {
+/**
+ * Tüm admin/manager'lara talep bildirimi: uygulama içi kayıt + push.
+ * Push'taki `data.type` mobilde bildirime tıklanınca Talepler ekranını açar.
+ */
+async function notifyAdminsOfRequest(type, title, bodyText, payload = {}) {
   try {
-    const title = 'Üyelik İptal Talebi';
-    const bodyText = `${memberName} üyelik iptali talebinde bulundu.`;
-
     const { rows: adminRows } = await db.query(
       `SELECT u.id AS user_id, pt.token
        FROM users u
@@ -60,14 +61,14 @@ async function sendDeletionRequestPush(memberName, memberId) {
        WHERE u.role IN ('admin', 'manager')`
     );
 
-    const payload = JSON.stringify({ memberId });
+    const payloadJson = JSON.stringify(payload);
     const seenUsers = new Set();
     for (const r of adminRows) {
       if (!r.user_id || seenUsers.has(r.user_id)) continue;
       seenUsers.add(r.user_id);
       db.query(
         `INSERT INTO staff_notifications (user_id, type, title, body, payload) VALUES ($1, $2, $3, $4, $5)`,
-        [r.user_id, 'deletion_request', title, bodyText, payload]
+        [r.user_id, type, title, bodyText, payloadJson]
       ).catch(() => {});
     }
 
@@ -79,12 +80,39 @@ async function sendDeletionRequestPush(memberName, memberId) {
         seenTokens.add(r.token);
         return true;
       })
-      .map((r) => ({ to: r.token, title, body: bodyText, sound: 'natification.caf', priority: 'high', channelId: 'fizyopark', interruptionLevel: 'active' }));
+      .map((r) => ({
+        to: r.token,
+        title,
+        body: bodyText,
+        data: { type, ...payload },
+        sound: 'natification.caf',
+        priority: 'high',
+        channelId: 'fizyopark',
+        interruptionLevel: 'active',
+      }));
 
     await expoPush(messages);
   } catch {
     // push hatası talebi engellemesin
   }
+}
+
+async function sendDeletionRequestPush(memberName, memberId) {
+  await notifyAdminsOfRequest(
+    'deletion_request',
+    'Üyelik İptal Talebi',
+    `${memberName} üyelik iptali talebinde bulundu.`,
+    { memberId }
+  );
+}
+
+async function sendPackageRequestPush(memberName, packageName, memberId) {
+  await notifyAdminsOfRequest(
+    'package_request',
+    'Paket Talebi',
+    `${memberName} «${packageName}» paketi için talep gönderdi.`,
+    { memberId }
+  );
 }
 
 /**
@@ -1255,6 +1283,8 @@ router.post('/package-request', requireMember, [
         package_name: packageName,
       },
     }).catch(() => {});
+
+    sendPackageRequestPush(memberName || 'Üye', packageName, memberId).catch(() => {});
 
     res.status(201).json({
       id: insertRes.rows[0].id,
