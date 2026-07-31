@@ -62,6 +62,7 @@ export function sessionToDto(row, staffMap, packageType, packageStatus = 'active
       const approval = buildPackageSessionApprovalInfo(row, now);
       dto.approvalLabel = pkgInactive ? PACKAGE_CANCELLED_LABEL : approval.label;
       dto.approvalKind = approval.kind;
+      dto.cancelKind = pkgInactive ? 'system' : (approval.cancelKind || 'unknown');
     }
     return dto;
   }
@@ -141,9 +142,11 @@ export function sessionToDto(row, staffMap, packageType, packageStatus = 'active
     if (pkgInactive && !consumed) {
       dto.approvalLabel = PACKAGE_CANCELLED_LABEL;
       dto.approvalKind = 'cancelled';
+      dto.cancelKind = 'system';
     } else {
       dto.approvalLabel = approval.label;
       dto.approvalKind = approval.kind;
+      if (approval.cancelKind) dto.cancelKind = approval.cancelKind;
     }
   }
 

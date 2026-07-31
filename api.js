@@ -174,6 +174,7 @@
       remainingSessions: row.remaining_sessions != null ? Number(row.remaining_sessions) : null,
       sessionConflicts: row.sessionConflicts || [],
       sessionsCreated: row.sessions_created != null ? Number(row.sessions_created) : (row.sessionsCreated != null ? Number(row.sessionsCreated) : null),
+      skippedMemberCancelDates: row.skipped_member_cancel_dates || [],
     };
   }
   function tryParse(s) {

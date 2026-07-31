@@ -109,6 +109,44 @@ const DAY_NAMES = ['Pazar', 'Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt'];
 const PACKAGE_CONFLICT_ERROR =
   'Seçilen gün/saat/personel için müsaitlik yok. Lütfen ilgili satırları düzenleyip tekrar kaydedin.';
 
+/** ts (ms) → Türkiye takvim günü (YYYY-MM-DD); buildPackageSessionInsertPlan ile aynı +03:00 ofseti */
+function turkeyDateStrFromTs(ts) {
+  return new Date(Number(ts) + 3 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+/**
+ * Üyenin kendi iptal ettiği (deleted_by → users.role = 'member') seansların takvim günleri.
+ * Yeniden planlamada bu günler atlanır: üye o gün gelemeyeceğini bildirmiştir, seans sona kaydırılır.
+ *
+ * Sadece üye iptalleri filtrelenir — slot değişikliği / paket sonlandırma gibi sistem kaynaklı
+ * soft-delete'lerde deleted_by NULL kalır; onları da atlarsak yeniden üretim tümüyle tıkanır.
+ * Admin iptalleri de atlanmaz: admin yeniden düzenlemede yeni programı zaten kendisi belirliyor.
+ */
+async function loadMemberCancelledDates(dbClient, mpId) {
+  if (mpId == null) return new Set();
+  const res = await dbClient.query(
+    `SELECT DISTINCT s.start_ts
+     FROM sessions s
+     JOIN users du ON du.id = s.deleted_by
+     WHERE s.member_package_id = $1 AND s.deleted_at IS NOT NULL AND du.role = 'member'`,
+    [mpId]
+  );
+  const dates = new Set();
+  for (const r of res.rows) {
+    const ts = Number(r.start_ts);
+    if (Number.isFinite(ts)) dates.add(turkeyDateStrFromTs(ts));
+  }
+  return dates;
+}
+
+/** slot_overrides'tan gelen skip set'i ile üye iptal günlerini birleştirir (biri boşsa diğerini döner) */
+function mergeSkipDates(baseSkipDates, extraDates) {
+  if (!extraDates || extraDates.size === 0) return baseSkipDates;
+  const merged = new Set(baseSkipDates || []);
+  extraDates.forEach((d) => merged.add(d));
+  return merged;
+}
+
 /**
  * Paket slot'larına göre oluşturulacak seans planını (henüz DB'ye yazılmadan) üretir.
  * Tüm tarih/saat işlemleri UTC metotlarıyla yapılır (+03:00 ofsetiyle) — sunucu TZ'den bağımsız.
@@ -343,12 +381,22 @@ export async function generateSessionsForMemberPackage(db, mpId, memberId, start
 
   // slot_overrides: atla (skip) ve tarih bazlı saat/personel geçersizlemeleri
   const slotOverrides = Array.isArray(options.slotOverrides) ? options.slotOverrides : [];
-  const skipDates = slotOverrides.length > 0
+  const baseSkipDates = slotOverrides.length > 0
     ? new Set(slotOverrides.filter((o) => o.skip).map((o) => o.date))
     : null;
   const dateOverrides = slotOverrides.length > 0
     ? new Map(slotOverrides.filter((o) => !o.skip && (o.start_time || o.staff_id != null)).map((o) => [o.date, o]))
     : null;
+
+  // Üyenin iptal ettiği günler yeniden açılmaz — seanslar bu günleri atlayıp sona kayar
+  const memberCancelledDates = options.skipMemberCancelledDates === false
+    ? new Set()
+    : await loadMemberCancelledDates(db, mpId);
+  const skipDates = mergeSkipDates(baseSkipDates, memberCancelledDates);
+  const startDateStr = String(startDate).slice(0, 10);
+  const skippedMemberCancelDates = Array.from(memberCancelledDates)
+    .filter((d) => d >= startDateStr)
+    .sort();
 
   const inserts = buildPackageSessionInsertPlan(startDate, endDate, slots, limit, { memberId, mpId, skipDates, dateOverrides });
 
@@ -383,7 +431,7 @@ export async function generateSessionsForMemberPackage(db, mpId, memberId, start
     excludeMemberPackageId: options.excludeMemberPackageId,
   });
   if (validationConflicts.length > 0) {
-    return { conflicts: validationConflicts, sessionsCreated: 0 };
+    return { conflicts: validationConflicts, sessionsCreated: 0, skippedMemberCancelDates };
   }
 
   const insertedSessionIds = [];
@@ -415,7 +463,7 @@ export async function generateSessionsForMemberPackage(db, mpId, memberId, start
     await db.query('DELETE FROM sessions WHERE id = ANY($1::int[])', [insertedSessionIds]).catch(() => {});
     sessionsCreated = 0;
   }
-  return { conflicts, sessionsCreated };
+  return { conflicts, sessionsCreated, skippedMemberCancelDates };
 }
 
 // Üyeye ait paket atamalarını listele
@@ -1022,12 +1070,14 @@ router.put('/:id', [
 
         if (genStart && genLimit > 0) {
           // slotOverrides: atla + saat/personel geçersizlemeleri pre-validation planına da yansıtılır
-          const preSkipDates = slotOverrides.length > 0
+          const preBaseSkipDates = slotOverrides.length > 0
             ? new Set(slotOverrides.filter((o) => o.skip).map((o) => o.date))
             : null;
           const preDateOverrides = slotOverrides.length > 0
             ? new Map(slotOverrides.filter((o) => !o.skip && (o.start_time || o.staff_id != null)).map((o) => [o.date, o]))
             : null;
+          // Üye iptalleri gerçek üretimde de atlanıyor; ön kontrol planı aynı günleri atlamalı
+          const preSkipDates = mergeSkipDates(preBaseSkipDates, await loadMemberCancelledDates(db, id));
           const plan = buildPackageSessionInsertPlan(genStart, genEnd, validSlotsAfter, genLimit, {
             memberId: mp.member_id,
             mpId: id,
@@ -1108,6 +1158,7 @@ router.put('/:id', [
     let sessionConflicts = [];
     let sessionsCreated = 0;
     let futureSessionIdsToRestore = [];
+    let skippedMemberCancelDates = [];
 
     // "Gün dağılımı yapmak istemiyorum" seçildiyse: geçmiş seanslara dokunma, sadece gelecek seansları iptal et (soft-delete).
     if (finalSkip) {
@@ -1209,6 +1260,7 @@ router.put('/:id', [
           );
           sessionConflicts = gen.conflicts || [];
           sessionsCreated = (gen.sessionsCreated === 0 && sessionConflicts.length === 0) ? null : (gen.sessionsCreated || 0);
+          skippedMemberCancelDates = gen.skippedMemberCancelDates || [];
         }
       }
     }
@@ -1231,6 +1283,7 @@ router.put('/:id', [
     row.slots = slotsRes.rows;
     row.sessionConflicts = sessionConflicts;
     row.sessions_created = sessionsCreated;
+    row.skipped_member_cancel_dates = skippedMemberCancelDates;
     await activityLog(req, { action: 'member_package.update', entityType: 'member_package', entityId: id, details: { member_id: mp.member_id, package_id: mp.package_id } }).catch(() => {});
     res.json(row);
   } catch (error) {

@@ -1229,6 +1229,8 @@ function cacheEls() {
     "packageSessionsEmpty",
     "packageSessionsCancelledSection",
     "packageSessionsCancelledSummary",
+    "packageSessionsCancelledTabs",
+    "packageSessionsCancelledEmpty",
     "packageSessionsCancelledCards",
     "packageSessionsCancelledTableWrap",
     "packageSessionsCancelledTable",
@@ -2699,6 +2701,7 @@ function normalizePackageSessionRow(s) {
     checkInMethod: s.checkInMethod || s.check_in_method || null,
     approvalLabel: s.approvalLabel || s.approval_label || null,
     approvalKind: s.approvalKind || s.approval_kind || null,
+    cancelKind: s.cancelKind || s.cancel_kind || null,
     dateStr: fmtPackageSessionDate(d),
     timeStr: fmtPackageSessionTime(d),
     checkInTimeStr: fmtPackageSessionCheckInTime(s),
@@ -10403,6 +10406,7 @@ async function renderMemberPackageHistory(memberId) {
 
 let packageSessionsCurrent = null;
 let packageSessionsMoveMode = false; // "Taşı" toggle açık mı
+let packageSessionsCancelFilter = "all"; // İptal edilenler sekmesi: all | admin | member
 // Paket seansları modalından "Seans Ekle" açıldığında dolu; kapanınca temizlenir.
 let packageSessionAddOverride = null;
 
@@ -10567,6 +10571,7 @@ function openPackageSessionsModal(mp, memberId, memberOverride, options) {
     els.packageSessionsAddBtn.classList.toggle("hidden", !isAdminUser());
   }
   packageSessionsMoveMode = false;
+  packageSessionsCancelFilter = "all";
   if (els.packageSessionsMoveToggleBtn) {
     els.packageSessionsMoveToggleBtn.classList.toggle("hidden", !isAdminUser());
     els.packageSessionsMoveToggleBtn.classList.remove("btn--primary");
@@ -10580,6 +10585,7 @@ function closePackageSessionsModal() {
   hidePackageSessionsPackagePicker();
   packageSessionsCurrent = null;
   packageSessionsMoveMode = false;
+  packageSessionsCancelFilter = "all";
 }
 
 async function moveSessionToPackage(sessionId, targetMpId) {
@@ -10621,6 +10627,26 @@ function renderPackageSessionsTable(sessions) {
   renderPackageSessionsCancelledSection(cancelled);
 }
 
+/** İptal türü: backend cancelKind ('member' | 'admin' | 'unknown' | 'system'); eski kayıtlar için etiketten türet */
+function packageSessionCancelKind(s) {
+  var kind = s.cancelKind || s.cancel_kind || null;
+  if (kind) return kind;
+  var label = s.approvalLabel || s.approval_label || "";
+  if (label === "Üye İptali") return "member";
+  if (label === "Admin İptali") return "admin";
+  return "unknown";
+}
+
+function countPackageSessionCancelKinds(cancelled) {
+  var counts = { all: cancelled.length, member: 0, admin: 0 };
+  cancelled.forEach(function (s) {
+    var k = packageSessionCancelKind(s);
+    if (k === "member") counts.member += 1;
+    else if (k === "admin") counts.admin += 1;
+  });
+  return counts;
+}
+
 function renderPackageSessionsCancelledSection(cancelled) {
   if (!els.packageSessionsCancelledSection) return;
   if (!cancelled.length) {
@@ -10631,7 +10657,33 @@ function renderPackageSessionsCancelledSection(cancelled) {
     els.packageSessionsCancelledSummary.textContent = "İptal edilenler (" + cancelled.length + ")";
   }
   els.packageSessionsCancelledSection.classList.remove("hidden");
-  renderPackageSessionsList(cancelled, {
+
+  var counts = countPackageSessionCancelKinds(cancelled);
+  if (els.packageSessionsCancelledTabs) {
+    var labels = { all: "Tümü", admin: "Admin İptali", member: "Üye İptali" };
+    els.packageSessionsCancelledTabs.querySelectorAll("[data-cancel-filter]").forEach(function (btn) {
+      var f = btn.dataset.cancelFilter;
+      btn.textContent = labels[f] + " (" + (counts[f] || 0) + ")";
+      var isActive = f === packageSessionsCancelFilter;
+      btn.classList.toggle("is-active", isActive);
+      btn.setAttribute("aria-selected", isActive ? "true" : "false");
+    });
+  }
+
+  var filtered = packageSessionsCancelFilter === "all"
+    ? cancelled
+    : cancelled.filter(function (s) { return packageSessionCancelKind(s) === packageSessionsCancelFilter; });
+
+  if (els.packageSessionsCancelledEmpty) {
+    els.packageSessionsCancelledEmpty.classList.toggle("hidden", filtered.length > 0);
+  }
+  if (!filtered.length) {
+    if (els.packageSessionsCancelledCards) els.packageSessionsCancelledCards.classList.add("hidden");
+    if (els.packageSessionsCancelledTableWrap) els.packageSessionsCancelledTableWrap.classList.add("hidden");
+    return;
+  }
+
+  renderPackageSessionsList(filtered, {
     role: "admin",
     compact: true,
     clickable: false,
@@ -11313,11 +11365,13 @@ async function doActualMemberPackageSave(endAfterSaveWithLastSessionDate) {
 
   if (els.mpFormError) els.mpFormError.classList.add("hidden");
 
+  let skippedMemberCancelDates = [];
   if (window.API && window.API.getToken()) {
     try {
       let createdOrUpdated = null;
       if (editingId) {
         createdOrUpdated = await window.API.updateMemberPackage(editingId, updatePayload);
+        skippedMemberCancelDates = createdOrUpdated.skippedMemberCancelDates || [];
         const idx = (state.memberPackages || []).findIndex((x) => x.id === editingId);
         if (idx !== -1) state.memberPackages[idx] = createdOrUpdated;
       } else {
@@ -11375,6 +11429,12 @@ async function doActualMemberPackageSave(endAfterSaveWithLastSessionDate) {
     refreshAdminPackageRequests(false);
   }
   if (memberId) renderMemberPackageHistory(memberId);
+  if (skippedMemberCancelDates.length) {
+    var dateList = skippedMemberCancelDates.map(fmtMemberPackagePeriodDate).join(", ");
+    showAppAlert(
+      "Üyenin iptal ettiği " + dateList + " tarihlerine yeni randevu oluşturulmadı; seanslar sona kaydırıldı."
+    );
+  }
 }
 
 async function endMemberPackageFromModal() {
@@ -14632,6 +14692,15 @@ function bindEvents() {
   els.deleteSessionBtn.addEventListener("click", deleteSessionFromModal);
   if (els.sessionMember) els.sessionMember.addEventListener("change", updateSessionPackageHint);
   if (els.sessionDate) els.sessionDate.addEventListener("change", updateSessionPackageHint);
+  if (els.packageSessionsCancelledTabs) {
+    els.packageSessionsCancelledTabs.addEventListener("click", function (e) {
+      var btn = e.target.closest("[data-cancel-filter]");
+      if (!btn) return;
+      e.preventDefault();
+      packageSessionsCancelFilter = btn.dataset.cancelFilter || "all";
+      if (packageSessionsCurrent) renderPackageSessionsTable(packageSessionsCurrent.sessions);
+    });
+  }
   if (els.packageSessionsMoveToggleBtn) {
     els.packageSessionsMoveToggleBtn.addEventListener("click", function () {
       packageSessionsMoveMode = !packageSessionsMoveMode;

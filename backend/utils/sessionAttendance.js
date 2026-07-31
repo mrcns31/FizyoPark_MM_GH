@@ -77,12 +77,12 @@ export function buildPackageSessionApprovalInfo(row, now = Date.now()) {
   if (row.deleted_at != null || isSessionCancelled(row)) {
     const deletedByRole = row.deleted_by_role ?? row.deletedByRole ?? null;
     if (deletedByRole === 'member') {
-      return { label: 'Üye İptali', kind: 'cancelled', checkInAt: null };
+      return { label: 'Üye İptali', kind: 'cancelled', cancelKind: 'member', checkInAt: null };
     }
     if (deletedByRole) {
-      return { label: 'Admin İptali', kind: 'cancelled', checkInAt: null };
+      return { label: 'Admin İptali', kind: 'cancelled', cancelKind: 'admin', checkInAt: null };
     }
-    return { label: 'İptal edildi', kind: 'cancelled', checkInAt: null };
+    return { label: 'İptal edildi', kind: 'cancelled', cancelKind: 'unknown', checkInAt: null };
   }
 
   const method = resolveMethod(row);
