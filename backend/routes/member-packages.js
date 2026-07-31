@@ -74,13 +74,6 @@ async function backfillMissingPackageSessions(db, mpId, memberId, startDate, end
   const maxToCreate = Math.max(0, lessonCount - existingCount);
   if (maxToCreate <= 0) return { conflicts: [], sessionsCreated: 0 };
 
-  let effectiveEndDate = String(endDate).slice(0, 10);
-  const neededEnd = computeEndDateForLessonCount(startDate, slots, lessonCount);
-  if (neededEnd > effectiveEndDate) {
-    effectiveEndDate = neededEnd;
-    await db.query('UPDATE member_packages SET end_date = $1 WHERE id = $2', [effectiveEndDate, mpId]);
-  }
-
   const lastRes = await db.query(
     `SELECT start_ts FROM sessions WHERE member_package_id = $1 AND (deleted_at IS NULL)
      ORDER BY start_ts DESC LIMIT 1`,
@@ -91,6 +84,19 @@ async function backfillMissingPackageSessions(db, mpId, memberId, startDate, end
     const lastDate = new Date(Number(lastRes.rows[0].start_ts));
     lastDate.setDate(lastDate.getDate() + 1);
     genStart = localDateStrFromTs(lastDate.getTime());
+  }
+  // Geçmişe seans oluşturulamaz (generateSessionsForMemberPackage geçmiş slotları eler).
+  // Paket başlangıcı geçmişteyse ve hiç aktif seans kalmadıysa üretim bugünden başlamalı;
+  // aksi halde plan tümüyle geçmişe düşer ve tek turlu telafi bloğu eksik kalır (12 yerine 4 seans).
+  const todayStr = turkeyDateStrFromTs(Date.now());
+  if (genStart < todayStr) genStart = todayStr;
+
+  // Bitiş: paket bitişi ile "genStart'tan itibaren maxToCreate seans" tarihinin büyüğü
+  let effectiveEndDate = String(endDate).slice(0, 10);
+  const neededEnd = computeEndDateForLessonCount(genStart, slots, maxToCreate);
+  if (neededEnd > effectiveEndDate) {
+    effectiveEndDate = neededEnd;
+    await db.query('UPDATE member_packages SET end_date = $1 WHERE id = $2', [effectiveEndDate, mpId]);
   }
   if (genStart > effectiveEndDate) return { conflicts: [], sessionsCreated: 0 };
 
@@ -1014,8 +1020,6 @@ router.put('/:id', [
           const existingCount = existingRes.rows[0]?.cnt ?? 0;
           const maxToCreate = Math.max(0, lessonCount - existingCount);
           if (maxToCreate > 0) {
-            const neededEnd = computeEndDateForLessonCount(finalStartDate, validSlotsAfter, lessonCount);
-            if (neededEnd > genEnd) genEnd = neededEnd;
             const lastRes = await db.query(
               `SELECT start_ts FROM sessions WHERE member_package_id = $1 AND (deleted_at IS NULL)
                ORDER BY start_ts DESC LIMIT 1`,
@@ -1027,6 +1031,11 @@ router.put('/:id', [
               lastDate.setDate(lastDate.getDate() + 1);
               genStart = localDateStrFromTs(lastDate.getTime());
             }
+            // backfillMissingPackageSessions ile aynı kural: üretim bugünden önce başlayamaz
+            const todayStrPre = turkeyDateStrFromTs(Date.now());
+            if (genStart < todayStrPre) genStart = todayStrPre;
+            const neededEnd = computeEndDateForLessonCount(genStart, validSlotsAfter, maxToCreate);
+            if (neededEnd > genEnd) genEnd = neededEnd;
             if (genStart <= genEnd) {
               const possible = countPossibleSessionsInRange(genStart, genEnd, validSlotsAfter);
               genLimit = Math.min(maxToCreate, possible);
