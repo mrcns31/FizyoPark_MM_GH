@@ -10406,7 +10406,7 @@ async function renderMemberPackageHistory(memberId) {
 
 let packageSessionsCurrent = null;
 let packageSessionsMoveMode = false; // "Taşı" toggle açık mı
-let packageSessionsCancelFilter = "all"; // İptal edilenler sekmesi: all | admin | member
+let packageSessionsCancelFilter = "main"; // İptal edilenler sekmesi: main (üye+admin) | admin | member | system
 // Paket seansları modalından "Seans Ekle" açıldığında dolu; kapanınca temizlenir.
 let packageSessionAddOverride = null;
 
@@ -10571,7 +10571,7 @@ function openPackageSessionsModal(mp, memberId, memberOverride, options) {
     els.packageSessionsAddBtn.classList.toggle("hidden", !isAdminUser());
   }
   packageSessionsMoveMode = false;
-  packageSessionsCancelFilter = "all";
+  packageSessionsCancelFilter = "main";
   if (els.packageSessionsMoveToggleBtn) {
     els.packageSessionsMoveToggleBtn.classList.toggle("hidden", !isAdminUser());
     els.packageSessionsMoveToggleBtn.classList.remove("btn--primary");
@@ -10585,7 +10585,7 @@ function closePackageSessionsModal() {
   hidePackageSessionsPackagePicker();
   packageSessionsCurrent = null;
   packageSessionsMoveMode = false;
-  packageSessionsCancelFilter = "all";
+  packageSessionsCancelFilter = "main";
 }
 
 async function moveSessionToPackage(sessionId, targetMpId) {
@@ -10637,13 +10637,22 @@ function packageSessionCancelKind(s) {
   return "unknown";
 }
 
+/**
+ * Sekme grubu: member | admin | system.
+ * deleted_by boş olan toplu silmeler ('unknown') ve paket iptali kaynaklı olanlar ('system')
+ * tek bir "Sistem" grubunda toplanır — bunlar admin işlemlerinin yan etkisi, gerçek iptal değil.
+ */
+function packageSessionCancelGroup(s) {
+  var k = packageSessionCancelKind(s);
+  return k === "member" || k === "admin" ? k : "system";
+}
+
 function countPackageSessionCancelKinds(cancelled) {
-  var counts = { all: cancelled.length, member: 0, admin: 0 };
+  var counts = { main: 0, member: 0, admin: 0, system: 0 };
   cancelled.forEach(function (s) {
-    var k = packageSessionCancelKind(s);
-    if (k === "member") counts.member += 1;
-    else if (k === "admin") counts.admin += 1;
+    counts[packageSessionCancelGroup(s)] += 1;
   });
+  counts.main = counts.member + counts.admin;
   return counts;
 }
 
@@ -10653,14 +10662,17 @@ function renderPackageSessionsCancelledSection(cancelled) {
     els.packageSessionsCancelledSection.classList.add("hidden");
     return;
   }
+  var counts = countPackageSessionCancelKinds(cancelled);
   if (els.packageSessionsCancelledSummary) {
-    els.packageSessionsCancelledSummary.textContent = "İptal edilenler (" + cancelled.length + ")";
+    // Sistem silmeleri (yeniden planlama, üyelik sonlandırma vb.) ayrı sayılır — gerçek iptalleri gölgelemesin
+    els.packageSessionsCancelledSummary.textContent = counts.system
+      ? "İptal edilenler (" + counts.main + " + " + counts.system + " sistem)"
+      : "İptal edilenler (" + counts.main + ")";
   }
   els.packageSessionsCancelledSection.classList.remove("hidden");
 
-  var counts = countPackageSessionCancelKinds(cancelled);
   if (els.packageSessionsCancelledTabs) {
-    var labels = { all: "Tümü", admin: "Admin İptali", member: "Üye İptali" };
+    var labels = { main: "Üye + Admin", admin: "Admin İptali", member: "Üye İptali", system: "Sistem" };
     els.packageSessionsCancelledTabs.querySelectorAll("[data-cancel-filter]").forEach(function (btn) {
       var f = btn.dataset.cancelFilter;
       btn.textContent = labels[f] + " (" + (counts[f] || 0) + ")";
@@ -10670,9 +10682,11 @@ function renderPackageSessionsCancelledSection(cancelled) {
     });
   }
 
-  var filtered = packageSessionsCancelFilter === "all"
-    ? cancelled
-    : cancelled.filter(function (s) { return packageSessionCancelKind(s) === packageSessionsCancelFilter; });
+  // Varsayılan sekme sistem silmelerini gizler; "Sistem" sekmesine tıklanınca yalnızca onlar listelenir
+  var filtered = cancelled.filter(function (s) {
+    var g = packageSessionCancelGroup(s);
+    return packageSessionsCancelFilter === "main" ? g !== "system" : g === packageSessionsCancelFilter;
+  });
 
   if (els.packageSessionsCancelledEmpty) {
     els.packageSessionsCancelledEmpty.classList.toggle("hidden", filtered.length > 0);
@@ -14697,7 +14711,7 @@ function bindEvents() {
       var btn = e.target.closest("[data-cancel-filter]");
       if (!btn) return;
       e.preventDefault();
-      packageSessionsCancelFilter = btn.dataset.cancelFilter || "all";
+      packageSessionsCancelFilter = btn.dataset.cancelFilter || "main";
       if (packageSessionsCurrent) renderPackageSessionsTable(packageSessionsCurrent.sessions);
     });
   }
