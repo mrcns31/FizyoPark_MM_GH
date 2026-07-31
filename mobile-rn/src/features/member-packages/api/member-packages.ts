@@ -117,6 +117,8 @@ export interface MemberPackageSession {
   statusLabel: string | null;
   approvalLabel: string | null;
   approvalKind: string | null;
+  /** İptal türü: 'member' | 'admin' | 'unknown' (deleted_by boş toplu silme) | 'system' (paket iptali) */
+  cancelKind: string | null;
 }
 
 export async function getMemberPackageSessions(id: number): Promise<MemberPackageSession[]> {
@@ -137,6 +139,7 @@ export async function getMemberPackageSessions(id: number): Promise<MemberPackag
     statusLabel: row.statusLabel || row.status_label || null,
     approvalLabel: row.approvalLabel || row.approval_label || null,
     approvalKind: row.approvalKind || row.approval_kind || null,
+    cancelKind: row.cancelKind || row.cancel_kind || null,
   }));
 }
 

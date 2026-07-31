@@ -28,6 +28,27 @@ import type { MemberPackage } from '../../../types/api';
 const CONFIRMED_APPROVAL_KINDS = new Set([
   'phone', 'card', 'qr', 'no_show', 'admin_present', 'staff_present', 'present',
 ]);
+
+type CancelFilter = 'main' | 'admin' | 'member' | 'system';
+
+const CANCEL_FILTERS: { key: CancelFilter; label: string }[] = [
+  { key: 'main', label: 'Üye + Admin' },
+  { key: 'admin', label: 'Admin' },
+  { key: 'member', label: 'Üye' },
+  { key: 'system', label: 'Sistem' },
+];
+
+/**
+ * Sekme grubu: member | admin | system. deleted_by boş olan toplu silmeler ('unknown') ve
+ * paket iptali kaynaklı olanlar ('system') "Sistem" grubunda toplanır — bunlar gerçek iptal
+ * değil, yeniden planlama/üyelik sonlandırma gibi admin işlemlerinin yan etkisi.
+ * cancelKind gelmeyen eski kayıtlar için etiketten türetilir (web packageSessionCancelKind paritesi).
+ */
+function cancelGroup(s: { cancelKind: string | null; approvalLabel: string | null }): 'member' | 'admin' | 'system' {
+  const kind = s.cancelKind
+    || (s.approvalLabel === 'Üye İptali' ? 'member' : s.approvalLabel === 'Admin İptali' ? 'admin' : null);
+  return kind === 'member' || kind === 'admin' ? kind : 'system';
+}
 function needsAdminPassword(s: MemberPackageSession): boolean {
   return !!s.approvalKind && CONFIRMED_APPROVAL_KINDS.has(s.approvalKind);
 }
@@ -187,6 +208,7 @@ export function PackageSessionsScreen() {
   const qc = useQueryClient();
 
   const [cancelledOpen, setCancelledOpen] = useState(false);
+  const [cancelFilter, setCancelFilter] = useState<CancelFilter>('main');
   const [moveTarget, setMoveTarget] = useState<MemberPackageSession | null>(null);
 
   useFocusEffect(
@@ -199,7 +221,23 @@ export function PackageSessionsScreen() {
 
   const sessions = useMemo(() => (data ?? []).slice().sort((a, b) => a.startTs - b.startTs), [data]);
   const active = sessions.filter((s) => !s.isCancelled);
-  const cancelled = sessions.filter((s) => s.isCancelled);
+  const cancelled = useMemo(() => sessions.filter((s) => s.isCancelled), [sessions]);
+
+  const cancelCounts = useMemo(() => {
+    const c = { main: 0, member: 0, admin: 0, system: 0 };
+    cancelled.forEach((s) => { c[cancelGroup(s)] += 1; });
+    c.main = c.member + c.admin;
+    return c;
+  }, [cancelled]);
+
+  // Varsayılan sekme sistem silmelerini gizler; "Sistem" seçilince yalnızca onlar listelenir
+  const cancelledFiltered = useMemo(
+    () => cancelled.filter((s) => {
+      const g = cancelGroup(s);
+      return cancelFilter === 'main' ? g !== 'system' : g === cancelFilter;
+    }),
+    [cancelled, cancelFilter],
+  );
 
   // Diğer paketler: mevcut paketin dışındakiler (active/completed)
   const otherPackages = useMemo(
@@ -311,13 +349,17 @@ export function PackageSessionsScreen() {
     | { type: 'header' }
     | { type: 'active'; s: MemberPackageSession; idx: number }
     | { type: 'cancelledHeader' }
+    | { type: 'cancelledTabs' }
+    | { type: 'cancelledEmpty' }
     | { type: 'cancelled'; s: MemberPackageSession };
 
   const listItems: ListItem[] = [
     { type: 'header' },
     ...active.map((s, idx) => ({ type: 'active' as const, s, idx })),
     ...(cancelled.length > 0 ? [{ type: 'cancelledHeader' as const }] : []),
-    ...(cancelledOpen ? cancelled.map((s) => ({ type: 'cancelled' as const, s })) : []),
+    ...(cancelledOpen && cancelled.length > 0 ? [{ type: 'cancelledTabs' as const }] : []),
+    ...(cancelledOpen ? cancelledFiltered.map((s) => ({ type: 'cancelled' as const, s })) : []),
+    ...(cancelledOpen && cancelledFiltered.length === 0 ? [{ type: 'cancelledEmpty' as const }] : []),
   ];
 
   return (
@@ -387,9 +429,13 @@ export function PackageSessionsScreen() {
               );
             }
             if (item.type === 'cancelledHeader') {
+              // Sistem silmeleri ayrı sayılır — gerçek iptalleri gölgelemesin
+              const countText = cancelCounts.system
+                ? `${cancelCounts.main} + ${cancelCounts.system} sistem`
+                : String(cancelCounts.main);
               return (
                 <Pressable style={styles.cancelledHeader} onPress={() => setCancelledOpen((v) => !v)}>
-                  <Text style={styles.section}>İptal edilen seanslar ({cancelled.length})</Text>
+                  <Text style={styles.section}>İptal edilen seanslar ({countText})</Text>
                   <Ionicons
                     name={cancelledOpen ? 'chevron-up' : 'chevron-down'}
                     size={16}
@@ -397,6 +443,29 @@ export function PackageSessionsScreen() {
                   />
                 </Pressable>
               );
+            }
+            if (item.type === 'cancelledTabs') {
+              return (
+                <View style={styles.cancelTabs}>
+                  {CANCEL_FILTERS.map((f) => {
+                    const isActive = f.key === cancelFilter;
+                    return (
+                      <Pressable
+                        key={f.key}
+                        onPress={() => setCancelFilter(f.key)}
+                        style={[styles.cancelTab, isActive && styles.cancelTabActive]}
+                      >
+                        <Text style={[styles.cancelTabText, isActive && styles.cancelTabTextActive]} numberOfLines={1}>
+                          {f.label} ({cancelCounts[f.key]})
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              );
+            }
+            if (item.type === 'cancelledEmpty') {
+              return <Text style={styles.cancelEmpty}>Bu türde iptal kaydı yok.</Text>;
             }
             if (item.type === 'cancelled') {
               const b = badgeFor({ ...item.s });
@@ -484,6 +553,26 @@ function makeStyles(colors: AppColors, theme: ResolvedTheme) {
       paddingVertical: 4,
     },
     section: { color: colors.muted, fontSize: 12, fontWeight: '700', letterSpacing: 0.5 },
+
+    cancelTabs: {
+      flexDirection: 'row',
+      gap: 4,
+      marginBottom: 8,
+    },
+    cancelTab: {
+      flex: 1,
+      minWidth: 0,
+      paddingVertical: 7,
+      paddingHorizontal: 4,
+      borderRadius: 8,
+      backgroundColor: colors.panel2,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    cancelTabActive: { backgroundColor: colors.accentSoft },
+    cancelTabText: { color: colors.muted, fontSize: 11, fontWeight: '600' },
+    cancelTabTextActive: { color: colors.text },
+    cancelEmpty: { color: colors.muted, fontSize: 12, paddingVertical: 8, textAlign: 'center' },
 
     swipeLeftGroup: { flexDirection: 'row', gap: 4, marginRight: 4 },
     swipeEdit: {
