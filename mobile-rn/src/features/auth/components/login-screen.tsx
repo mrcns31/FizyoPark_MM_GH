@@ -87,6 +87,14 @@ export function LoginScreen() {
               style={[styles.input, styles.pwInput]}
               placeholderTextColor={colors.textMuted}
               secureTextEntry={!showPw}
+              // Göz ikonuyla şifre görünür yapıldığında secureTextEntry kapanıyor ve alan
+              // normal metin gibi davranıyor: iOS ilk harfi büyütüp otomatik düzeltme
+              // uyguluyordu, şifre yanlış gidiyordu. Bu ayarlar her iki durumda da kapatır.
+              autoCapitalize="none"
+              autoCorrect={false}
+              spellCheck={false}
+              textContentType="password"
+              autoComplete="password"
               value={password}
               onChangeText={setPassword}
             />
