@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import * as Notifications from 'expo-notifications';
-import { useRouter } from 'expo-router';
+import { useRootNavigationState, useRouter } from 'expo-router';
 
 import { useAuth } from '../features/auth';
 import { resolveNotificationRoute } from './push-notifications';
@@ -17,6 +17,7 @@ import { resolveNotificationRoute } from './push-notifications';
  */
 export function useNotificationRouting() {
   const router = useRouter();
+  const navigationState = useRootNavigationState();
   const { isInitializing, isAuthenticated, role } = useAuth();
   const [pendingData, setPendingData] = useState<unknown>(null);
 
@@ -42,19 +43,18 @@ export function useNotificationRouting() {
     };
   }, []);
 
-  // Oturum hazır olduğunda yönlendir
+  // Oturum ve navigasyon hazır olduğunda yönlendir.
+  // useAuthRedirect bu hook'tan ÖNCE çağrıldığı için landing replace'i sıraya
+  // önce girer; buradaki push onun üstüne biner ve hedef ekran açık kalır.
   useEffect(() => {
     if (pendingData == null) return;
     if (isInitializing || !isAuthenticated) return;
+    if (!navigationState?.key) return; // navigasyon ağacı henüz kurulmadı
 
     const route = resolveNotificationRoute(pendingData, role);
     setPendingData(null);
     if (!route) return;
 
-    // useAuthRedirect'in aynı turda yaptığı replace'ten sonra çalışsın
-    const timer = setTimeout(() => {
-      router.push(route as never);
-    }, 0);
-    return () => clearTimeout(timer);
-  }, [pendingData, isInitializing, isAuthenticated, role, router]);
+    router.push(route as never);
+  }, [pendingData, isInitializing, isAuthenticated, role, router, navigationState?.key]);
 }
