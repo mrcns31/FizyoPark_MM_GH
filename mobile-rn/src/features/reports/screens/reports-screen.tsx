@@ -208,33 +208,12 @@ function avgColor(avg: number | null, colors: AppColors): string {
   return colors.fpOrange;
 }
 
-/**
- * Ortalama az örneklemde de gösterilir, ama soluk çizilir.
- * Tamamen gizlemek tabloyu ilk aylarda boş gösteriyordu; değerlendirme sayısı
- * hemen altında durduğu için soluk gösterim yanıltmadan uyarmaya yetiyor.
- */
-function RatingCell({
-  bucket,
-  minSample,
-  styles,
-  colors,
-}: {
-  bucket: RatingBucket;
-  minSample: number;
-  styles: any;
-  colors: AppColors;
-}) {
+/** Her hücrede ortalama ve değerlendirme sayısı — eşik/gizleme yok. */
+function RatingCell({ bucket, styles, colors }: { bucket: RatingBucket; styles: any; colors: AppColors }) {
   const score = bucket.avg ?? bucket.rawAvg;
-  const provisional = bucket.count > 0 && bucket.count < minSample;
   return (
     <View style={styles.ratingCell}>
-      <Text
-        style={[
-          styles.ratingValue,
-          { color: avgColor(score, colors) },
-          provisional && styles.ratingValueProvisional,
-        ]}
-      >
+      <Text style={[styles.ratingValue, { color: avgColor(score, colors) }]}>
         {score != null ? `${score.toFixed(1)} ★` : '–'}
       </Text>
       {bucket.count > 0 ? (
@@ -262,7 +241,6 @@ function RatingsTable({
   const [detail, setDetail] = useState<{ staff: StaffRatingRow; month: number | null } | null>(null);
 
   const rows = data?.staff ?? [];
-  const minSample = data?.minSample ?? 5;
 
   if (isLoading) {
     return <ActivityIndicator color={colors.accent} style={{ marginTop: 40 }} />;
@@ -287,9 +265,6 @@ function RatingsTable({
             {data?.grand.responseRate != null
               ? `  ·  Yanıt oranı %${Math.round(data.grand.responseRate * 100)}`
               : ''}
-          </Text>
-          <Text style={styles.ratingSummaryHint}>
-            {minSample} değerlendirmeden az olan hücreler soluk gösterilir — az sayıda puan yanıltıcı olabilir.
           </Text>
         </View>
 
@@ -319,7 +294,7 @@ function RatingsTable({
                       onPress={() => s.months[m].count > 0 && setDetail({ staff: s, month: m })}
                       disabled={s.months[m].count === 0}
                     >
-                      <RatingCell bucket={s.months[m]} minSample={minSample} styles={styles} colors={colors} />
+                      <RatingCell bucket={s.months[m]} styles={styles} colors={colors} />
                     </Pressable>
                   ))}
                 </View>
@@ -335,7 +310,7 @@ function RatingsTable({
                   onPress={() => s.total.count > 0 && setDetail({ staff: s, month: null })}
                   disabled={s.total.count === 0}
                 >
-                  <RatingCell bucket={s.total} minSample={minSample} styles={styles} colors={colors} />
+                  <RatingCell bucket={s.total} styles={styles} colors={colors} />
                 </Pressable>
               ))}
             </View>
@@ -382,7 +357,7 @@ function RatingDetailSheet({
         <View style={{ gap: 12 }}>
           <View style={styles.detailStatsRow}>
             <Text style={[styles.detailStat, { color: avgColor(bucket.avg, colors) }]}>
-              {bucket.avg != null ? `${bucket.avg.toFixed(2)} ★` : 'Yetersiz veri'}
+              {(bucket.avg ?? bucket.rawAvg) != null ? `${(bucket.avg ?? bucket.rawAvg)!.toFixed(2)} ★` : '–'}
             </Text>
             <Muted>
               {bucket.count} puan
@@ -517,7 +492,6 @@ function makeStyles(colors: AppColors, theme: ResolvedTheme) {
     ratingCell: { width: 104, paddingVertical: 6, alignItems: 'center' },
     ratingHeaderCell: { width: 104 },
     ratingValue: { fontSize: 13, fontWeight: '700' },
-    ratingValueProvisional: { opacity: 0.45, fontWeight: '600' },
     ratingCount: { color: surfaceTint(theme, 0.35), fontSize: 10, fontWeight: '600' },
 
     // ── Detay sheet ──

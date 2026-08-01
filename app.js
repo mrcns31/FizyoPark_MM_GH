@@ -6882,13 +6882,11 @@ function ratingAvgClass(avg) {
 }
 
 function ratingCellHtml(bucket, staffId, month, extraClass) {
-  // Az orneklemde de ortalama gosterilir, sadece soluk cizilir (mobil ile ayni kural)
+  // Tum degerlendirmeler ayni bicimde gosterilir; esik/gizleme yok
   var avg = bucket.avg != null ? bucket.avg : bucket.rawAvg;
-  var provisional = bucket.count > 0 && bucket.count < ((reportsRatingsData && reportsRatingsData.minSample) || 5);
   var clickable = bucket.count > 0 && staffId != null;
   var cls = "reports-td reports-td--rating" + (extraClass || "") + ratingAvgClass(avg) +
-    (bucket.count === 0 ? " reports-td--zero" : "") + (provisional ? " reports-td--rating-provisional" : "") +
-    (clickable ? " reports-td--clickable" : "");
+    (bucket.count === 0 ? " reports-td--zero" : "") + (clickable ? " reports-td--clickable" : "");
   var attrs = clickable
     ? ' data-rating-staff="' + staffId + '"' + (month == null ? '' : ' data-rating-month="' + (month + 1) + '"')
     : "";
@@ -6915,9 +6913,7 @@ function renderRatingsTable() {
     summary += " · Yanıt oranı %" + Math.round(data.grand.responseRate * 100);
   }
 
-  var html = '<div class="reports-rating-summary">' + escapeHtml(summary) +
-    '<span class="reports-rating-hint">' + (data.minSample || 5) +
-    " değerlendirmeden az olan hücreler soluk gösterilir — az sayıda puan yanıltıcı olabilir.</span></div>";
+  var html = '<div class="reports-rating-summary">' + escapeHtml(summary) + "</div>";
 
   html += '<div class="reports-table-wrap"><table class="reports-table"><thead><tr>';
   html += "<th class=\"reports-th reports-th--month\">Ay</th>";
