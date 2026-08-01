@@ -4882,6 +4882,8 @@ select option:checked{
 }
 .reports-td--rating-good .reports-rating-value{ color:var(--ok); }
 .reports-td--rating-low .reports-rating-value{ color:#ff9500; }
+/* Az orneklemli hucre: deger gosterilir ama solgun — sayi hemen altinda durur */
+.reports-td--rating-provisional .reports-rating-value{ opacity:.45; font-weight:600; }
 .reports-td--clickable{ cursor:pointer; }
 .reports-td--clickable:hover{ background:rgba(124,92,255,.12); }
 

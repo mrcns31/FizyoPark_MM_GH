@@ -243,7 +243,8 @@ export async function buildPackageWithSessions(mpRow, memberId, staffMap, option
     const dto = sessionToDto(s, staffMap, packageType, mpRow.status);
     dto.cancelledByMember = dto.isCancelled ? memberCancelledIds.has(s.id) : false;
 
-    const r = ratings.get(s.id);
+    // İptal edilen seansın puanı raporlarda sayılmıyor; kartta da yıldız gösterilmez
+    const r = dto.isCancelled ? null : ratings.get(s.id);
     dto.rating = r ? Number(r.rating) : null;
     dto.ratingComment = r?.comment || '';
     // Puan bir kez verilir; verildikten sonra seans yeniden puanlanamaz

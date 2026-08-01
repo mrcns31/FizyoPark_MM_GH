@@ -74,11 +74,14 @@ async function loadYearData(year) {
   let ratingRows = [];
   try {
     const res = await db.query(
-      // Personel ve tarih sessions'tan okunur: seans devredilirse puan da yeni personele geçer
+      // Personel ve tarih sessions'tan okunur: seans devredilirse puan da yeni personele geçer.
+      // deleted_at filtresi paydayla (ratableSessionSql) aynı kuralı uygular; olmazsa
+      // iptal edilen seansın puanı payda kalır ve yanıt oranı %100'ü aşar.
       `SELECT s.staff_id, sr.member_id, s.start_ts AS session_start_ts, sr.rating
        FROM session_ratings sr
        JOIN sessions s ON s.id = sr.session_id
-       WHERE s.start_ts >= $1 AND s.start_ts < $2`,
+       WHERE s.start_ts >= $1 AND s.start_ts < $2
+         AND s.deleted_at IS NULL`,
       [start, end]
     );
     ratingRows = res.rows;
@@ -239,6 +242,7 @@ router.get('/list', checkAdminOrManager, [
          LEFT JOIN members m ON m.id = sr.member_id
          WHERE s.staff_id = $1
            AND s.start_ts >= $2 AND s.start_ts < $3
+           AND s.deleted_at IS NULL
          ORDER BY s.start_ts DESC`,
         [staffId, start, end]
       );

@@ -6882,15 +6882,18 @@ function ratingAvgClass(avg) {
 }
 
 function ratingCellHtml(bucket, staffId, month, extraClass) {
-  var avg = bucket.avg;
+  // Az orneklemde de ortalama gosterilir, sadece soluk cizilir (mobil ile ayni kural)
+  var avg = bucket.avg != null ? bucket.avg : bucket.rawAvg;
+  var provisional = bucket.count > 0 && bucket.count < ((reportsRatingsData && reportsRatingsData.minSample) || 5);
   var clickable = bucket.count > 0 && staffId != null;
   var cls = "reports-td reports-td--rating" + (extraClass || "") + ratingAvgClass(avg) +
-    (bucket.count === 0 ? " reports-td--zero" : "") + (clickable ? " reports-td--clickable" : "");
+    (bucket.count === 0 ? " reports-td--zero" : "") + (provisional ? " reports-td--rating-provisional" : "") +
+    (clickable ? " reports-td--clickable" : "");
   var attrs = clickable
     ? ' data-rating-staff="' + staffId + '"' + (month == null ? '' : ' data-rating-month="' + (month + 1) + '"')
     : "";
   var value = avg != null ? avg.toFixed(1) + " ★" : "–";
-  var sub = bucket.count > 0 ? '<span class="reports-rating-n">n=' + bucket.count + "</span>" : "";
+  var sub = bucket.count > 0 ? '<span class="reports-rating-n">' + bucket.count + " değerlendirme</span>" : "";
   return "<td class=\"" + cls + "\"" + attrs + "><span class=\"reports-rating-value\">" + value + "</span>" + sub + "</td>";
 }
 
@@ -6907,14 +6910,14 @@ function renderRatingsTable() {
   var monthNames = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
 
   var summary = "Kurum ortalaması: " + (data.globalMean != null ? data.globalMean.toFixed(2) + " ★" : "–") +
-    " · " + (data.globalCount || 0) + " puan";
+    " · " + (data.globalCount || 0) + " değerlendirme";
   if (data.grand && data.grand.responseRate != null) {
     summary += " · Yanıt oranı %" + Math.round(data.grand.responseRate * 100);
   }
 
   var html = '<div class="reports-rating-summary">' + escapeHtml(summary) +
     '<span class="reports-rating-hint">' + (data.minSample || 5) +
-    " puandan az olan hücrelerde ortalama gösterilmez.</span></div>";
+    " değerlendirmeden az olan hücreler soluk gösterilir — az sayıda puan yanıltıcı olabilir.</span></div>";
 
   html += '<div class="reports-table-wrap"><table class="reports-table"><thead><tr>';
   html += "<th class=\"reports-th reports-th--month\">Ay</th>";
