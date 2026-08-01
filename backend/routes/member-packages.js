@@ -5,7 +5,7 @@ import { verifyToken } from './auth.js';
 import { validateAndPickRoom, validateRoomForSession, placeSessionWithRebalance, getDemandByStaff, matchStaffToRooms } from '../utils/sessionSlot.js';
 import { log as activityLog } from '../utils/activityLogger.js';
 import { ATTENDANCE_JOIN_SQL } from '../utils/sessionAttendance.js';
-import { loadStaffMap, sessionToDto, toDateOnlyString } from '../utils/memberPackageDto.js';
+import { loadMemberRatings, loadStaffMap, sessionToDto, toDateOnlyString } from '../utils/memberPackageDto.js';
 import { fulfillPendingPackageRequestsForMember } from './package-requests.js';
 import { localDateStrFromTs } from '../utils/staffWorkingHours.js';
 import { autoCompletePackageIfExhausted } from '../utils/packageSessionCounts.js';
@@ -1368,9 +1368,15 @@ router.get('/:id/sessions', async (req, res) => {
 
     const staffMap = await loadStaffMap();
     const packageType = mp.package_type || 'fixed';
-    const sessions = result.rows.map((row) =>
-      sessionToDto(row, staffMap, packageType, mp.status, { forAdmin: true })
-    );
+    // Üyenin bu seanslara verdiği puanlar — yönetici paket listesinde görebilsin
+    const ratings = await loadMemberRatings(mp.member_id, result.rows.map((r) => r.id));
+    const sessions = result.rows.map((row) => {
+      const dto = sessionToDto(row, staffMap, packageType, mp.status, { forAdmin: true });
+      const r = dto.isCancelled ? null : ratings.get(row.id);
+      dto.rating = r ? Number(r.rating) : null;
+      dto.ratingComment = r?.comment || '';
+      return dto;
+    });
 
     res.json(sessions);
   } catch (error) {

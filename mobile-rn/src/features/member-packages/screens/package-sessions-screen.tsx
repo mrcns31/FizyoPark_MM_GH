@@ -10,6 +10,7 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import { Badge, Card, Muted } from '../../../components/ui';
 import { BottomSheet } from '../../../components/bottom-sheet';
+import { StarRating } from '../../../components/star-rating';
 import { formatTime } from '../../../lib/datetime';
 import { useTheme } from '../../theme';
 import { type AppColors, type ResolvedTheme } from '../../../theme/colors';
@@ -178,6 +179,15 @@ function SessionCard({
             <Text style={styles.date}>{fmtSessionDate(s.startTs)}</Text>
             <Text style={styles.sub}>{fmtWeekday(s.startTs)}{s.staffName ? ` - ${s.staffName}` : ''}</Text>
             {s.note ? <Muted>{s.note}</Muted> : null}
+            {/* Üyenin bu seansa verdiği puan — yorum yazmasa da görünür */}
+            {s.rating != null ? (
+              <View style={styles.ratingRow}>
+                <StarRating value={s.rating} size={14} />
+                {s.ratingComment ? (
+                  <Text style={styles.ratingComment} numberOfLines={2}>{s.ratingComment}</Text>
+                ) : null}
+              </View>
+            ) : null}
           </View>
           <Badge label={b.label} tone={b.tone} />
         </View>
@@ -543,6 +553,8 @@ function makeStyles(colors: AppColors, theme: ResolvedTheme) {
     info: { flex: 1, gap: 2 },
     date: { color: colors.text, fontSize: 14, fontWeight: '700' },
     sub: { color: colors.muted, fontSize: 12 },
+    ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 3, flexWrap: 'wrap' },
+    ratingComment: { color: colors.muted, fontSize: 11, flexShrink: 1 },
 
     cancelledHeader: {
       flexDirection: 'row',

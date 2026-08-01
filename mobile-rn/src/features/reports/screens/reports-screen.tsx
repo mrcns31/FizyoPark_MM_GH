@@ -383,25 +383,26 @@ function RatingDetailSheet({
 
           {isLoading ? <ActivityIndicator color={colors.accent} /> : null}
 
-          {(data?.items ?? []).filter((i) => i.comment).length > 0 ? (
+          {/* Yorumsuz puanlar da listelenir — "kim kaç verdi" yalnızca yorum yazanlarla sınırlı kalmasın */}
+          {(data?.items ?? []).length > 0 ? (
             <>
-              <Text style={styles.detailSectionTitle}>Yorumlar</Text>
-              {(data?.items ?? [])
-                .filter((i) => i.comment)
-                .map((i) => (
-                  <View key={i.sessionId} style={styles.commentCard}>
-                    <View style={styles.commentHead}>
-                      <StarRating value={i.rating} size={14} />
-                      <Text style={styles.commentMeta}>
-                        {i.memberName} · {formatDayLabel(i.sessionStartTs)}
-                      </Text>
-                    </View>
-                    <Text style={styles.commentText}>{i.comment}</Text>
+              <Text style={styles.detailSectionTitle}>
+                Değerlendirmeler ({(data?.items ?? []).length})
+              </Text>
+              {(data?.items ?? []).map((i) => (
+                <View key={i.sessionId} style={styles.commentCard}>
+                  <View style={styles.commentHead}>
+                    <StarRating value={i.rating} size={14} />
+                    <Text style={styles.commentMeta}>
+                      {i.memberName} · {formatDayLabel(i.sessionStartTs)}
+                    </Text>
                   </View>
-                ))}
+                  {i.comment ? <Text style={styles.commentText}>{i.comment}</Text> : null}
+                </View>
+              ))}
             </>
           ) : !isLoading ? (
-            <Muted>Yorum yazılmamış.</Muted>
+            <Muted>Bu dönemde değerlendirme yok.</Muted>
           ) : null}
         </View>
       ) : null}
