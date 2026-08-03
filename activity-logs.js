@@ -21,6 +21,7 @@
     "session.update": "Seans güncelleme",
     "session.delete": "Seans silme",
     "session.delete_bulk": "Grup seans silme",
+    "session.swap": "Seans takası",
     "session.cancel_by_member": "Üye seans iptali",
     "session.check_in_qr": "QR ile giriş",
     "session.attendance_confirm": "Seans giriş onayı",

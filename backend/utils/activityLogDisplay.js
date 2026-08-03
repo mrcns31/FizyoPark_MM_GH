@@ -235,6 +235,20 @@ function buildDetailsDisplay(action, details, ctx) {
     return [when ? `Tarih: ${when}` : null, member ? `Üye: ${member}` : null, staff ? `Personel: ${staff}` : null].filter(Boolean).join(' · ') || '—';
   }
 
+  // Takasta A ve B karşılıklı yer değiştirir: A'nın üyesi B'nin personeline geçer.
+  if (action === 'session.swap') {
+    const when = fmtLogDateTime(d.startTs);
+    const memberA = memberLabel(ctx.memberMap, d.memberAId);
+    const memberB = memberLabel(ctx.memberMap, d.memberBId);
+    const staffA = staffLabel(ctx.staffMap, d.staffAId);
+    const staffB = staffLabel(ctx.staffMap, d.staffBId);
+    const parts = [];
+    if (when) parts.push(`Tarih: ${when}`);
+    if (memberA && staffB) parts.push(`${memberA} → ${staffB}`);
+    if (memberB && staffA) parts.push(`${memberB} → ${staffA}`);
+    return parts.join(' · ') || 'Seanslar takas edildi';
+  }
+
   if (action === 'session.delete' || action === 'session.delete_bulk') {
     const staff = staffLabel(ctx.staffMap, d.staffId);
     const when = fmtLogDateTime(d.startTs);
@@ -439,6 +453,11 @@ function collectIds(rows) {
     if (d.member_id != null) memberIds.add(Number(d.member_id));
     if (d.staffId != null) staffIds.add(Number(d.staffId));
     if (d.staff_id != null) staffIds.add(Number(d.staff_id));
+    // Takas: iki taraf da isimle gösterilsin
+    if (d.memberAId != null) memberIds.add(Number(d.memberAId));
+    if (d.memberBId != null) memberIds.add(Number(d.memberBId));
+    if (d.staffAId != null) staffIds.add(Number(d.staffAId));
+    if (d.staffBId != null) staffIds.add(Number(d.staffBId));
     if (d.package_id != null) packageIds.add(Number(d.package_id));
   }
 

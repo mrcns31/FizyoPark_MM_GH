@@ -935,6 +935,21 @@
     const session = res && res.session ? res.session : res;
     return session && session.id ? sessionFromApi(session) : { ...payload, id: parseInt(id, 10) };
   }
+  /**
+   * Aynı tarih/saatteki iki seansın personelini (ve odasını) tek işlemde takas eder.
+   * Seans kayıtları korunur, üyeye bildirim gitmez.
+   */
+  async function swapSessions(sessionAId, sessionBId, options) {
+    var opts = options || {};
+    var payload = {
+      sessionAId: toValidInt(sessionAId, 'Seans ID'),
+      sessionBId: toValidInt(sessionBId, 'Seans ID'),
+    };
+    if (opts.adminPassword) payload.adminPassword = opts.adminPassword;
+    const res = await apiFetch('/sessions/swap', { method: 'POST', body: JSON.stringify(payload) });
+    const rows = (res && res.sessions) || [];
+    return rows.map(sessionFromApi);
+  }
   async function deleteSession(id, options) {
     var opts = options || {};
     await apiFetch('/sessions/' + id, {
@@ -1150,6 +1165,7 @@
     getNotifications,
     createSession,
     updateSession,
+    swapSessions,
     deleteSession,
     updateWorkingHours,
     getInstitutionWhatsapp,

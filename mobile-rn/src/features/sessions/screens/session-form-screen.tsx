@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router';
 
 import { ScreenContainer } from '../../../components/screen-container';
+import { BottomSheet } from '../../../components/bottom-sheet';
 import { DateField } from '../../../components/date-field';
 import { TimeField } from '../../../components/time-field';
 import { SelectField } from '../../../components/select-field';
@@ -15,7 +16,7 @@ import { getMembers } from '../../members/api/members';
 import { getStaff } from '../../staff/api/staff';
 import { useTheme } from '../../theme';
 import { surfaceTint, type AppColors, type ResolvedTheme } from '../../../theme/colors';
-import { sessionKeys, useCreateSession, useDeleteSession, useSessions, useUpdateSession } from '../api/hooks';
+import { sessionKeys, useCreateSession, useDeleteSession, useSessions, useSwapSessions, useUpdateSession } from '../api/hooks';
 import { useWorkingHours } from '../../settings/api/hooks';
 import { useMemberPackages } from '../../member-packages/api/hooks';
 import { isAttendanceConfirmed, type PlannerSession } from '../api/sessions';
@@ -55,6 +56,7 @@ export function SessionFormScreen() {
   const create = useCreateSession();
   const update = useUpdateSession();
   const del = useDeleteSession();
+  const swap = useSwapSessions();
 
   const { data: daySessions } = useSessions(
     params.date ? { startDate: params.date, endDate: params.date } : {}
@@ -247,6 +249,69 @@ export function SessionFormScreen() {
     }
   }
 
+  // ——— Takas ———
+  // Aynı tarih/saatteki başka bir personelin üyesiyle yer değiştirme. Tek tek taşımak
+  // ara adımda oda kapasitesini aştığı için reddedilir; takasta sayılar değişmez.
+  const [swapMemberId, setSwapMemberId] = useState<number | null>(null);
+
+  // Aynı slottaki DİĞER personellerin seansları, personele göre gruplu.
+  const swapGroups = useMemo(() => {
+    if (!editing) return [];
+    const groups = new Map<number, { staffId: number; staffName: string; sessions: PlannerSession[] }>();
+    for (const s of daySessions ?? []) {
+      // Bitiş de eşleşmeli: backend takası yalnızca birebir aynı aralık için kabul eder.
+      if (s.startTs !== editing.startTs || s.endTs !== editing.endTs) continue;
+      if (s.staffId == null || s.memberId == null) continue;
+      if (s.staffId === editing.staffId) continue;
+      const g = groups.get(s.staffId) ?? { staffId: s.staffId, staffName: s.staffName || `#${s.staffId}`, sessions: [] };
+      g.sessions.push(s);
+      groups.set(s.staffId, g);
+    }
+    return [...groups.values()].sort((a, b) => a.staffName.localeCompare(b.staffName, 'tr'));
+  }, [daySessions, editing]);
+
+  // Formda kaydedilmemiş slot değişikliği varken takas yanıltıcı olur (takas kayıtlı
+  // satırlar üzerinde çalışır), o yüzden önce kaydetmesi/geri alması istenir.
+  const slotDirty = !!editing && (staffId !== editing.staffId || start.getTime() !== editing.startTs);
+
+  function openSwap(memberIdToSwap: number) {
+    if (slotDirty) {
+      return Alert.alert(
+        'Önce kaydedin',
+        'Personel/tarih/saat değişikliğini kaydedin veya geri alın; takas kayıtlı seanslar üzerinde çalışır.'
+      );
+    }
+    if (swapGroups.length === 0) {
+      return Alert.alert('Takas edilecek seans yok', 'Bu saatte başka bir personelin seansı bulunmuyor.');
+    }
+    setSwapMemberId(memberIdToSwap);
+  }
+
+  async function doSwap(target: PlannerSession) {
+    const sourceMemberId = swapMemberId;
+    const source = groupSessions.find((s) => s.memberId === sourceMemberId);
+    if (sourceMemberId == null || !source || target.memberId == null) return;
+
+    let adminPassword: string | undefined;
+    if (isAttendanceConfirmed(source) || isAttendanceConfirmed(target)) {
+      const pwd = await promptAdminPassword('Girişi onaylanmış seans(lar) üzerinde değişiklik için admin şifrenizi girin.');
+      if (pwd == null) return;
+      adminPassword = pwd;
+    }
+
+    try {
+      await swap.mutateAsync({ sessionAId: source.id, sessionBId: target.id, adminPassword });
+      setSwapMemberId(null);
+      // Form ?id ile açıldığı seansa bağlı; o seans artık karşı gruba geçtiği için
+      // ekranda eski grup kalırsa "Güncelle" yanlış tabanla çalışır. Yığında geri
+      // dönülecek ekran varsa kapat, yoksa (derin bağlantı/ilk ekran) formu tazele.
+      if (router.canGoBack()) router.back();
+      else setInited(false);
+    } catch (e) {
+      Alert.alert('Takas başarısız', e instanceof ApiError ? e.message : 'Takas yapılamadı.');
+    }
+  }
+
   function stepStaff(dir: 1 | -1) {
     if (staffOptions.length === 0) return;
     const idx = staffOptions.findIndex((o) => o.value === staffId);
@@ -338,10 +403,15 @@ export function SessionFormScreen() {
           {memberIds.map((mid) => (
             <View key={mid} style={styles.memberRow}>
               <Text style={styles.memberName} numberOfLines={1}>{memberName(mid)}</Text>
+              {editing && groupSessions.some((s) => s.memberId === mid) && (
+                <Pressable hitSlop={8} style={styles.rowBtn} onPress={() => openSwap(mid)}>
+                  <Ionicons name="swap-horizontal" size={18} color={colors.accent} />
+                </Pressable>
+              )}
               {(forceMemberId == null || mid !== forceMemberId) && (
                 <Pressable
                   hitSlop={8}
-                  style={styles.removeBtn}
+                  style={styles.rowBtn}
                   onPress={() => setMemberIds((ids) => ids.filter((x) => x !== mid))}
                 >
                   <Ionicons name="trash-outline" size={18} color={colors.danger} />
@@ -363,6 +433,33 @@ export function SessionFormScreen() {
       </Card>
 
       <Button title={editing ? 'Güncelle' : 'Oluştur'} onPress={onSave} loading={saving} style={styles.submit} />
+
+      <BottomSheet
+        visible={swapMemberId != null}
+        onClose={() => setSwapMemberId(null)}
+        title={swapMemberId != null ? `${memberName(swapMemberId)} — takas` : 'Takas'}
+      >
+        <Text style={styles.swapHint}>
+          Yerini değiştireceğiniz üyeyi seçin. İki üye aynı saatte kalır, sadece personelleri
+          değişir; üyelere bildirim gitmez.
+        </Text>
+        {swapGroups.map((g) => (
+          <View key={g.staffId} style={styles.swapGroup}>
+            <Text style={styles.swapStaff}>{g.staffName}</Text>
+            {g.sessions.map((s) => (
+              <Pressable
+                key={s.id}
+                style={styles.swapRow}
+                disabled={swap.isPending}
+                onPress={() => doSwap(s)}
+              >
+                <Text style={styles.memberName} numberOfLines={1}>{s.memberName || `#${s.memberId}`}</Text>
+                <Ionicons name="swap-horizontal" size={18} color={colors.accent} />
+              </Pressable>
+            ))}
+          </View>
+        ))}
+      </BottomSheet>
     </ScreenContainer>
   );
 }
@@ -396,7 +493,21 @@ function makeStyles(colors: AppColors, theme: ResolvedTheme) {
       marginBottom: 8,
     },
     memberName: { color: colors.text, fontSize: 15, fontWeight: '600', flex: 1 },
-    removeBtn: { padding: 2 },
+    rowBtn: { padding: 2, marginLeft: 8 },
+    swapHint: { color: colors.muted, fontSize: 13, lineHeight: 18 },
+    swapGroup: { gap: 8 },
+    swapStaff: { color: colors.muted, fontSize: 12, fontWeight: '700', marginTop: 6 },
+    swapRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 10,
+      paddingVertical: 12,
+      paddingHorizontal: 12,
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: colors.border,
+      backgroundColor: surfaceTint(theme, 0.03),
+    },
     submit: { marginTop: 14, marginBottom: 8 },
   });
 }

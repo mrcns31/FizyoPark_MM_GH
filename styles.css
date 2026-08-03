@@ -3002,6 +3002,36 @@ body.body--sidebar-open{
   min-width:0;
   width:auto;
 }
+.group-session-member-item{
+  display:flex;
+  flex-direction:column;
+  gap:6px;
+}
+.group-session-member-row__name{
+  flex:1;
+  min-width:0;
+  display:flex;
+  align-items:center;
+  cursor:default;
+}
+.group-swap-wrap{
+  padding-left:2px;
+}
+.group-swap-wrap .input{
+  width:100%;
+}
+.group-session-member-row__swap{
+  flex:0 0 auto;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  width:44px;
+  min-width:44px;
+  height:44px;
+  min-height:44px;
+  padding:0;
+  border-radius:10px;
+}
 .group-session-member-row__remove{
   flex:0 0 auto;
   display:flex;

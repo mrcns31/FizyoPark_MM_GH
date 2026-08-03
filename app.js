@@ -12175,6 +12175,66 @@ function refreshGroupSessionNewMemberSelect() {
   }
 }
 
+/** Aynı saatte BAŞKA personellerin seansları — takas adayları (personel, üye adına göre sıralı). */
+function getSwapCandidates(session) {
+  if (!session) return [];
+  const groupIds = new Set(currentGroupSessions.map((s) => normId(s.id)));
+  return state.sessions
+    .filter(
+      (s) =>
+        !groupIds.has(normId(s.id)) &&
+        s.memberId != null &&
+        s.staffId != null &&
+        normId(s.staffId) !== normId(session.staffId) &&
+        s.startTs === session.startTs &&
+        s.endTs === session.endTs
+    )
+    .sort((a, b) => {
+      const sa = getStaffFullName(getStaffById(a.staffId)) || "";
+      const sb = getStaffFullName(getStaffById(b.staffId)) || "";
+      return sa.localeCompare(sb, "tr") ||
+        getSessionMemberDisplayName(a).localeCompare(getSessionMemberDisplayName(b), "tr");
+    });
+}
+
+/**
+ * İki üyenin yerini değiştirir: seans kayıtları korunur, yalnızca personel (ve oda)
+ * karşılıklı değişir. Tek tek taşımak ara adımda kapasiteyi aştığı için reddedilir.
+ */
+async function swapGroupSessionMember(sourceSession, targetSessionId) {
+  const target = state.sessions.find((s) => normId(s.id) === normId(targetSessionId));
+  if (!sourceSession || !target) return;
+  if (!window.API || !window.API.getToken()) {
+    els.groupSessionError.textContent = "Takas için sunucu bağlantısı gerekli.";
+    els.groupSessionError.classList.remove("hidden");
+    return;
+  }
+
+  const pwd = await resolveAdminPasswordForSessions(
+    [sourceSession, target],
+    "Girişi onaylanmış seans(lar) üzerinde takas için admin şifrenizi girin."
+  );
+  if (pwd.cancelled) return;
+
+  try {
+    await window.API.swapSessions(
+      sourceSession.id,
+      target.id,
+      pwd.adminPassword ? { adminPassword: pwd.adminPassword } : undefined
+    );
+    await syncSessionsFromServer({ silent: true });
+    render();
+    // Takas sonrası gelen üye artık bu grupta — modalı güncel veriyle yeniden aç.
+    const incoming = state.sessions.find((s) => normId(s.id) === normId(target.id));
+    if (incoming) openGroupSessionModal(getGroupForSession(incoming));
+    else closeGroupSessionModal();
+  } catch (e) {
+    els.groupSessionError.textContent =
+      (e.data && e.data.error) || e.message || "Takas yapılamadı.";
+    els.groupSessionError.classList.remove("hidden");
+  }
+}
+
 function renderGroupSessionMembers() {
   const container = els.groupSessionMembers;
   container.innerHTML = "";
@@ -12182,31 +12242,82 @@ function renderGroupSessionMembers() {
 
   for (let i = 0; i < currentGroupSessions.length; i++) {
     const session = currentGroupSessions[i];
-    const member = getMemberById(session.memberId);
-    
+    // Kayıtlı seansta üye alanı değiştirilemez (seans kaydı üyeye bağlıdır); yer
+    // değiştirmek için takas kullanılır. Yeni grup oluştururken üye seçilebilir.
+    const saved = !isNewGroupSession && state.sessions.some((s) => normId(s.id) === normId(session.id));
+
+    const item = document.createElement("div");
+    item.className = "group-session-member-item";
+
     const memberRow = document.createElement("div");
     memberRow.className = "group-session-member-row";
 
-    const select = document.createElement("select");
-    select.className = "input";
-    const memberIdsWithActivePackage = getMemberIdsWithActivePackage();
-    const currentMemberIdNorm = normId(session.memberId);
-    const membersForRow = state.members.filter(
-      (m) => memberIdsWithActivePackage.has(normId(m.id)) || normId(m.id) === currentMemberIdNorm
-    );
-    for (const m of membersForRow) {
-      const option = document.createElement("option");
-      option.value = String(Number(m.id));
-      option.textContent = getMemberDisplayName(m);
-      if (String(Number(m.id)) === String(Number(session.memberId))) {
-        option.selected = true;
+    if (saved) {
+      const nameEl = document.createElement("div");
+      nameEl.className = "input group-session-member-row__name";
+      nameEl.textContent = getSessionMemberDisplayName(session);
+      memberRow.appendChild(nameEl);
+    } else {
+      const select = document.createElement("select");
+      select.className = "input";
+      const memberIdsWithActivePackage = getMemberIdsWithActivePackage();
+      const currentMemberIdNorm = normId(session.memberId);
+      const membersForRow = state.members.filter(
+        (m) => memberIdsWithActivePackage.has(normId(m.id)) || normId(m.id) === currentMemberIdNorm
+      );
+      for (const m of membersForRow) {
+        const option = document.createElement("option");
+        option.value = String(Number(m.id));
+        option.textContent = getMemberDisplayName(m);
+        if (String(Number(m.id)) === String(Number(session.memberId))) {
+          option.selected = true;
+        }
+        select.appendChild(option);
       }
-      select.appendChild(option);
+      select.addEventListener("change", () => {
+        currentGroupSessions[i].memberId = select.value;
+      });
+      memberRow.appendChild(select);
     }
-    select.addEventListener("change", () => {
-      currentGroupSessions[i].memberId = select.value;
-    });
-    
+
+    let swapWrap = null;
+    if (saved) {
+      const candidates = getSwapCandidates(session);
+      const swapBtn = document.createElement("button");
+      swapBtn.type = "button";
+      swapBtn.className = "btn btn--ghost group-session-member-row__swap";
+      swapBtn.innerHTML =
+        '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M7 4L3 8l4 4M3 8h13M17 20l4-4-4-4M21 16H8"/></svg>';
+      swapBtn.title = candidates.length ? "Başka personeldeki bir üyeyle takas et" : "Bu saatte takas edilecek başka seans yok";
+      swapBtn.setAttribute("aria-label", "Takas et");
+      swapBtn.disabled = candidates.length === 0;
+
+      swapWrap = document.createElement("div");
+      swapWrap.className = "group-swap-wrap hidden";
+      const swapSelect = document.createElement("select");
+      swapSelect.className = "input";
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = "Takas edilecek üyeyi seçin…";
+      swapSelect.appendChild(placeholder);
+      for (const c of candidates) {
+        const o = document.createElement("option");
+        o.value = String(Number(c.id));
+        o.textContent = `${getStaffFullName(getStaffById(c.staffId)) || "Personel"} — ${getSessionMemberDisplayName(c)}`;
+        swapSelect.appendChild(o);
+      }
+      swapSelect.addEventListener("change", function () {
+        if (!swapSelect.value) return;
+        swapGroupSessionMember(session, Number(swapSelect.value));
+      });
+      swapWrap.appendChild(swapSelect);
+
+      swapBtn.addEventListener("click", function () {
+        swapWrap.classList.toggle("hidden");
+      });
+      memberRow.appendChild(swapBtn);
+    }
+
     const deleteBtn = document.createElement("button");
     deleteBtn.type = "button";
     deleteBtn.className = "btn btn--danger group-session-member-row__remove";
@@ -12218,10 +12329,11 @@ function renderGroupSessionMembers() {
       currentGroupSessions.splice(i, 1);
       renderGroupSessionMembers();
     });
-    
-    memberRow.appendChild(select);
+
     memberRow.appendChild(deleteBtn);
-    container.appendChild(memberRow);
+    item.appendChild(memberRow);
+    if (swapWrap) item.appendChild(swapWrap);
+    container.appendChild(item);
   }
 }
 

@@ -89,6 +89,21 @@ export async function deleteSession(id: number, adminPassword?: string): Promise
   await apiClient.delete(`/sessions/${id}`, { data: adminPassword ? { adminPassword } : {} });
 }
 
+/**
+ * Aynı tarih/saatteki iki seansın personelini (ve odasını) tek işlemde takas eder.
+ * Seans kayıtları korunur, üyeye bildirim gitmez — bkz. POST /sessions/swap.
+ */
+export async function swapSessions(
+  sessionAId: number,
+  sessionBId: number,
+  adminPassword?: string,
+): Promise<unknown> {
+  const body: Record<string, unknown> = { sessionAId, sessionBId };
+  if (adminPassword) body.adminPassword = adminPassword;
+  const { data } = await apiClient.post('/sessions/swap', body);
+  return data;
+}
+
 export async function moveSessionToPackage(
   sessionId: number,
   targetMpId: number,

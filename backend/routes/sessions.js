@@ -644,6 +644,136 @@ router.put('/:id', [
   }
 });
 
+/**
+ * İki seansın personelini (ve odasını) tek işlemde takas eder.
+ *
+ * Aynı saatteki iki üyeyi tek tek taşımak, ara adımda bir personelin talebi oda
+ * kapasitesini aştığı için reddedilir (bkz. rebalanceSlotRooms). Takasta personel
+ * başına seans sayısı değişmediğinden kural hiçbir anda ihlal edilmez.
+ *
+ * Seans satırları korunur: yoklama, puanlama, not, paket bağı ve id'ler aynı kalır.
+ * Saat değişmediği için üyeye bildirim gönderilmez ve 24h hatırlatma sıfırlanmaz.
+ */
+router.post('/swap', [
+  body('sessionAId').toInt().isInt(),
+  body('sessionBId').toInt().isInt(),
+  body('adminPassword').optional().isString(),
+], async (req, res) => {
+  try {
+    if (req.user.role === 'member') {
+      return res.status(403).json({ error: 'Üyeler seans takası yapamaz' });
+    }
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { sessionAId, sessionBId, adminPassword } = req.body;
+    if (sessionAId === sessionBId) {
+      return res.status(400).json({ error: 'Bir seans kendisiyle takas edilemez.' });
+    }
+
+    const found = await db.query('SELECT * FROM sessions WHERE id = ANY($1::int[])', [[sessionAId, sessionBId]]);
+    const a = found.rows.find((r) => r.id === sessionAId);
+    const b = found.rows.find((r) => r.id === sessionBId);
+    if (!a || !b || a.deleted_at != null || b.deleted_at != null) {
+      return res.status(404).json({ error: 'Seans bulunamadı' });
+    }
+
+    // Silinmiş üyenin geçmiş kaydı salt okunurdur (PUT ile aynı kural).
+    const memberIds = [a.member_id, b.member_id].filter((x) => x != null);
+    if (memberIds.length > 0) {
+      const removed = await db.query(
+        'SELECT id FROM members WHERE id = ANY($1::int[]) AND deleted_at IS NOT NULL',
+        [memberIds]
+      );
+      if (removed.rows.length > 0) {
+        return res.status(409).json({ error: 'Bu üye silinmiş. Geçmiş randevu kaydı değiştirilemez.' });
+      }
+    }
+
+    // Personel yalnızca kendi seansının taraf olduğu takası yapabilir.
+    if (req.user.role === 'staff') {
+      const staffResult = await db.query('SELECT id FROM staff WHERE user_id = $1', [req.user.userId]);
+      const myStaffId = staffResult.rows[0]?.id ?? null;
+      if (myStaffId == null || (Number(a.staff_id) !== myStaffId && Number(b.staff_id) !== myStaffId)) {
+        return res.status(403).json({ error: 'Bu seanslar üzerinde takas yetkiniz yok' });
+      }
+    }
+
+    // Girişi onaylanmış seansta admin şifresi — düzenleme ile aynı kural.
+    for (const row of [a, b]) {
+      const pwErr = await requireAdminPasswordIfSessionConfirmed(row, adminPassword);
+      if (pwErr) {
+        return res.status(pwErr.status).json({ error: pwErr.error });
+      }
+    }
+
+    const client = await db.pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query('SELECT id FROM rooms ORDER BY id FOR UPDATE');
+
+      // Kilit altında yeniden oku: iki istek aynı anda gelirse doğrulama tazelensin.
+      const locked = await client.query(
+        'SELECT * FROM sessions WHERE id = ANY($1::int[]) AND deleted_at IS NULL FOR UPDATE',
+        [[sessionAId, sessionBId]]
+      );
+      const la = locked.rows.find((r) => r.id === sessionAId);
+      const lb = locked.rows.find((r) => r.id === sessionBId);
+      if (!la || !lb) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ error: 'Seans bulunamadı' });
+      }
+      if (Number(la.start_ts) !== Number(lb.start_ts) || Number(la.end_ts) !== Number(lb.end_ts)) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'Takas yalnızca aynı tarih ve saatteki iki seans arasında yapılabilir.' });
+      }
+      if (la.staff_id == null || lb.staff_id == null || Number(la.staff_id) === Number(lb.staff_id)) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'Takas için iki seansın personeli farklı olmalı.' });
+      }
+
+      await client.query('UPDATE sessions SET staff_id = $1, room_id = $2 WHERE id = $3', [lb.staff_id, lb.room_id, la.id]);
+      await client.query('UPDATE sessions SET staff_id = $1, room_id = $2 WHERE id = $3', [la.staff_id, la.room_id, lb.id]);
+
+      // rebalanceSlotRooms BİLEREK çağrılmıyor: iki satır personelini ve odasını
+      // karşılıklı değiştirdiği için personel başına seans sayısı, oda doluluğu ve
+      // "bir odada tek personel" kuralı zaten korunur. Rebalance çağrılırsa eşit
+      // kapasiteli odalarda atama yeniden kurulur ve takasla ilgisi olmayan
+      // üyelerin odası da değişir — takasın sessiz kalması bozulur.
+
+      const result = await client.query('SELECT * FROM sessions WHERE id = ANY($1::int[]) ORDER BY id', [[la.id, lb.id]]);
+      await client.query('COMMIT');
+
+      await activityLog(req, {
+        action: 'session.swap',
+        entityType: 'session',
+        entityId: la.id,
+        details: {
+          startTs: Number(la.start_ts),
+          sessionAId: la.id,
+          sessionBId: lb.id,
+          memberAId: la.member_id,
+          memberBId: lb.member_id,
+          staffAId: la.staff_id,
+          staffBId: lb.staff_id,
+        },
+      }).catch(() => {});
+
+      return res.json({ message: 'Seanslar takas edildi', sessions: result.rows });
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
+      throw err;
+    } finally {
+      client.release();
+    }
+  } catch (error) {
+    console.error('Session swap error:', error);
+    res.status(500).json({ error: 'Takas sırasında bir hata oluştu' });
+  }
+});
+
 // Seans sil (soft delete: veritabanında kalır, deleted_at işaretlenir; ileride log için)
 router.delete('/:id', [
   body('adminPassword').optional().isString()

@@ -6,6 +6,7 @@ import {
   deleteSession,
   getSessions,
   moveSessionToPackage,
+  swapSessions,
   updateSession,
   type AttendanceAction,
   type SessionInput,
@@ -65,6 +66,15 @@ export function useDeleteSession() {
   return useMutation({
     mutationFn: (vars: { id: number; adminPassword?: string }) =>
       deleteSession(vars.id, vars.adminPassword),
+    onSuccess: () => invalidateAll(qc),
+  });
+}
+
+export function useSwapSessions() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (vars: { sessionAId: number; sessionBId: number; adminPassword?: string }) =>
+      swapSessions(vars.sessionAId, vars.sessionBId, vars.adminPassword),
     onSuccess: () => invalidateAll(qc),
   });
 }
