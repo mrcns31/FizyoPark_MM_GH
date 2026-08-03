@@ -6943,11 +6943,16 @@ function renderRatingsTable() {
   html += '<div id="reportsRatingDetail" class="reports-rating-detail"></div>';
 
   els.reportsContent.innerHTML = html;
+  // Tablo bastan cizildi; acik panel de gitti, aksi halde kapali panele "acik" deyip
+  // ilk tiklama hicbir sey yapmaz gorunur
+  ratingDetailKey = null;
 }
 
 // Puan detayi: secili siralama (varsayilan tarihe gore, yeniden eskiye)
 var ratingDetailData = null;
 var ratingDetailTitle = "";
+// Acik olan hucrenin anahtari ("staffId:month"); ayni hucreye tekrar tiklamak paneli kapatir
+var ratingDetailKey = null;
 var ratingSortKey = "date";   // date | rating
 var ratingSortDir = "desc";   // desc | asc
 
@@ -7031,15 +7036,29 @@ function renderRatingDetail() {
   panel.innerHTML = html;
 }
 
+function closeRatingDetail() {
+  var panel = document.getElementById("reportsRatingDetail");
+  if (panel) panel.innerHTML = "";
+  ratingDetailData = null;
+  ratingDetailKey = null;
+}
+
 async function openRatingDetail(staffId, month) {
   var panel = document.getElementById("reportsRatingDetail");
   if (!panel || !window.API || !window.API.getRatingList) return;
+
+  // Ayni hucreye tekrar tiklamak paneli kapatir
+  var key = staffId + ":" + (month == null ? "" : month);
+  if (ratingDetailKey === key) { closeRatingDetail(); return; }
+  ratingDetailKey = key;
+
   panel.innerHTML = '<p class="hint">Yükleniyor…</p>';
 
   try {
     ratingDetailData = await window.API.getRatingList(staffId, reportsYear, month);
   } catch (e) {
     ratingDetailData = null;
+    ratingDetailKey = null; // hata sonrasi ayni hucreye tiklamak yeniden denesin, kapatmasin
     panel.innerHTML = '<p class="hint">Puan detayı alınamadı.</p>';
     return;
   }
