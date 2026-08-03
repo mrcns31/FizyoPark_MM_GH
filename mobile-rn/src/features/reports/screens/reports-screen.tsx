@@ -347,6 +347,22 @@ function RatingDetailSheet({
   const { data, isLoading } = useRatingList(detail?.staff.staffId ?? null, year, monthParam);
   const bucket = detail ? (detail.month != null ? detail.staff.months[detail.month] : detail.staff.total) : null;
 
+  // Varsayılan sıralama tarihe göre (yeniden eskiye); aynı butona basmak yönü çevirir
+  const [sortKey, setSortKey] = useState<'date' | 'rating'>('date');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  function toggleSort(key: 'date' | 'rating') {
+    if (sortKey === key) setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'));
+    else { setSortKey(key); setSortDir('desc'); }
+  }
+  const sortedItems = useMemo(() => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    return [...(data?.items ?? [])].sort((a, b) =>
+      sortKey === 'rating'
+        ? (a.rating - b.rating) * dir || (a.sessionStartTs - b.sessionStartTs) * dir
+        : (a.sessionStartTs - b.sessionStartTs) * dir || (a.rating - b.rating) * dir,
+    );
+  }, [data?.items, sortKey, sortDir]);
+
   const title = detail
     ? `${detail.staff.staffName} — ${detail.month != null ? MONTH_NAMES[detail.month] : 'Yıllık'} ${year}`
     : '';
@@ -384,12 +400,31 @@ function RatingDetailSheet({
           {isLoading ? <ActivityIndicator color={colors.accent} /> : null}
 
           {/* Yorumsuz puanlar da listelenir — "kim kaç verdi" yalnızca yorum yazanlarla sınırlı kalmasın */}
-          {(data?.items ?? []).length > 0 ? (
+          {sortedItems.length > 0 ? (
             <>
-              <Text style={styles.detailSectionTitle}>
-                Değerlendirmeler ({(data?.items ?? []).length})
-              </Text>
-              {(data?.items ?? []).map((i) => (
+              <View style={styles.raterHead}>
+                <Text style={styles.detailSectionTitle}>
+                  Değerlendirmeler ({sortedItems.length})
+                </Text>
+                <View style={styles.sortGroup}>
+                  {([['date', 'Tarih'], ['rating', 'Puan']] as const).map(([key, label]) => {
+                    const on = sortKey === key;
+                    return (
+                      <Pressable
+                        key={key}
+                        onPress={() => toggleSort(key)}
+                        style={[styles.sortBtn, on && styles.sortBtnOn]}
+                        hitSlop={4}
+                      >
+                        <Text style={[styles.sortBtnText, on && styles.sortBtnTextOn]}>
+                          {label}{on ? (sortDir === 'desc' ? ' ↓' : ' ↑') : ''}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+              {sortedItems.map((i) => (
                 <View key={i.sessionId} style={styles.commentCard}>
                   <View style={styles.commentHead}>
                     <StarRating value={i.rating} size={14} />
@@ -506,7 +541,19 @@ function makeStyles(colors: AppColors, theme: ResolvedTheme) {
     },
     distFill: { height: '100%', backgroundColor: colors.accent, borderRadius: 4 },
     distCount: { color: colors.muted, fontSize: 12, width: 24, textAlign: 'right' },
-    detailSectionTitle: { color: colors.text, fontSize: 14, fontWeight: '700', marginTop: 4 },
+    detailSectionTitle: { color: colors.text, fontSize: 14, fontWeight: '700' },
+    raterHead: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      flexWrap: 'wrap', gap: 8, marginTop: 4,
+    },
+    sortGroup: { flexDirection: 'row', gap: 4 },
+    sortBtn: {
+      paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8,
+      borderWidth: 1, borderColor: colors.border, backgroundColor: surfaceTint(theme, 0.03),
+    },
+    sortBtnOn: { borderColor: 'rgba(124,92,255,0.5)', backgroundColor: 'rgba(124,92,255,0.18)' },
+    sortBtnText: { color: colors.muted, fontSize: 11, fontWeight: '700' },
+    sortBtnTextOn: { color: colors.text },
     commentCard: {
       backgroundColor: surfaceTint(theme, 0.04),
       borderRadius: 10, borderWidth: 1, borderColor: colors.border,
