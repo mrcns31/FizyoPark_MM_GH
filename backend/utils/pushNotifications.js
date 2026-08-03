@@ -35,15 +35,19 @@ export async function sendExpoPush(db, userId, title, body, data = null) {
       headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
       body: JSON.stringify(messages),
     });
-    const data = await res.json().catch(() => null);
-    if (data?.data) {
-      const invalid = data.data
+    // DİKKAT: `data` fonksiyon parametresidir; burada aynı adı kullanmak yukarıdaki
+    // messages.map içindeki `data` okumasını temporal dead zone'a düşürür ve tüm
+    // gönderimi sessizce öldürür (bkz. 1 Ağustos 2026 kesintisi).
+    const json = await res.json().catch(() => null);
+    if (json?.data) {
+      const invalid = json.data
         .map((ticket, i) => ticket.details?.error === 'DeviceNotRegistered' ? rows[i]?.token : null)
         .filter(Boolean);
       if (invalid.length) purgeInvalidTokens(db, invalid);
     }
     return true;
-  } catch {
+  } catch (err) {
+    console.error('[pushNotifications] gönderim hatası:', err.message);
     return false;
   }
 }
