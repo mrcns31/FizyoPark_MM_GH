@@ -6945,29 +6945,57 @@ function renderRatingsTable() {
   els.reportsContent.innerHTML = html;
 }
 
-async function openRatingDetail(staffId, month) {
-  var panel = document.getElementById("reportsRatingDetail");
-  if (!panel || !window.API || !window.API.getRatingList) return;
-  panel.innerHTML = '<p class="hint">Yükleniyor…</p>';
+// Puan detayi: secili siralama (varsayilan tarihe gore, yeniden eskiye)
+var ratingDetailData = null;
+var ratingDetailTitle = "";
+var ratingSortKey = "date";   // date | rating
+var ratingSortDir = "desc";   // desc | asc
 
-  var data;
-  try {
-    data = await window.API.getRatingList(staffId, reportsYear, month);
-  } catch (e) {
-    panel.innerHTML = '<p class="hint">Puan detayı alınamadı.</p>';
-    return;
+function setRatingSort(key) {
+  // Ayni sutuna tekrar tiklamak yonu cevirir; farkli sutun varsayilan yonle baslar
+  if (ratingSortKey === key) {
+    ratingSortDir = ratingSortDir === "desc" ? "asc" : "desc";
+  } else {
+    ratingSortKey = key;
+    ratingSortDir = "desc";
   }
+  renderRatingDetail();
+}
 
-  var monthNames = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
-  var staffRow = (reportsRatingsData.staff || []).find(function (s) { return Number(s.staffId) === Number(staffId); });
-  var title = (staffRow ? staffRow.staffName : "Personel") + " — " +
-    (month ? monthNames[month - 1] : "Yıllık") + " " + reportsYear;
+function sortedRatingItems() {
+  var dir = ratingSortDir === "asc" ? 1 : -1;
+  return (ratingDetailData && ratingDetailData.items ? ratingDetailData.items : []).slice().sort(function (a, b) {
+    if (ratingSortKey === "rating") {
+      return (a.rating - b.rating) * dir || (Number(a.sessionStartTs) - Number(b.sessionStartTs)) * dir;
+    }
+    return (Number(a.sessionStartTs) - Number(b.sessionStartTs)) * dir || (a.rating - b.rating) * dir;
+  });
+}
+
+function renderRatingDetail() {
+  var panel = document.getElementById("reportsRatingDetail");
+  if (!panel || !ratingDetailData) return;
+  var data = ratingDetailData;
 
   var total = 0;
   [1, 2, 3, 4, 5].forEach(function (n) { total += Number(data.distribution[n] || 0); });
 
-  var html = '<h3 class="reports-rating-detail__title">' + escapeHtml(title) + "</h3>";
-  html += '<div class="reports-rating-dist">';
+  function fmtRatingDate(ts) {
+    var d = new Date(Number(ts));
+    return String(d.getDate()).padStart(2, "0") + "." + String(d.getMonth() + 1).padStart(2, "0") + "." + d.getFullYear();
+  }
+  function sortBtn(key, label) {
+    var on = ratingSortKey === key;
+    var arrow = on ? (ratingSortDir === "desc" ? " ↓" : " ↑") : "";
+    return '<button type="button" class="reports-sort-btn' + (on ? " reports-sort-btn--on" : "") +
+      '" data-rating-sort="' + key + '">' + label + arrow + "</button>";
+  }
+
+  var html = '<h3 class="reports-rating-detail__title">' + escapeHtml(ratingDetailTitle) + "</h3>";
+  html += '<div class="reports-rating-detail__cols">';
+
+  // Sol sutun: puan dagilimi
+  html += '<div class="reports-rating-detail__col"><div class="reports-rating-dist">';
   [5, 4, 3, 2, 1].forEach(function (n) {
     var c = Number(data.distribution[n] || 0);
     var pct = total > 0 ? (c / total) * 100 : 0;
@@ -6975,23 +7003,53 @@ async function openRatingDetail(staffId, month) {
       ' ★</span><span class="reports-rating-dist__track"><span class="reports-rating-dist__fill" style="width:' +
       pct.toFixed(1) + '%"></span></span><span class="reports-rating-dist__count">' + c + "</span></div>";
   });
-  html += "</div>";
+  html += "</div></div>";
 
-  var withComments = (data.items || []).filter(function (i) { return i.comment; });
-  if (withComments.length) {
-    html += '<h4 class="reports-rating-detail__subtitle">Yorumlar</h4>';
-    withComments.forEach(function (i) {
-      var d = new Date(Number(i.sessionStartTs));
-      var dateStr = String(d.getDate()).padStart(2, "0") + "." + String(d.getMonth() + 1).padStart(2, "0") + "." + d.getFullYear();
-      html += '<div class="reports-rating-comment"><div class="reports-rating-comment__head">' +
-        escapeHtml("★".repeat(i.rating)) + " · " + escapeHtml(i.memberName || "") + " · " + dateStr +
-        '</div><div class="reports-rating-comment__body">' + escapeHtml(i.comment) + "</div></div>";
+  // Sag sutun: kim kac puan verdi
+  var items = sortedRatingItems();
+  html += '<div class="reports-rating-detail__col">';
+  if (items.length) {
+    html += '<div class="reports-rater-head">' +
+      '<h4 class="reports-rating-detail__subtitle">Puan verenler (' + items.length + ")</h4>" +
+      '<div class="reports-sort-group">' + sortBtn("date", "Tarih") + sortBtn("rating", "Puan") + "</div></div>";
+    html += '<div class="reports-rater-list">';
+    items.forEach(function (i) {
+      var cls = i.rating <= 2 ? " reports-rater--low" : i.rating >= 4 ? " reports-rater--high" : "";
+      html += '<div class="reports-rater' + cls + '">' +
+        '<span class="reports-rater__stars">' + escapeHtml("★".repeat(i.rating) + "☆".repeat(5 - i.rating)) + "</span>" +
+        '<span class="reports-rater__name">' + escapeHtml(i.memberName || "—") + "</span>" +
+        '<span class="reports-rater__date">' + fmtRatingDate(i.sessionStartTs) + "</span>" +
+        (i.comment ? '<div class="reports-rater__comment">' + escapeHtml(i.comment) + "</div>" : "") +
+        "</div>";
     });
+    html += "</div>";
   } else {
-    html += '<p class="hint">Yorum yazılmamış.</p>';
+    html += '<p class="hint">Bu dönemde değerlendirme yok.</p>';
   }
+  html += "</div></div>";
 
   panel.innerHTML = html;
+}
+
+async function openRatingDetail(staffId, month) {
+  var panel = document.getElementById("reportsRatingDetail");
+  if (!panel || !window.API || !window.API.getRatingList) return;
+  panel.innerHTML = '<p class="hint">Yükleniyor…</p>';
+
+  try {
+    ratingDetailData = await window.API.getRatingList(staffId, reportsYear, month);
+  } catch (e) {
+    ratingDetailData = null;
+    panel.innerHTML = '<p class="hint">Puan detayı alınamadı.</p>';
+    return;
+  }
+
+  var monthNames = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
+  var staffRow = (reportsRatingsData.staff || []).find(function (s) { return Number(s.staffId) === Number(staffId); });
+  ratingDetailTitle = (staffRow ? staffRow.staffName : "Personel") + " — " +
+    (month ? monthNames[month - 1] : "Yıllık") + " " + reportsYear;
+
+  renderRatingDetail();
   panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
 }
 
@@ -14338,7 +14396,10 @@ function bindEvents() {
   if (els.reportsTabCountsBtn) els.reportsTabCountsBtn.addEventListener("click", function () { setReportsTab("counts"); });
   if (els.reportsTabRatingsBtn) els.reportsTabRatingsBtn.addEventListener("click", function () { setReportsTab("ratings"); });
   if (els.reportsContent) els.reportsContent.addEventListener("click", function (e) {
-    var cell = e.target.closest ? e.target.closest("[data-rating-staff]") : null;
+    if (!e.target.closest) return;
+    var sortBtnEl = e.target.closest("[data-rating-sort]");
+    if (sortBtnEl) { setRatingSort(sortBtnEl.getAttribute("data-rating-sort")); return; }
+    var cell = e.target.closest("[data-rating-staff]");
     if (!cell) return;
     var month = cell.getAttribute("data-rating-month");
     openRatingDetail(Number(cell.getAttribute("data-rating-staff")), month ? Number(month) : undefined);
