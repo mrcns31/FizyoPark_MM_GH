@@ -208,17 +208,22 @@ function avgColor(avg: number | null, colors: AppColors): string {
   return colors.fpOrange;
 }
 
-/** Her hücrede ortalama ve değerlendirme sayısı — eşik/gizleme yok. */
+/** Sadece adı — soyadla birlikte sütun taşıyor, tablo yatay kayıyordu. */
+function firstName(full: string): string {
+  return (full || '').trim().split(/\s+/)[0] || full;
+}
+
+/** Hücre: ortalama ★ ve altında "puan/seans" (ör. 1/9). Dar ekrana sığsın diye kısa. */
 function RatingCell({ bucket, styles, colors }: { bucket: RatingBucket; styles: any; colors: AppColors }) {
   const score = bucket.avg ?? bucket.rawAvg;
   return (
     <View style={styles.ratingCell}>
-      <Text style={[styles.ratingValue, { color: avgColor(score, colors) }]}>
+      <Text style={[styles.ratingValue, { color: avgColor(score, colors) }]} numberOfLines={1}>
         {score != null ? `${score.toFixed(1)} ★` : '–'}
       </Text>
       {bucket.count > 0 ? (
         <Text style={styles.ratingCount} numberOfLines={1}>
-          {bucket.count} değerlendirme
+          {bucket.count}/{bucket.eligible}
         </Text>
       ) : null}
     </View>
@@ -268,17 +273,16 @@ function RatingsTable({
           </Text>
         </View>
 
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View>
+        <View>
             <View style={[styles.row, styles.headerRow]}>
-              <Text style={[styles.cell, styles.monthCell, styles.headerText]}>Ay</Text>
+              <Text style={[styles.cell, styles.ratingMonthCell, styles.headerText]}>Ay</Text>
               {rows.map((s) => (
                 <Text
                   key={String(s.staffId)}
-                  style={[styles.cell, styles.ratingHeaderCell, styles.headerText, s.isFormer && styles.formerText]}
-                  numberOfLines={2}
+                  style={[styles.ratingHeaderCell, styles.headerText, s.isFormer && styles.formerText]}
+                  numberOfLines={1}
                 >
-                  {s.staffName}
+                  {firstName(s.staffName)}
                 </Text>
               ))}
             </View>
@@ -287,10 +291,11 @@ function RatingsTable({
               const empty = rows.every((s) => s.months[m].count === 0);
               return (
                 <View key={m} style={[styles.row, empty && styles.rowEmpty]}>
-                  <Text style={[styles.cell, styles.monthCell]}>{name} {year}</Text>
+                  <Text style={[styles.cell, styles.ratingMonthCell]}>{name}</Text>
                   {rows.map((s) => (
                     <Pressable
                       key={String(s.staffId)}
+                      style={styles.ratingCellPress}
                       onPress={() => s.months[m].count > 0 && setDetail({ staff: s, month: m })}
                       disabled={s.months[m].count === 0}
                     >
@@ -303,10 +308,11 @@ function RatingsTable({
 
             {/* Yıllık satır: ağırlıklı ortalama (Σpuan / Σn), ayların basit ortalaması değil */}
             <View style={[styles.row, styles.grandRow]}>
-              <Text style={[styles.cell, styles.monthCell, styles.grandText]}>Yıllık</Text>
+              <Text style={[styles.cell, styles.ratingMonthCell, styles.grandText]}>Yıllık</Text>
               {rows.map((s) => (
                 <Pressable
                   key={String(s.staffId)}
+                  style={styles.ratingCellPress}
                   onPress={() => s.total.count > 0 && setDetail({ staff: s, month: null })}
                   disabled={s.total.count === 0}
                 >
@@ -314,8 +320,7 @@ function RatingsTable({
                 </Pressable>
               ))}
             </View>
-          </View>
-        </ScrollView>
+        </View>
       </ScrollView>
 
       <RatingDetailSheet
@@ -524,9 +529,14 @@ function makeStyles(colors: AppColors, theme: ResolvedTheme) {
     ratingSummaryRow: { paddingBottom: 10, gap: 2 },
     ratingSummaryText: { color: colors.text, fontSize: 13, fontWeight: '700' },
     ratingSummaryHint: { color: colors.muted, fontSize: 11 },
-    // Hücre "12 değerlendirme" yazısını taşıyacak kadar geniş; başlık da aynı genişlikte olmalı
-    ratingCell: { width: 104, paddingVertical: 6, alignItems: 'center' },
-    ratingHeaderCell: { width: 104 },
+    // Sütunlar ekranı paylaşır — yatay kaydırma yok, tablo sağa sola kaymaz
+    ratingMonthCell: { width: 84, textAlign: 'left', paddingLeft: 4 },
+    ratingCellPress: { flex: 1 },
+    ratingCell: { paddingVertical: 6, alignItems: 'center' },
+    ratingHeaderCell: {
+      flex: 1, paddingHorizontal: 2, paddingVertical: 8,
+      fontSize: 11, fontWeight: '700', textAlign: 'center',
+    },
     ratingValue: { fontSize: 13, fontWeight: '700' },
     ratingCount: { color: surfaceTint(theme, 0.35), fontSize: 10, fontWeight: '600' },
 
