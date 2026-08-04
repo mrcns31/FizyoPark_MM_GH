@@ -52,25 +52,57 @@ export function resolveNotificationRoute(data: unknown, role: string | null): st
   return PUSH_TARGETS[type]?.[role] ?? null;
 }
 
+/** Backend tüm push'ları bu kanal üzerinden gönderir (pushNotifications.js → channelId) */
+const ANDROID_CHANNEL_ID = 'fizyopark';
+
+/**
+ * Android 8+ bildirimi mutlaka bir kanala ait olmalı. Cihazda bu kanal yoksa
+ * `channelId: 'fizyopark'` ile gelen push SESSİZCE düşer — hata dönmez, kullanıcı
+ * hiçbir şey görmez. iOS channelId alanını yok saydığı için orada sorun çıkmaz.
+ * Bu yüzden token alınmadan önce kanal oluşturulur (varsa güncellenir, zararsızdır).
+ */
+async function ensureAndroidChannel(): Promise<void> {
+  if (Platform.OS !== 'android') return;
+  try {
+    await Notifications.setNotificationChannelAsync(ANDROID_CHANNEL_ID, {
+      name: 'FizyoPark Bildirimleri',
+      importance: Notifications.AndroidImportance.HIGH,
+      sound: 'default',
+      vibrationPattern: [0, 250, 250, 250],
+      lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    });
+  } catch {
+    // kanal oluşturulamazsa token alma akışı yine de devam etsin
+  }
+}
+
+/**
+ * Push token'ı döner; hiçbir koşulda reject etmez.
+ * İzin API'leri de (getPermissionsAsync/requestPermissionsAsync) hata fırlatabiliyor —
+ * eskiden yalnızca getExpoPushTokenAsync korunuyordu, o yüzden çağıran taraftaki
+ * `.then(...)` zincirleri yakalanmamış promise reddi üretiyordu.
+ */
 export async function getExpoPushToken(): Promise<string | null> {
   if (Platform.OS === 'web') return null;
 
-  const { status: existing } = await Notifications.getPermissionsAsync();
-  let finalStatus = existing;
-
-  if (existing !== 'granted') {
-    const { status } = await Notifications.requestPermissionsAsync();
-    finalStatus = status;
-  }
-
-  if (finalStatus !== 'granted') return null;
-
-  const projectId =
-    (Constants.expoConfig?.extra?.eas as { projectId?: string } | undefined)?.projectId;
-
-  if (!projectId) return null;
-
   try {
+    await ensureAndroidChannel();
+
+    const { status: existing } = await Notifications.getPermissionsAsync();
+    let finalStatus = existing;
+
+    if (existing !== 'granted') {
+      const { status } = await Notifications.requestPermissionsAsync();
+      finalStatus = status;
+    }
+
+    if (finalStatus !== 'granted') return null;
+
+    const projectId =
+      (Constants.expoConfig?.extra?.eas as { projectId?: string } | undefined)?.projectId;
+
+    if (!projectId) return null;
+
     const { data } = await Notifications.getExpoPushTokenAsync({ projectId });
     return data;
   } catch {

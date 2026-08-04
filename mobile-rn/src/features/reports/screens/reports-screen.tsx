@@ -118,78 +118,85 @@ export function ReportsScreen() {
         contentContainerStyle={[styles.scrollContent, wide]}
         showsVerticalScrollIndicator={false}
       >
-        <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-          <View>
-            {/* Başlık satırı */}
-            <View style={[styles.row, styles.headerRow]}>
-              <Text style={[styles.cell, styles.monthCell, styles.headerText]}>Ay</Text>
-              {activeStaff.map((s, idx) => {
-                const c = staffColor(idx, s.id);
-                return (
-                  <Text key={s.id} style={[styles.cell, styles.headerText, { color: c.border }]} numberOfLines={2}>
-                    {s.fullName}
-                  </Text>
-                );
-              })}
-              {formerStaff.length > 0 ? (
-                <Text style={[styles.cell, styles.headerText, styles.formerText]} numberOfLines={2}>
-                  Eski Personeller
-                </Text>
-              ) : null}
-              <Text style={[styles.cell, styles.totalCell, styles.headerText]}>Toplam</Text>
-            </View>
-
-            {/* Ay satırları */}
-            {MONTH_NAMES.map((name, m) => {
-              const total = monthTotals[m];
+        <View>
+          {/* Başlık satırı */}
+          <View style={[styles.row, styles.countRow, styles.headerRow]}>
+            <Text style={[styles.cell, styles.countCell, styles.countMonthCell, styles.headerText]}>Ay</Text>
+            {activeStaff.map((s, idx) => {
+              const c = staffColor(idx, s.id);
               return (
-                <View key={m} style={[styles.row, total === 0 && styles.rowEmpty]}>
-                  <Text style={[styles.cell, styles.monthCell]}>{name} {year}</Text>
-                  {activeStaff.map((s, idx) => {
-                    const val = counts[m]?.[String(s.id)] ?? 0;
-                    const c = staffColor(idx, s.id);
-                    return (
-                      <Text key={s.id} style={[styles.cell, val === 0 && styles.zeroText, { color: val > 0 ? c.border : undefined }]}>
-                        {val > 0 ? val : '–'}
-                      </Text>
-                    );
-                  })}
-                  {formerStaff.length > 0 ? (
-                    <Text style={[styles.cell, styles.formerText]}>
-                      {(() => {
-                        const sum = formerStaff.reduce((acc, f) => acc + (counts[m]?.[String(f.id)] ?? 0), 0);
-                        return sum > 0 ? sum : '–';
-                      })()}
-                    </Text>
-                  ) : null}
-                  <Text style={[styles.cell, styles.totalCell, total > 0 && styles.totalBold]}>
-                    {total > 0 ? total : '–'}
-                  </Text>
-                </View>
+                <Text
+                  key={s.id}
+                  style={[styles.cell, styles.countCell, styles.headerText, { color: c.border }]}
+                  numberOfLines={1}
+                >
+                  {firstName(s.fullName)}
+                </Text>
               );
             })}
-
-            {/* Yıllık toplam satırı */}
-            <View style={[styles.row, styles.grandRow]}>
-              <Text style={[styles.cell, styles.monthCell, styles.grandText]}>Yıllık Toplam</Text>
-              {activeStaff.map((s, idx) => {
-                const val = staffTotals[String(s.id)] ?? 0;
-                const c = staffColor(idx, s.id);
-                return (
-                  <Text key={s.id} style={[styles.cell, styles.grandText, { color: c.border }]}>
-                    {val > 0 ? val : '–'}
-                  </Text>
-                );
-              })}
-              {formerStaff.length > 0 ? (
-                <Text style={[styles.cell, styles.grandText, styles.formerText]}>
-                  {formerStaff.reduce((acc, f) => acc + (staffTotals[String(f.id)] ?? 0), 0) || '–'}
-                </Text>
-              ) : null}
-              <Text style={[styles.cell, styles.totalCell, styles.grandText]}>{grandTotal || '–'}</Text>
-            </View>
+            {formerStaff.length > 0 ? (
+              <Text style={[styles.cell, styles.countCell, styles.headerText, styles.formerText]} numberOfLines={1}>
+                Eski
+              </Text>
+            ) : null}
+            <Text style={[styles.cell, styles.countCell, styles.countTotalCell, styles.headerText]}>Top.</Text>
           </View>
-        </ScrollView>
+
+          {/* Ay satırları */}
+          {MONTH_NAMES.map((name, m) => {
+            const total = monthTotals[m];
+            return (
+              <View key={m} style={[styles.row, styles.countRow, total === 0 && styles.rowEmpty]}>
+                <Text style={[styles.cell, styles.countCell, styles.countMonthCell]} numberOfLines={1}>{name}</Text>
+                {activeStaff.map((s, idx) => {
+                  const val = counts[m]?.[String(s.id)] ?? 0;
+                  const c = staffColor(idx, s.id);
+                  return (
+                    <Text
+                      key={s.id}
+                      style={[styles.cell, styles.countCell, val === 0 && styles.zeroText, { color: val > 0 ? c.border : undefined }]}
+                    >
+                      {val > 0 ? val : '–'}
+                    </Text>
+                  );
+                })}
+                {formerStaff.length > 0 ? (
+                  <Text style={[styles.cell, styles.countCell, styles.formerText]}>
+                    {(() => {
+                      const sum = formerStaff.reduce((acc, f) => acc + (counts[m]?.[String(f.id)] ?? 0), 0);
+                      return sum > 0 ? sum : '–';
+                    })()}
+                  </Text>
+                ) : null}
+                <Text style={[styles.cell, styles.countCell, styles.countTotalCell, total > 0 && styles.totalBold]}>
+                  {total > 0 ? total : '–'}
+                </Text>
+              </View>
+            );
+          })}
+
+          {/* Yıllık toplam satırı */}
+          <View style={[styles.row, styles.countRow, styles.grandRow]}>
+            <Text style={[styles.cell, styles.countCell, styles.countMonthCell, styles.grandText]}>Yıllık</Text>
+            {activeStaff.map((s, idx) => {
+              const val = staffTotals[String(s.id)] ?? 0;
+              const c = staffColor(idx, s.id);
+              return (
+                <Text key={s.id} style={[styles.cell, styles.countCell, styles.grandText, { color: c.border }]}>
+                  {val > 0 ? val : '–'}
+                </Text>
+              );
+            })}
+            {formerStaff.length > 0 ? (
+              <Text style={[styles.cell, styles.countCell, styles.grandText, styles.formerText]}>
+                {formerStaff.reduce((acc, f) => acc + (staffTotals[String(f.id)] ?? 0), 0) || '–'}
+              </Text>
+            ) : null}
+            <Text style={[styles.cell, styles.countCell, styles.countTotalCell, styles.grandText]}>
+              {grandTotal || '–'}
+            </Text>
+          </View>
+        </View>
 
         {isLoading && (sessions ?? []).length === 0 ? null : (sessions ?? []).length === 0 && !isLoading ? (
           <Text style={[styles.empty, wide]}>{year} yılına ait seans bulunamadı.</Text>
@@ -450,10 +457,6 @@ function RatingDetailSheet({
   );
 }
 
-const CELL_W = 80;
-const MONTH_CELL_W = 110;
-const TOTAL_CELL_W = 70;
-
 function makeStyles(colors: AppColors, theme: ResolvedTheme) {
   return StyleSheet.create({
     safe: { flex: 1, backgroundColor: colors.bg },
@@ -499,7 +502,6 @@ function makeStyles(colors: AppColors, theme: ResolvedTheme) {
     },
 
     cell: {
-      width: CELL_W,
       paddingHorizontal: 6,
       paddingVertical: 8,
       fontSize: 13,
@@ -507,13 +509,19 @@ function makeStyles(colors: AppColors, theme: ResolvedTheme) {
       color: colors.muted,
       textAlign: 'center',
     },
-    monthCell: { width: MONTH_CELL_W, textAlign: 'left', paddingLeft: 10 },
-    totalCell: { width: TOTAL_CELL_W },
     headerText: { fontSize: 11, fontWeight: '700', color: colors.muted },
     formerText: { color: surfaceTint(theme, 0.4) },
     zeroText: { color: surfaceTint(theme, 0.2) },
     totalBold: { fontWeight: '800', color: colors.text },
     grandText: { fontWeight: '800', color: colors.text },
+
+    // ── Seans sayıları tablosu ──
+    // Puan tablosuyla aynı düzen: sütunlar ekranı paylaşır, yatay kaydırma yok.
+    // 14 satır (12 ay + başlık + yıllık) tek ekrana sığsın diye satırlar sıkı.
+    countRow: { minHeight: 30 },
+    countCell: { flex: 1, width: undefined, paddingHorizontal: 2, paddingVertical: 5, fontSize: 12 },
+    countMonthCell: { flex: 0, width: 66, textAlign: 'left', paddingLeft: 4, fontSize: 11 },
+    countTotalCell: { flex: 0, width: 46 },
 
     // ── Sekmeler ──
     tabs: { flexDirection: 'row', gap: 6, paddingTop: 8 },
