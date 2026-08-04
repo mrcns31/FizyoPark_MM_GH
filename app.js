@@ -6874,6 +6874,11 @@ function renderReportsTable() {
 // ── Puan raporu ────────────────────────────────────────────────────────────
 
 /** Ortalamaya göre hücre sınıfı — kolon kimliği değil, değer önemli. */
+/** Sadece ad — mobil tablodaki firstName ile ayni davranis. */
+function ratingFirstName(full) {
+  return String(full || "").trim().split(/\s+/)[0] || full;
+}
+
 function ratingAvgClass(avg) {
   if (avg == null) return "";
   if (avg >= 4.5) return " reports-td--rating-good";
@@ -6891,7 +6896,10 @@ function ratingCellHtml(bucket, staffId, month, extraClass) {
     ? ' data-rating-staff="' + staffId + '"' + (month == null ? '' : ' data-rating-month="' + (month + 1) + '"')
     : "";
   var value = avg != null ? avg.toFixed(1) + " ★" : "–";
-  var sub = bucket.count > 0 ? '<span class="reports-rating-n">' + bucket.count + " değerlendirme</span>" : "";
+  // Mobil ile ayni: puan sayisi / puanlanabilir seans (or. 1/9)
+  var sub = bucket.count > 0
+    ? '<span class="reports-rating-n">' + bucket.count + "/" + (bucket.eligible || 0) + "</span>"
+    : "";
   return "<td class=\"" + cls + "\"" + attrs + "><span class=\"reports-rating-value\">" + value + "</span>" + sub + "</td>";
 }
 
@@ -6918,7 +6926,7 @@ function renderRatingsTable() {
   html += '<div class="reports-table-wrap"><table class="reports-table"><thead><tr>';
   html += "<th class=\"reports-th reports-th--month\">Ay</th>";
   rows.forEach(function (s) {
-    html += "<th class=\"reports-th" + (s.isFormer ? " reports-th--former" : "") + "\">" + escapeHtml(s.staffName) + "</th>";
+    html += "<th class=\"reports-th" + (s.isFormer ? " reports-th--former" : "") + "\">" + escapeHtml(ratingFirstName(s.staffName)) + "</th>";
   });
   html += "</tr></thead><tbody>";
 
