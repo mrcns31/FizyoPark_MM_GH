@@ -2,7 +2,7 @@
   "expo": {
     "name": "FizyoPark",
     "slug": "mobile-rn",
-    "version": "1.1.4",
+    "version": "1.1.5",
     "runtimeVersion": {
       "policy": "nativeVersion"
     },
@@ -14,18 +14,11 @@
     },
     "scheme": "fizyoparkrn",
     "orientation": "default",
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#E6F4FE"
-    },
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.fizyopark.mobilern",
-      "buildNumber": "2",
-
       "infoPlist": {
         "NSLocalNetworkUsageDescription": "Klinik yönetim sistemiyle yerel ağ üzerinden iletişim kurmak için kullanılır.",
         "ITSAppUsesNonExemptEncryption": false
@@ -54,7 +47,6 @@
     },
     "android": {
       "package": "com.fizyopark.mobilern",
-      "versionCode": 10,
       "googleServicesFile": "./google-services.json",
       "adaptiveIcon": {
         "backgroundColor": "#E6F4FE",
@@ -68,6 +60,15 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 220,
+          "resizeMode": "contain",
+          "backgroundColor": "#FFFFFF"
+        }
+      ],
       "expo-secure-store",
       "@react-native-community/datetimepicker",
       "expo-router",
