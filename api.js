@@ -924,7 +924,12 @@
       method: 'POST',
       body: JSON.stringify(payload),
     });
-    return sessionFromApi(row);
+    const session = sessionFromApi(row);
+    // Paket hakkı aştığı için sunucunun sessizce düşürdüğü seanslar — panelde uyarı gösterilir.
+    if (row && Array.isArray(row.droppedSessions) && row.droppedSessions.length > 0) {
+      session.droppedSessions = row.droppedSessions;
+    }
+    return session;
   }
   async function updateSession(id, body) {
     const payload = {};
@@ -933,7 +938,11 @@
     });
     const res = await apiFetch('/sessions/' + id, { method: 'PUT', body: JSON.stringify(payload) });
     const session = res && res.session ? res.session : res;
-    return session && session.id ? sessionFromApi(session) : { ...payload, id: parseInt(id, 10) };
+    const mapped = session && session.id ? sessionFromApi(session) : { ...payload, id: parseInt(id, 10) };
+    if (res && Array.isArray(res.droppedSessions) && res.droppedSessions.length > 0) {
+      mapped.droppedSessions = res.droppedSessions;
+    }
+    return mapped;
   }
   /**
    * Aynı tarih/saatteki iki seansın personelini (ve odasını) tek işlemde takas eder.

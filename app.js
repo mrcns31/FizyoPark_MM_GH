@@ -12706,6 +12706,10 @@ async function saveSessionFromModal() {
     }
   }
 
+  // Sunucu, paket hakkı aşıldığı için paketin son randevusunu düşürmüş olabilir; kaydetme
+  // bittikten sonra admin'e bildirilir (eskiden sessizce siliniyordu).
+  var droppedSessionsNotice = null;
+
   if (window.API && window.API.getToken()) {
     try {
       var editPwd = {};
@@ -12728,9 +12732,11 @@ async function saveSessionFromModal() {
         if (editPwd.adminPassword) updatePayload.adminPassword = editPwd.adminPassword;
         const updated = await window.API.updateSession(ui.editingSessionId, updatePayload);
         mergeSessionsIntoState([updated]);
+        droppedSessionsNotice = updated && updated.droppedSessions;
       } else {
         const created = await window.API.createSession(candidate);
         mergeSessionsIntoState([created]);
+        droppedSessionsNotice = created && created.droppedSessions;
       }
     } catch (e) {
       if (e.status === 404) {
@@ -12766,6 +12772,19 @@ async function saveSessionFromModal() {
   }
   closeSessionModal();
   render();
+
+  if (droppedSessionsNotice && droppedSessionsNotice.length > 0) {
+    var dropped = droppedSessionsNotice
+      .map(function (d) {
+        var dt = new Date(Number(d.startTs));
+        return `${fmtPackageSessionDate(dt)} ${fmtPackageSessionTime(dt)}`;
+      })
+      .join(", ");
+    await showAppAlert(
+      `Paket hakkı dolduğu için şu randevu${droppedSessionsNotice.length > 1 ? "lar" : ""} programdan düşürüldü: ${dropped}. Üyenin kalmasını istiyorsan paket seans sayısını artır veya randevuyu yeniden ekle.`,
+      { title: "Randevu düşürüldü" }
+    );
+  }
 }
 
 async function deleteSessionFromModal() {

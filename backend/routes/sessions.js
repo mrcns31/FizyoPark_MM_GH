@@ -81,6 +81,9 @@ router.use(verifyToken);
 
 /**
  * Pakette lesson_count aşıldıysa en son tarihli seans(lar)ı siler. excludeSessionId verilirse o seans hariç tutulur (yeni eklenen silinmesin).
+ * Düşürülen seanslar üyenin takviminden habersizce kaybolmasın diye geriye döner; çağıranlar
+ * bunu activity log'a yazar ve API yanıtında panele bildirir.
+ * @returns {Promise<Array<{ id: number, startTs: number }>>}
  */
 async function trimPackageSessionsIfOver(db, memberPackageId, excludeSessionId = null) {
   const pkg = await db.query(
@@ -93,23 +96,50 @@ async function trimPackageSessionsIfOver(db, memberPackageId, excludeSessionId =
     [memberPackageId]
   );
   const count = countRes.rows[0]?.cnt ?? 0;
-  if (count <= lessonCount) return;
+  if (count <= lessonCount) return [];
   const toRemove = count - lessonCount;
   let lastSessions;
   if (excludeSessionId != null) {
     lastSessions = await db.query(
-      'SELECT id FROM sessions WHERE member_package_id = $1 AND (deleted_at IS NULL) AND id != $2 ORDER BY start_ts DESC LIMIT $3',
+      'SELECT id, start_ts FROM sessions WHERE member_package_id = $1 AND (deleted_at IS NULL) AND id != $2 ORDER BY start_ts DESC LIMIT $3',
       [memberPackageId, excludeSessionId, toRemove]
     );
   } else {
     lastSessions = await db.query(
-      'SELECT id FROM sessions WHERE member_package_id = $1 AND (deleted_at IS NULL) ORDER BY start_ts DESC LIMIT $2',
+      'SELECT id, start_ts FROM sessions WHERE member_package_id = $1 AND (deleted_at IS NULL) ORDER BY start_ts DESC LIMIT $2',
       [memberPackageId, toRemove]
     );
   }
+  const dropped = [];
   for (const row of lastSessions.rows) {
     await db.query('UPDATE sessions SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1', [row.id]);
+    dropped.push({ id: row.id, startTs: Number(row.start_ts) });
   }
+  if (dropped.length > 0) {
+    console.warn('[trimPackageSessions] paket hakkı aşıldı, son seans(lar) düşürüldü', {
+      memberPackageId,
+      lessonCount,
+      count,
+      dropped: dropped.map((d) => new Date(d.startTs).toISOString()),
+    });
+  }
+  return dropped;
+}
+
+/** Düşürülen seansları activity log'a yazar; sessiz silme kalmasın. */
+async function logTrimmedSessions(req, memberPackageId, dropped) {
+  if (!dropped || dropped.length === 0) return;
+  await activityLog(req, {
+    action: 'session.trim_auto',
+    entityType: 'member_package',
+    entityId: memberPackageId,
+    details: {
+      memberPackageId,
+      droppedSessionIds: dropped.map((d) => d.id),
+      droppedStartTs: dropped.map((d) => d.startTs),
+      reason: 'lesson_count_exceeded',
+    },
+  }).catch(() => {});
 }
 
 // Seansları listele (filtreleme ile)
@@ -439,12 +469,15 @@ router.post('/', [
       }
       const created = await db.query('SELECT * FROM sessions WHERE id = $1', [placed.sessionId]);
       const createdRow = created.rows[0];
-      if (memberPackageId && !skipTrim) await trimPackageSessionsIfOver(db, memberPackageId, createdRow?.id);
+      const dropped = (memberPackageId && !skipTrim)
+        ? await trimPackageSessionsIfOver(db, memberPackageId, createdRow?.id)
+        : [];
+      await logTrimmedSessions(req, memberPackageId, dropped);
       if (createdRow) {
         await activityLog(req, { action: 'session.create', entityType: 'session', entityId: createdRow.id, details: { staffId, memberId, roomId: createdRow.room_id, startTs, endTs } }).catch(() => {});
         matchWalkInToSession(db, createdRow.id).catch(() => {});
       }
-      return res.status(201).json(createdRow);
+      return res.status(201).json({ ...createdRow, droppedSessions: dropped });
     }
 
     // Oda açıkça belirtildi: tüm odaları kilitle, ekle ve rebalance et.
@@ -472,12 +505,15 @@ router.post('/', [
       const created = await client.query('SELECT * FROM sessions WHERE id = $1', [sessionId]);
       await client.query('COMMIT');
       const createdRow = created.rows[0];
-      if (memberPackageId && !skipTrim) await trimPackageSessionsIfOver(db, memberPackageId, createdRow?.id);
+      const dropped = (memberPackageId && !skipTrim)
+        ? await trimPackageSessionsIfOver(db, memberPackageId, createdRow?.id)
+        : [];
+      await logTrimmedSessions(req, memberPackageId, dropped);
       if (createdRow) {
         await activityLog(req, { action: 'session.create', entityType: 'session', entityId: createdRow.id, details: { staffId, memberId, roomId: createdRow.room_id, startTs, endTs } }).catch(() => {});
         matchWalkInToSession(db, createdRow.id).catch(() => {});
       }
-      return res.status(201).json(createdRow);
+      return res.status(201).json({ ...createdRow, droppedSessions: dropped });
     } catch (err) {
       if (client) await client.query('ROLLBACK').catch(() => {});
       throw err;
@@ -606,7 +642,8 @@ router.put('/:id', [
         const result = await client.query('SELECT * FROM sessions WHERE id = $1', [id]);
         await client.query('COMMIT');
 
-        if (finalMpId && !skipTrim) await trimPackageSessionsIfOver(db, finalMpId);
+        const dropped = (finalMpId && !skipTrim) ? await trimPackageSessionsIfOver(db, finalMpId) : [];
+        await logTrimmedSessions(req, finalMpId, dropped);
         const updated = result.rows[0];
         if (updated) {
           await activityLog(req, { action: 'session.update', entityType: 'session', entityId: id, details: { staffId: updated.staff_id, memberId: updated.member_id } }).catch(() => {});
@@ -615,7 +652,7 @@ router.put('/:id', [
             handleStartTsChange(id, finalMemberId, finalStartTs).catch(() => {});
           }
         }
-        return res.json({ message: 'Seans güncellendi', session: updated });
+        return res.json({ message: 'Seans güncellendi', session: updated, droppedSessions: dropped });
       } catch (err) {
         await client.query('ROLLBACK').catch(() => {});
         throw err;
@@ -628,7 +665,8 @@ router.put('/:id', [
     const query = `UPDATE sessions SET ${updateFields.join(', ')} WHERE id = $${paramIndex} RETURNING *`;
 
     const result = await db.query(query, values);
-    if (finalMpId && !skipTrim) await trimPackageSessionsIfOver(db, finalMpId);
+    const dropped = (finalMpId && !skipTrim) ? await trimPackageSessionsIfOver(db, finalMpId) : [];
+    await logTrimmedSessions(req, finalMpId, dropped);
     const updated = result.rows[0];
     if (updated) {
       await activityLog(req, { action: 'session.update', entityType: 'session', entityId: id, details: { staffId: updated.staff_id, memberId: updated.member_id } }).catch(() => {});
@@ -637,7 +675,7 @@ router.put('/:id', [
         handleStartTsChange(id, finalMemberId, finalStartTs).catch(() => {});
       }
     }
-    res.json({ message: 'Seans güncellendi', session: updated });
+    res.json({ message: 'Seans güncellendi', session: updated, droppedSessions: dropped });
   } catch (error) {
     console.error('Session update error:', error);
     res.status(500).json({ error: 'Seans güncellenirken bir hata oluştu' });

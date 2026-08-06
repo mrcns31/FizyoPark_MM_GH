@@ -141,9 +141,14 @@ export async function addNextSessionAfterLastForPackage(db, memberPackageId, opt
       return { added: false, reason: 'no_slots' };
     }
 
+    // Yalnızca ÜYENİN iptal ettiği tarihler telafiye kapalıdır — üye "o gün gelemem" demiştir.
+    // Sistemin kendi sildikleri (deleted_by NULL: paket yeniden planlama, hak taşması trim'i) ve
+    // admin iptalleri atlanmaz; atlanırsa o tarih pakette kalıcı olarak kullanılamaz hale gelir ve
+    // telafi bir sonraki slota kayar. Aynı kural toplu üretimde de geçerli (member-packages.js).
     const cancelledRes = await db.query(
-      `SELECT DISTINCT start_ts FROM sessions
-       WHERE member_package_id = $1 AND deleted_at IS NOT NULL`,
+      `SELECT DISTINCT s.start_ts FROM sessions s
+       JOIN users du ON du.id = s.deleted_by AND du.role = 'member'
+       WHERE s.member_package_id = $1 AND s.deleted_at IS NOT NULL`,
       [memberPackageId]
     );
     const cancelledStartTs = new Set(
@@ -153,19 +158,38 @@ export async function addNextSessionAfterLastForPackage(db, memberPackageId, opt
       cancelledStartTs.add(Number(options.skipStartTs));
     }
 
+    // Kapanış (tatil) günlerine telafi seansı yerleştirilmez. Önceden bu koruma yoktu; yukarıdaki
+    // filtre daraldığı için burada açıkça kontrol edilmeli.
+    const closureRes = await db.query(
+      'SELECT start_date::text AS start_date, end_date::text AS end_date FROM closure_periods'
+    );
+    const closureRanges = closureRes.rows.map((r) => ({
+      start: String(r.start_date).slice(0, 10),
+      end: String(r.end_date).slice(0, 10),
+    }));
+    const isClosedDay = (dateStr) =>
+      closureRanges.some((r) => dateStr >= r.start && dateStr <= r.end);
+
+    // Atlanan adaylar: telafinin neden ileri bir tarihe kaydığı loglardan görülebilsin.
+    const skipped = [];
+
     for (let d = new Date(startDay.getTime()); d.getTime() <= end.getTime(); d.setDate(d.getDate() + 1)) {
       const dayOfWeek = d.getDay();
+      // buildPackageSessionInsertPlan ile tutarlı: Türkiye saati (+03:00) kullan
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      if (isClosedDay(dateStr)) continue;
       for (const slot of slots) {
         if (Number(slot.day_of_week) !== dayOfWeek) continue;
         const timeStr = String(slot.start_time || '08:00');
         const [h, m] = timeStr.split(':').map((x) => parseInt(x, 10) || 0);
-        // buildPackageSessionInsertPlan ile tutarlı: Türkiye saati (+03:00) kullan
-        const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
         const slotStart = new Date(`${dateStr}T${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:00+03:00`);
         const startTs = slotStart.getTime();
         const endTs = startTs + SLOT_DURATION_MS;
 
-        if (cancelledStartTs.has(startTs)) continue;
+        if (cancelledStartTs.has(startTs)) {
+          skipped.push(`${dateStr} ${timeStr}: üye daha önce iptal etmiş`);
+          continue;
+        }
 
         const dup = await db.query(
           `SELECT id FROM sessions
@@ -173,7 +197,10 @@ export async function addNextSessionAfterLastForPackage(db, memberPackageId, opt
            LIMIT 1`,
           [memberPackageId, member_id, startTs]
         );
-        if (dup.rows.length > 0) continue;
+        if (dup.rows.length > 0) {
+          skipped.push(`${dateStr} ${timeStr}: zaten seans var`);
+          continue;
+        }
 
         const placed = await placeSessionWithRebalance(db, {
           staffId: slot.staff_id,
@@ -182,9 +209,19 @@ export async function addNextSessionAfterLastForPackage(db, memberPackageId, opt
           memberId: member_id,
           memberPackageId,
         });
-        if (!placed.ok) continue;
+        if (!placed.ok) {
+          skipped.push(`${dateStr} ${timeStr}: ${placed.error || 'yerleştirilemedi'}`);
+          continue;
+        }
 
-        return { added: true, sessionId: placed.sessionId };
+        if (skipped.length > 0) {
+          console.warn('addNextSessionAfterLastForPackage: aday tarihler atlandı', {
+            memberPackageId,
+            yerlesen: `${dateStr} ${timeStr}`,
+            atlananlar: skipped,
+          });
+        }
+        return { added: true, sessionId: placed.sessionId, skipped };
       }
     }
 
@@ -194,6 +231,7 @@ export async function addNextSessionAfterLastForPackage(db, memberPackageId, opt
       end: end.toISOString(),
       count,
       lesson_count,
+      atlananlar: skipped,
     });
     return { added: false, reason: 'no_available_slot' };
   } catch (err) {
