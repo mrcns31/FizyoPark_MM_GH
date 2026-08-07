@@ -1172,6 +1172,7 @@ function cacheEls() {
     "mcClinicalConditions",
     "mcPastOperations",
     "memberCardError",
+    "printMemberContractBtn",
     "saveMemberCardBtn",
     "resetMemberPasswordBtn",
     "deleteMemberCardBtn",
@@ -9489,10 +9490,12 @@ async function initFormerMembersHubPanel() {
           '<div style="font-weight:600; margin-bottom:8px;">' + escapeHtml(infoText) + '</div>' +
           '<div style="display:flex; gap:8px; flex-wrap:wrap;">' +
           '<button type="button" class="btn btn--xs btn--ghost" data-hub-former-card="' + m.id + '">Kimlik Kartı</button>' +
+          '<button type="button" class="btn btn--xs btn--ghost" data-hub-former-contract="' + m.id + '">🖨️ Sözleşme</button>' +
           '<button type="button" class="btn btn--xs btn--ghost" data-hub-former-sessions="' + m.id + '">Eski Paketler</button>' +
           '<button type="button" class="btn btn--xs btn--primary" data-hub-former-reactivate="' + m.id + '">Aktif Et</button>' +
           '</div>';
         div.querySelector("[data-hub-former-card]").addEventListener("click", function () { openFormerMemberCard(m.id); });
+        div.querySelector("[data-hub-former-contract]").addEventListener("click", function () { printMemberContract(m); });
         div.querySelector("[data-hub-former-sessions]").addEventListener("click", function () { openFormerMemberSessions(m.id); });
         div.querySelector("[data-hub-former-reactivate]").addEventListener("click", function () { reactivateFormerMemberById(m.id); });
         resultsEl.appendChild(div);
@@ -10228,6 +10231,7 @@ function openMemberCard(memberId) {
   if (els.memberCardError) { els.memberCardError.classList.add("hidden"); els.memberCardError.textContent = ""; }
   if (els.deleteMemberCardBtn) els.deleteMemberCardBtn.style.display = m ? "inline-block" : "none";
   if (els.memberPackageInfoBtn) els.memberPackageInfoBtn.style.display = m ? "inline-block" : "none";
+  if (els.printMemberContractBtn) els.printMemberContractBtn.style.display = m ? "inline-block" : "none";
   if (els.resetMemberPasswordBtn) {
     els.resetMemberPasswordBtn.classList.toggle("hidden", !isAdminUser() || !m || !m.email);
     els.resetMemberPasswordBtn.onclick = m ? function () { resetMemberPasswordForCard(m.id); } : null;
@@ -13289,6 +13293,7 @@ function renderExpiredMembershipsTable() {
       <td>
         <span class="expired-memberships-table__actions">
           <button type="button" class="btn btn--xs btn--ghost btn--icon-action" data-action="member-card" title="Kimlik Kartı" aria-label="Kimlik Kartı">🪪</button>
+          <button type="button" class="btn btn--xs btn--ghost btn--icon-action" data-action="contract" title="Kayıt Sözleşmesi Yazdır" aria-label="Kayıt Sözleşmesi Yazdır">🖨️</button>
           ${showNewPackageBtn ? '<button type="button" class="btn btn--xs btn--ghost btn--icon-action" data-action="new-package" title="Yeni Paket" aria-label="Yeni Paket">➕</button>' : ""}
         </span>
       </td>
@@ -13299,6 +13304,9 @@ function renderExpiredMembershipsTable() {
     });
     row.querySelector("[data-action='member-card']").addEventListener("click", function (e) {
       e.stopPropagation(); openMemberCard(memberId);
+    });
+    row.querySelector("[data-action='contract']").addEventListener("click", function (e) {
+      e.stopPropagation(); printMemberContract(memberId);
     });
     const newPkgBtn = row.querySelector("[data-action='new-package']");
     if (newPkgBtn) newPkgBtn.addEventListener("click", function (e) {
@@ -13447,6 +13455,7 @@ function renderFormerMembersTable() {
       '<td class="expired-memberships-table__package">' + escapeHtml(String(pkgCount)) + "</td>" +
       '<td><span class="expired-memberships-table__actions">' +
       '<button type="button" class="btn btn--xs btn--ghost btn--icon-action" data-former-card="' + m.id + '" title="Kimlik Kartı" aria-label="Kimlik Kartı">🪪</button>' +
+      '<button type="button" class="btn btn--xs btn--ghost btn--icon-action" data-former-contract="' + m.id + '" title="Kayıt Sözleşmesi Yazdır" aria-label="Kayıt Sözleşmesi Yazdır">🖨️</button>' +
       '<button type="button" class="btn btn--xs btn--primary btn--icon-action" data-former-reactivate="' + m.id + '" title="Tekrar Aktif Et" aria-label="Tekrar Aktif Et">↺</button>' +
       "</span></td>";
     row.addEventListener("click", function (e) {
@@ -13458,6 +13467,13 @@ function renderFormerMembersTable() {
       cardBtn.addEventListener("click", function (e) {
         e.stopPropagation();
         openFormerMemberCard(parseInt(cardBtn.getAttribute("data-former-card"), 10));
+      });
+    }
+    var contractBtn = row.querySelector("[data-former-contract]");
+    if (contractBtn) {
+      contractBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        printMemberContract(m);
       });
     }
     var reactivateBtn = row.querySelector("[data-former-reactivate]");
@@ -13827,6 +13843,10 @@ async function openListMembersModal({ resetFilters = true } = {}) {
       e.stopPropagation();
       openMemberCard(m.id);
     });
+    el.querySelector('[data-action="contract"]').addEventListener("click", (e) => {
+      e.stopPropagation();
+      printMemberContract(m.id);
+    });
     el.querySelector('[data-action="package"]').addEventListener("click", (e) => {
       e.stopPropagation();
       openMemberPackageModal(m.id, mp.id);
@@ -13840,6 +13860,7 @@ async function openListMembersModal({ resetFilters = true } = {}) {
   function memberListActionButtonsHtml() {
     return (
       '<button type="button" class="btn btn--xs btn--ghost btn--icon-action" data-action="card" title="Kimlik Kartı" aria-label="Kimlik Kartı">🪪</button>' +
+      '<button type="button" class="btn btn--xs btn--ghost btn--icon-action" data-action="contract" title="Kayıt Sözleşmesi Yazdır" aria-label="Kayıt Sözleşmesi Yazdır">🖨️</button>' +
       '<button type="button" class="btn btn--xs btn--ghost btn--icon-action" data-action="package" title="Paket" aria-label="Paket">📦</button>' +
       '<button type="button" class="btn btn--xs btn--ghost btn--icon-action" data-action="delete" title="Sil" aria-label="Sil">🗑️</button>'
     );
@@ -14189,6 +14210,155 @@ function openBroadcastModal(memberIds) {
   });
 
   setTimeout(function () { titleInp.focus(); }, 100);
+}
+
+/** Kayıt sözleşmesindeki telefon formatı: 0(5XX) XXX XX XX */
+function contractPhone(value) {
+  const d = String(value == null ? "" : value).replace(/\D/g, "");
+  if (d.length !== PHONE_MAX_DIGITS) return String(value || "");
+  return `0(${d.slice(0, 3)}) ${d.slice(3, 6)} ${d.slice(6, 8)} ${d.slice(8, 10)}`;
+}
+
+/** Kayıt sözleşmesindeki tarih formatı: gg.aa.yyyy */
+function contractDate(dateStr) {
+  if (!dateStr) return "";
+  const parts = String(dateStr).slice(0, 10).split("-");
+  if (parts.length !== 3) return String(dateStr);
+  return parts[2] + "." + parts[1] + "." + parts[0];
+}
+
+/**
+ * "Fizyopark Kayıt Sözleşmesi" şablonunu üyenin bilgileriyle doldurup yazdırma penceresinde açar.
+ * Parametre olarak üye id'si ya da doğrudan üye nesnesi verilebilir (eski üyeler state.members'ta olmaz).
+ */
+function printMemberContract(memberOrId) {
+  const m = (memberOrId && typeof memberOrId === "object")
+    ? memberOrId
+    : state.members.find((x) => normId(x.id) === normId(memberOrId));
+  if (!m) return;
+
+  // Aktif üyeler camelCase, eski üye kayıtları (API /former) snake_case döner
+  const f = (camel, snake) => m[camel] ?? m[snake] ?? "";
+
+  const e = escapeHtml;
+  const fullName = getMemberFullName(m) || "";
+  const phoneRaw = f("phone", "phone");
+  const phone = phoneRaw ? contractPhone(phoneRaw) : "";
+  const email = f("email", "email");
+  const birth = contractDate(f("birthDate", "birth_date"));
+  const profession = f("profession", "profession");
+  const contactPhoneRaw = f("contactPhone", "contact_phone");
+  // "DOĞUM TARİHİ/MESLEĞİ" ve "TELEFON/E-POSTA" tek satırda iki bilgi taşır
+  const birthProfession = [birth, profession].filter(Boolean).join(" / ");
+  const phoneEmail = [phone, email].filter(Boolean).join(" / ");
+  const contact = [f("contactName", "contact_name"), contactPhoneRaw ? contractPhone(contactPhoneRaw) : ""]
+    .filter(Boolean).join(" – ");
+
+  const infoRows = [
+    ["ÜYE NO", e(f("memberNo", "member_no"))],
+    ["ÜYE ADI SOYADI", e(fullName)],
+    ["T.C. KİMLİK NUMARASI", ""],
+    ["DOĞUM TARİHİ/MESLEĞİ", e(birthProfession)],
+    ["TELEFON/E-POSTA", e(phoneEmail)],
+    ["ADRESİ", e(f("address", "address"))],
+    ["ÜYE YAKINI ADI SOYADI TEL", e(contact)],
+    ["SİSTEMİK HASTALIKLARI (KALP, TANSİYON, ŞEKER vb.)", e(f("systemicDiseases", "systemic_diseases"))],
+    ["KLİNİK RAHATSIZLIKLARI (FITIK, KİREÇLEME vb.)", e(f("clinicalConditions", "clinical_conditions"))],
+    ["VARSA GEÇİRDİĞİ OPERASYONLAR", e(f("pastOperations", "past_operations"))],
+  ].map(([label, value]) => `<tr><th>${label}</th><td>${value}</td></tr>`).join("");
+
+  const clauses = [
+    "1.İşbu sözleşmenin imzalanması ile birlikte Üye, FizyoPark tarafından oluşturulacak en fazla 2'şer kişilik gruplara katılmayı ve oluşturulan gruplar ile birlikte egzersiz, pilates ve fonksiyonel antrenman seans sayısı üzerinden ücret ödemeyi, FizyoPark ise sözleşme kapsamında ve sözleşme süresi boyunca taahhüt ettiği egzersiz veya pilates veya fonksiyonel antrenman hizmeti vermeyi kabul etmiştir.",
+    "2.Üye tarafından seçilen Seans Paketi/Seans Sayısı ile üyelik ücreti iş bu kayıt sözleşmesinin 8.maddesinesindeki seçilen pakete göre müzakere edilmiş ve kararlaştırılmıştır.",
+    "3.Seans süreleri 45 (kırkbeş) dakika olup Üye, seansın başlamasından en geç 15 dakika önce FizyoPark'ta olmayı kabul etmiştir. Üye, seans başladıktan sonra seansa katıldığı takdirde seans normal saatinde bitirilecektir. FizyoPark'tan kaynaklanan nedenlerle seansın geç başlaması ya da hiç yapılamaması halinde bu durum mutlaka telafi edilecektir.",
+    "4. Üye, kendi isteğine göre oluşturulan ve telafisiz paket niteliğinde olan Aylık8 ve Aylık12 paketlerini tercih etmiş ise anılan paketler hariç diğer paketlerde kendisinden kaynaklanan sebeplerle planlanan seansa katılamayacak ise bu durumu, seansın başlamasından en az 2 saat önce FizyoPark'a bildirmek zorunda olup, aksi halde mazerete bakılmaksızın Üyenin seansa katıldığı kabul edilecek ve telafi seansı yapılmayacaktır. Süresinde mazeret bildirilmek suretiyle seansa iştirak edilmemesi halinde ise, uygun gün ve saatte telafi yapılacaktır. Telafisiz paket niteliğindeki Aylık8 ve Aylık12 paketlerinde seans katılım gün ve saatleri kayıt sırasında Üye tarafından belirlenmiştir. Üye, hangi nedenle olursa olsun belirlediği seanslara katılmadığı takdirde kendisine telafi hakkı tanınmayacak, seans yapılmış kabul edilecektir.",
+    "5.FizyoPark, Pazar günleri hariç haftanın diğer günlerinde faaliyet göstermekte olup, günlük çalışma/seans saatleri ise sabah 08:00, akşam 20:00 arasındadır. Resmi ve dini bayram günleri ile genel tatil günlerinde FizyoPark kapalı olacağından seans yapılmayacaktır.",
+    "6.İşbu sözleşme, Üyenin oluşturulacak gruplar ile birlikte spor faaliyetlerinde bulunması esasına göre tanzim ve imza edilmiş olup, cinsiyet, yaş, yetenek, bünye, sağlık durumu vb. hususlar göz önünde bulundurulmak suretiyle Üyenin katılacağı seanslar ile oluşturulacak gruplar belirlenecektir. Grup belirlemesi sırasında mümkün olduğu ölçüde Üye koşulları dikkate alınarak planlama yapılacak ve planlama doğrultusunda oluşturulan program dahilinde spor faaliyetleri yürütülecektir.",
+    "7.İşbu sözleşme kapsamında Üye tarafından seçilen paket ve seansların sayısı ile kullanım süresi aşağıda paket halinde gösterilmiştir. Her kullanımdan sonra Üye, kullanım gününe ilişkin FizyoPark Ödeme Taahhütnamesi ve Seans Katılım Formunu imzalayacak ve/veya elektronik ortamda kayıt tutulacak olup, uyuşmazlık halinde anılan kayıtlar esas alınacaktır. FizyoPark tarafından çeşitli araçlarla yapılacak hatırlatmaya rağmen paket süresinin Fizyopark Ödeme Taahhütnamesi ve Seans Katılım Formlarında belirlenen tarihler arasında kullanılmaması halinde Üye, hiçbir iade talebinde bulunmayacak, kullanılmayan seans günlerinin sonraki günlere aktarılmasını talep edemeyecek, Üyeden kaynaklanan nedenlerle süresinde kullanılmayan seanslar iptal edilmiş olacaktır.",
+  ];
+
+  const packageLines = [
+    "a.Aylık8 (haftada 2 gün telafisiz) paketi 1 ay,",
+    "b.Aylık12 (haftada 3 gün telafisiz) paketi 1 ay,",
+    "c.12 seanslık paketler maksimum 2 ay,",
+    "d.24 seanslık paketler maksimum 4 ay,",
+    "e.36 seanslık paketler maksimum 6 ay,",
+    "f.Klinik Pilates 10 Seans Paketi 2 ay,",
+  ];
+
+  const clauses2 = [
+    "8.Seans Paketlerinin tamamen ya da kısmen akrabalar dahil üçüncü kişilere devri yanında herhangi bir nedenle dondurulması mümkün olmayıp, kullanım hak ve yetkisi münhasıran Üyeye aittir.",
+    "9.Egzersiz, pilates ve fonksiyonel antrenman faaliyetleri sırasında karşılaşılabilecek sağlık sorunları nedeniyle sorumluluk Üyeye ait olacaktır.",
+    "10.Gebelik şüphesi olan Üyenin bu durumu derhal FizyoPark Eğitmenlerine bildirmesi gerekmektedir. Doktorundan “Pilates yapmasında herhangi bir sakınca yoktur.” yazısını getirmeyen Gebe Üye ise, hiçbir şekilde Gebe Pilatesi seanslarına katılamayacaktır.",
+    "11.İşbu sözleşmeyi imzalayan Üye, spor faaliyeti sırasında uzunsa saçlarını toplamayı, kullanılan spor aletlerine zarar verebilecek sivri ve kesici nitelikte takı, toka, saat vb. şeyleri salonda kullanmamayı taahhüt etmiştir. Üye, spor faaliyeti için gerekli temiz spor kıyafetini, spor çorabını, ter havlusunu, sadece FizyoPark'ta kullanılacak temiz spor ayakkabısını temin ve yanında bulundurmakla yükümlüdür.",
+    "12.18 yaşını ikmal etmemiş olanların üyeliği için velilerinin sözleşmeyi imzalaması ve küçüklerin etkinliklere katılmasına yazılı olarak onay vermeleri gerekmektedir.",
+    "13.İşbu sözleşmenin uygulanmasından doğacak uyuşmazlıklarda Ankara Mahkemeleri ve İcra Dairelerinin yetkili olacağı hususunda taraflar arasında anlaşmaya varılmıştır.",
+    "14.FizyoPark, işbu sözleşme kapsamında edindiği kişisel verileri korumak, adli ve idari makamlarca resmi olarak talep edilmediği takdirde hiçbir kişi ya da kuruluşla paylaşmamakla yükümlüdür.",
+    "15.6563 sayılı Kanun ile Ticari İletişim ve Ticari Elektronik İletiler Hakkında Yönetmelik hükümlerine göre işbu sözleşmede yazılı veya sonradan tarafımdan bildirilecek olan elektronik iletişim adreslerime Ticari Elektronik İleti gönderilmesini;",
+  ];
+
+  const intro =
+    "Halen “Prof. Dr. Ahmet Kışlalı Mahallesi İlko Sitesi 2822. Sokak No:2 Çayyolu/Ankara” adresinde " +
+    "faaliyetlerini sürdüren Cansu Mullaoğlu-FizyoPark Ankara Sağlıklı Yaşam Merkezi ile (bundan böyle kısaca " +
+    "“FizyoPark” olarak anılacaktır) <strong>" + e(fullName) + "</strong> arasında (Bundan böyle kısaca " +
+    "“Üye” olarak anılacaktır) aşağıdaki koşullarda Kayıt Sözleşmesi imzalanmıştır.";
+
+  const clause16 =
+    "16. Toplam 16 maddeden ve 2 sayfadan oluşan işbu sözleşmenin tüm hükümleri ile Üye ile mutabataka varılan " +
+    "kayıt ücreti taraflar arasında müzakere edilmiş, Üye \"spor yapmasına engel olacak önemli bir hastalık veya " +
+    "tıbbi bir operasyon geçirmediğini\" beyan ve taahhüt etmiş, akdedilen sözleşmenin onaylı bir sureti Üyeye " +
+    "teslim edilmiştir…../…../………";
+
+  const html =
+    "<!DOCTYPE html><html lang=\"tr\"><head><meta charset=\"UTF-8\">" +
+    "<title>Kayıt Sözleşmesi – " + e(fullName) + "</title><style>" +
+    "@page { size: A4; margin: 15mm 14mm; }" +
+    "* { margin:0; padding:0; box-sizing:border-box; }" +
+    "body { font-family: Calibri, Carlito, Arial, sans-serif; font-size: 11pt; line-height: 1.25; color:#000; }" +
+    "h1 { font-size: 12pt; text-align:center; }" +
+    "h2 { font-size: 12pt; text-align:center; margin-bottom: 10px; }" +
+    "table.info { width:100%; border-collapse:collapse; margin-bottom:10px; }" +
+    "table.info th, table.info td { border:1px solid #000; padding:3px 5px; font-size:11pt; vertical-align:middle; }" +
+    "table.info th { width:31%; text-align:left; font-weight:bold; }" +
+    "table.info td { height: 22px; }" +
+    "p.clause { text-align: justify; margin-bottom: 4px; page-break-inside: avoid; }" +
+    "p.pkg { text-align: justify; margin-left: 10mm; }" +
+    "table.choice { width:100%; border-collapse:collapse; margin:10px 0; }" +
+    "table.choice td { border:1px solid #000; padding:6px 5px; text-align:center; font-size:11pt; }" +
+    "table.choice td.box { height: 34px; }" +
+    "table.sign { width:100%; border-collapse:collapse; margin-top:14px; }" +
+    "table.sign td { border:1px solid #000; padding:6px 5px; text-align:center; font-size:11pt; }" +
+    "table.sign td.box { height: 70px; }" +
+    ".pagebreak { page-break-before: always; }" +
+    "</style></head><body>" +
+    "<h1>FİZYOPARK SAĞLIKLI YAŞAM MERKEZİ</h1><h2>KAYIT SÖZLEŞMESİ</h2>" +
+    "<table class=\"info\"><tbody>" + infoRows + "</tbody></table>" +
+    "<p class=\"clause\">" + intro + "</p>" +
+    clauses.map((c) => "<p class=\"clause\">" + e(c) + "</p>").join("") +
+    "<p class=\"clause\">Seansların sayısı ve kullanım süreleri (1 ay 30 gün kabul edilmek suretiyle);</p>" +
+    packageLines.map((c) => "<p class=\"pkg\">" + e(c) + "</p>").join("") +
+    "<p class=\"clause\">olarak belirlenmiş olup, tercih edilen kullanım süresi ile sürenin başlangıç ve bitiş " +
+    "tarihleri, Fizyopark Ödeme Taahhütnamesi ve Seans Katılım Formunda gösterilmiştir.</p>" +
+    clauses2.map((c) => "<p class=\"clause\">" + e(c) + "</p>").join("") +
+    "<table class=\"choice\"><tbody>" +
+    "<tr><td>KABUL EDİYORUM</td><td>KABUL ETMİYORUM</td></tr>" +
+    "<tr><td class=\"box\"></td><td class=\"box\"></td></tr>" +
+    "</tbody></table>" +
+    "<p class=\"clause\">" + e(clause16) + "</p>" +
+    "<table class=\"sign\"><tbody>" +
+    "<tr><td>ÜYE İMZA</td><td>FİZYOPARK SYM</td></tr>" +
+    "<tr><td class=\"box\"></td><td class=\"box\"></td></tr>" +
+    "</tbody></table>" +
+    "</body></html>";
+
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) {
+    showAppAlert("Yazdırma penceresi açılamadı. Tarayıcının açılır pencere engelini kontrol edin.");
+    return;
+  }
+  printWindow.document.write(html);
+  printWindow.document.close();
+  setTimeout(() => { printWindow.print(); }, 250);
 }
 
 function printWeeklySchedule() {
@@ -14801,6 +14971,9 @@ function bindEvents() {
     });
   }
   if (els.saveMemberCardBtn) els.saveMemberCardBtn.addEventListener("click", saveMemberCard);
+  if (els.printMemberContractBtn) els.printMemberContractBtn.addEventListener("click", () => {
+    if (ui.editingMemberId != null) printMemberContract(ui.editingMemberId);
+  });
   if (els.deleteMemberCardBtn) els.deleteMemberCardBtn.addEventListener("click", deleteMemberCardFromModal);
   // Üye silme modalı: İleri -> adım 2, Sil -> API çağrısı
   if (els.deleteMemberConfirmBtn) els.deleteMemberConfirmBtn.onclick = confirmDeleteMember;
