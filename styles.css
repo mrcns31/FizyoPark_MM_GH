@@ -5852,6 +5852,21 @@ select option:checked{
   padding-bottom:8px;
   flex-shrink:0;
 }
+/* Başlık ortada kalır, sözleşme butonu sağa yaslanır */
+.member-card-modal__header{
+  display:flex;
+  align-items:center;
+  gap:10px;
+}
+.member-card-modal__header > span{
+  flex:1 1 auto;
+  min-width:0;
+}
+.member-card-modal__header-action{
+  flex:0 0 auto;
+  font-weight:650;
+  white-space:nowrap;
+}
 #appDialogModal.modal--compact .modal__title,
 #memberSessionCancelModal.modal--compact .modal__title{
   text-align:center;

@@ -1466,7 +1466,10 @@
     <div class="modal modal--compact hidden" id="memberCardModal" role="dialog" aria-modal="true">
       <div class="modal__backdrop" data-close="memberCardModal"></div>
       <div class="modal__card member-card-modal">
-        <div class="modal__title" id="memberCardTitle">Üye Kimlik Kartı</div>
+        <div class="modal__title member-card-modal__header">
+          <span id="memberCardTitle">Üye Kimlik Kartı</span>
+          <button id="printMemberContractBtn" class="btn btn--xs btn--ghost member-card-modal__header-action" type="button" style="display:none;" title="Kayıt sözleşmesini üye bilgileriyle doldurup Word dosyası olarak indir">📄 Sözleşme</button>
+        </div>
         <div class="modal__body member-card-modal__body">
           <div class="formGrid">
             <div class="formRow">
@@ -1538,7 +1541,6 @@
         </div>
         <div class="modal__footer">
           <button id="memberPackageInfoBtn" class="btn btn--ghost" type="button" title="Aldığı paket bilgisi ve geçmişi">Aldığı Paket Bilgisi</button>
-          <button id="printMemberContractBtn" class="btn btn--ghost" type="button" style="display:none;" title="Kayıt sözleşmesini üye bilgileriyle doldurup Word dosyası olarak indir">📄 Sözleşme İndir</button>
           <button id="resetMemberPasswordBtn" class="btn btn--ghost hidden" type="button" title="Giriş şifresini telefon son 4 haneye sıfırla">Şifre Sıfırla</button>
           <button id="deleteMemberCardBtn" class="btn btn--danger" type="button" style="display:none;">Sil</button>
           <div class="spacer"></div>

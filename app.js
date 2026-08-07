@@ -13843,10 +13843,6 @@ async function openListMembersModal({ resetFilters = true } = {}) {
       e.stopPropagation();
       openMemberCard(m.id);
     });
-    el.querySelector('[data-action="contract"]').addEventListener("click", (e) => {
-      e.stopPropagation();
-      printMemberContract(m.id);
-    });
     el.querySelector('[data-action="package"]').addEventListener("click", (e) => {
       e.stopPropagation();
       openMemberPackageModal(m.id, mp.id);
@@ -13860,7 +13856,6 @@ async function openListMembersModal({ resetFilters = true } = {}) {
   function memberListActionButtonsHtml() {
     return (
       '<button type="button" class="btn btn--xs btn--ghost btn--icon-action" data-action="card" title="Kimlik Kartı" aria-label="Kimlik Kartı">🪪</button>' +
-      '<button type="button" class="btn btn--xs btn--ghost btn--icon-action" data-action="contract" title="Kayıt Sözleşmesi indir (Word)" aria-label="Kayıt Sözleşmesi indir">📄</button>' +
       '<button type="button" class="btn btn--xs btn--ghost btn--icon-action" data-action="package" title="Paket" aria-label="Paket">📦</button>' +
       '<button type="button" class="btn btn--xs btn--ghost btn--icon-action" data-action="delete" title="Sil" aria-label="Sil">🗑️</button>'
     );
