@@ -120,8 +120,14 @@ export function MemberPackageScreen() {
   }
 
   // Paket seçilince: başlangıç=bugün, bitiş=bugün + ay-aşım (web ile birebir).
+  // Düzenlemede başlangıç korunur (ilk seansa katılım varsa backend bu tarihi kilitler);
+  // yalnızca bitiş yeni paketin ay-aşımına göre yeniden hesaplanır.
   function onPickPackage(id: number) {
     setPackageId(id);
+    if (editingId && startDate) {
+      setEndDate(addMonths(startDate, monthsFor(id)));
+      return;
+    }
     const start = todayStr();
     setStartDate(start);
     setEndDate(addMonths(start, monthsFor(id)));

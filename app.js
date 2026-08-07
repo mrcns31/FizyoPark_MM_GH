@@ -15091,12 +15091,22 @@ function bindEvents() {
       const packageId = els.mpPackage.value ? parseInt(els.mpPackage.value, 10) : null;
       const pkg = packageId && state.packages ? state.packages.find((p) => p.id === packageId) : null;
       if (!pkg || !els.mpStartDate || !els.mpEndDate) return;
-      const today = new Date();
-      const startStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
       const months = Number(pkg.monthOverrun ?? pkg.month_overrun ?? 1) || 1;
-      const endDate = new Date(today.getFullYear(), today.getMonth() + months, today.getDate());
+      let startStr;
+      if (editingMemberPackageId) {
+        // Düzenlemede başlangıç tarihi korunur (ilk seansa katılım varsa zaten kilitli);
+        // yalnızca bitiş tarihi yeni paketin ay aşım süresine göre yeniden hesaplanır.
+        startStr = els.mpStartDate.value;
+        if (!startStr) return; // mevcut paket bilgisi henüz yüklenmedi
+      } else {
+        const today = new Date();
+        startStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+        els.mpStartDate.value = startStr;
+      }
+      const parts = startStr.split("-").map(Number);
+      if (parts.length !== 3 || parts.some((n) => !Number.isFinite(n))) return;
+      const endDate = new Date(parts[0], parts[1] - 1 + months, parts[2]);
       const endStr = `${endDate.getFullYear()}-${String(endDate.getMonth() + 1).padStart(2, "0")}-${String(endDate.getDate()).padStart(2, "0")}`;
-      els.mpStartDate.value = startStr;
       els.mpEndDate.value = endStr;
     });
   }
