@@ -429,6 +429,17 @@ async function refreshSessionsInLoadedRange() {
   await fetchAndMergeSessions(sessionsLoadedRange.startDate, sessionsLoadedRange.endDate);
 }
 
+/**
+ * Yalnızca görünür takvim penceresini (± tampon) sunucudan tazeler.
+ * Paket kaydetme/sonlandırma gibi sunucunun arka planda seans ürettiği/iptal ettiği
+ * yerlerde kullanılır: paketin tüm dönemini (yıllara yayılabilir) indirmek yerine
+ * kullanıcının fiilen gördüğü aralık tazelenir; diğer haftalar oraya gidildiğinde yüklenir.
+ */
+async function refreshPlannerWindowSessions() {
+  var range = getPlannerFetchRange();
+  await fetchAndMergeSessions(range.startDate, range.endDate);
+}
+
 function localTodayDateStr(d) {
   d = d || new Date();
   return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
@@ -452,23 +463,6 @@ function isMemberPackageActive(mp, todayStr) {
   if (!mp) return false;
   if (isMemberPackageExpired(mp, todayStr)) return false;
   return (mp.status || "active").toLowerCase() === "active";
-}
-
-async function ensureActivePackageSessionsForList() {
-  var todayStr = localTodayDateStr();
-  var activePackages = (state.memberPackages || []).filter(function (mp) {
-    return isMemberPackageActive(mp, todayStr);
-  });
-  if (!activePackages.length) return;
-  var starts = activePackages.map(function (mp) { return String(mp.startDate || mp.start_date || "").slice(0, 10); }).filter(Boolean);
-  var ends = activePackages.map(function (mp) { return String(mp.endDate || mp.end_date || "").slice(0, 10); }).filter(Boolean);
-  if (!starts.length || !ends.length) return;
-  starts.sort();
-  ends.sort();
-  var startDate = starts[0];
-  var endDate = ends[ends.length - 1];
-  if (isRangeWithinLoaded(startDate, endDate)) return;
-  await fetchAndMergeSessions(startDate, endDate);
 }
 
 function removeSessionFromState(sessionId) {
@@ -8318,16 +8312,18 @@ async function openPackageSessionEditorFromPackageList(sessionId) {
   var s = state.sessions.find(function (x) {
     return normId(x.id) === normId(sessionId);
   });
+  // Seans takvimde yüklü değilse yalnızca kendi gününü çek. Eskiden paketin ilk–son
+  // seansı arasındaki tüm aralık indiriliyordu; tek bir seansı bulmak için yıllarca
+  // veri çekmek hem yavaş hem de takvimin tazeleme penceresini şişiriyordu.
   if (!s && window.API && window.API.getSessions && packageSessionsCurrent && packageSessionsCurrent.sessions.length) {
     try {
-      var firstTs = packageSessionsCurrent.sessions[0].start_ts || packageSessionsCurrent.sessions[0].startTs;
-      var lastTs =
-        packageSessionsCurrent.sessions[packageSessionsCurrent.sessions.length - 1].start_ts ||
-        packageSessionsCurrent.sessions[packageSessionsCurrent.sessions.length - 1].startTs;
-      if (firstTs && lastTs) {
-        var startD = new Date(Number(firstTs)).toISOString().slice(0, 10);
-        var endD = new Date(Number(lastTs)).toISOString().slice(0, 10);
-        await fetchAndMergeSessions(startD, endD);
+      var row = packageSessionsCurrent.sessions.find(function (x) {
+        return normId(x.id) === normId(sessionId);
+      });
+      var rowTs = row && (row.start_ts || row.startTs);
+      if (rowTs) {
+        var dayStr = dateToInputValue(new Date(Number(rowTs)));
+        await ensureDaySessionsLoaded(dayStr);
         s = state.sessions.find(function (x) {
           return normId(x.id) === normId(sessionId);
         });
@@ -10579,7 +10575,11 @@ function loadPackageSessionsForModal(mp) {
     els.packageSessionsEmpty.classList.remove("hidden");
     return;
   }
-  window.API.getMemberPackageSessions(mp.id).then(async function (sessions) {
+  // Modal tablosu yalnızca bu isteğin verisiyle dolar; takvimin state.sessions'ına
+  // bakmaz. Eskiden buradan ayrıca paketin ilk–son seansı arasındaki TÜM klinik
+  // randevuları çekilirdi (eski üyelerde 17 bin kayıt) — kullanılmadığı ve takvimin
+  // tazeleme penceresini yıllar geriye kilitlediği için kaldırıldı.
+  window.API.getMemberPackageSessions(mp.id).then(function (sessions) {
     if (!packageSessionsCurrent || Number(packageSessionsCurrent.mp.id) !== Number(mp.id)) return;
     packageSessionsCurrent.sessions = sessions || [];
     renderPackageSessionsTable(packageSessionsCurrent.sessions);
@@ -10589,21 +10589,6 @@ function loadPackageSessionsForModal(mp) {
       if (els.packageSessionsTable) els.packageSessionsTable.classList.add("hidden");
       if (els.packageSessionsCards) els.packageSessionsCards.classList.add("hidden");
       if (els.packageSessionsTableWrap) els.packageSessionsTableWrap.classList.add("hidden");
-    }
-    if (window.API.getSessions && packageSessionsCurrent && packageSessionsCurrent.sessions.length) {
-      try {
-        var firstTs =
-          packageSessionsCurrent.sessions[0].start_ts || packageSessionsCurrent.sessions[0].startTs;
-        var lastTs =
-          packageSessionsCurrent.sessions[packageSessionsCurrent.sessions.length - 1].start_ts ||
-          packageSessionsCurrent.sessions[packageSessionsCurrent.sessions.length - 1].startTs;
-        if (firstTs && lastTs) {
-          var startD = new Date(Number(firstTs)).toISOString().slice(0, 10);
-          var endD = new Date(Number(lastTs)).toISOString().slice(0, 10);
-          await fetchAndMergeSessions(startD, endD);
-          render();
-        }
-      } catch (_) {}
     }
   }).catch(function (e) {
     if (!packageSessionsCurrent || Number(packageSessionsCurrent.mp.id) !== Number(mp.id)) return;
@@ -11445,7 +11430,7 @@ window._saveMpConflictOverrides = async function() {
     closeMemberPackageModal();
     render();
     if (window.API && window.API.getSessions && updatePayload.startDate) {
-      await fetchAndMergeSessions(updatePayload.startDate, updatePayload.endDate || updatePayload.startDate);
+      await refreshPlannerWindowSessions();
     }
   } catch (e) {
     if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = "Kaydet"; }
@@ -11494,7 +11479,7 @@ async function doActualMemberPackageSave(endAfterSaveWithLastSessionDate) {
         state.memberPackages.push(createdOrUpdated);
       }
       if (window.API.getSessions && payload.startDate && payload.endDate) {
-        await fetchAndMergeSessions(payload.startDate, payload.endDate);
+        await refreshPlannerWindowSessions();
       }
 
       if (endAfterSaveWithLastSessionDate && createdOrUpdated && createdOrUpdated.id) {
@@ -11505,7 +11490,7 @@ async function doActualMemberPackageSave(endAfterSaveWithLastSessionDate) {
           if (idx !== -1) state.memberPackages[idx] = ended;
         }
         if (window.API.getSessions && payload.startDate) {
-          await fetchAndMergeSessions(payload.startDate, endDateStr);
+          await refreshPlannerWindowSessions();
         }
       }
     } catch (e) {
@@ -11559,10 +11544,8 @@ async function endMemberPackageFromModal() {
   if (window.API && window.API.getToken()) {
     try {
       await window.API.endMemberPackage(editingMemberPackageId, endDateStr);
-      var mpRow = (state.memberPackages || []).find(function (x) { return x.id === editingMemberPackageId; });
-      var mpStart = mpRow && (mpRow.startDate || mpRow.start_date);
-      if (window.API.getSessions && mpStart) {
-        await fetchAndMergeSessions(String(mpStart).slice(0, 10), endDateStr);
+      if (window.API.getSessions) {
+        await refreshPlannerWindowSessions();
       }
     } catch (e) {
       await showAppAlert((e.data && e.data.error) || e.message || "Sonlandırılamadı.");
@@ -11877,13 +11860,6 @@ function updateSessionPackageHint() {
   const packages = (state.memberPackages || []).filter(
     (mp) => normId(mp.memberId) === memberId && isMemberPackageActive(mp)
   );
-  const usedByPackage = {};
-  (state.sessions || []).forEach((s) => {
-    if (!s.memberPackageId) return;
-    const key = s.memberPackageId;
-    if (!usedByPackage[key]) usedByPackage[key] = [];
-    usedByPackage[key].push(s);
-  });
   const matching = packages.filter((mp) => {
     const start = (mp.startDate || "").toString().slice(0, 10);
     const end = (mp.endDate || "").toString().slice(0, 10);
@@ -11893,10 +11869,15 @@ function updateSessionPackageHint() {
     els.sessionPackageHint.textContent = "Bu tarihte bu üyenin aktif paketi yok. Seans pakete işlenmeyecek.";
     return;
   }
+  // Kullanılan/kalan sunucudan hazır gelir. Eskiden state.sessions üzerinden sayılıyordu;
+  // takvimde yüklü olmayan seanslar sayıma girmediği için "kalan" olduğundan fazla çıkıyordu.
   const lines = matching.map((mp) => {
-    const total = mp.lessonCount ?? mp.lesson_count ?? 0;
-    const counts = computePackageSessionCountsFromSessions(usedByPackage[mp.id] || [], total);
-    return `${mp.packageName || "Paket"}: ${counts.consumed}/${total} kullanıldı, ${counts.remaining} kaldı`;
+    const total = Number(mp.lessonCount ?? mp.lesson_count ?? 0);
+    const remaining = mp.remainingSessions != null
+      ? Math.max(0, Number(mp.remainingSessions))
+      : total;
+    const consumed = Math.max(0, total - remaining);
+    return `${mp.packageName || "Paket"}: ${consumed}/${total} kullanıldı, ${remaining} kaldı`;
   });
   els.sessionPackageHint.textContent = "Aktif paket(ler) – takvimden eklenen seans otomatik pakete işlenir: " + lines.join("; ");
 }
@@ -13670,10 +13651,6 @@ async function openListMembersModal({ resetFilters = true } = {}) {
     }
   } catch (_) {}
 
-  try {
-    await ensureActivePackageSessionsForList();
-  } catch (_) {}
-
   content.innerHTML = "";
 
   const activePackages = (state.memberPackages || []).filter((mp) => isMemberPackageActive(mp));
@@ -13734,18 +13711,14 @@ async function openListMembersModal({ resetFilters = true } = {}) {
     const mp = getMp(m);
     return mp && (mp.endDate || mp.end_date) ? String(mp.endDate || mp.end_date).slice(0, 10) : "";
   }
+  // Kalan seans sunucudan hazır gelir (member-packages remaining_sessions). Eskiden
+  // state.sessions üzerinden sayan bir yedek yol vardı; takvimde o paketin seansları
+  // yoksa "hiç kullanılmamış" sanıp fazla rakam gösterdiği için kaldırıldı.
   function getRemaining(m) {
     const mp = getMp(m);
     if (!mp) return 0;
     if (mp.remainingSessions != null) return Math.max(0, Number(mp.remainingSessions));
-    if (!state.sessions) return Math.max(0, Number(mp.lessonCount ?? mp.lesson_count ?? 0));
-    const pkgSessions = state.sessions.filter(
-      (s) => normId(s.memberPackageId) === normId(mp.id)
-    );
-    return computePackageSessionCountsFromSessions(
-      pkgSessions,
-      mp.lessonCount ?? mp.lesson_count ?? 0
-    ).remaining;
+    return Math.max(0, Number(mp.lessonCount ?? mp.lesson_count ?? 0));
   }
   function getTotal(m) {
     const mp = getMp(m);

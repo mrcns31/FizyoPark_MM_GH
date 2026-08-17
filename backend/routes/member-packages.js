@@ -13,6 +13,26 @@ import { autoCompletePackageIfExhausted } from '../utils/packageSessionCounts.js
 const router = express.Router();
 router.use(verifyToken);
 
+/**
+ * Kalan seans: paketin ders sayısından "tüketilmiş" seanslar düşülür.
+ * Tüketilmiş = giriş yapılmış | no_show | bitmiş (2 saatlik iptal kilidi geçtikten sonra).
+ * Panel bu değeri hazır kullanır, kendisi saymaz — elindeki seans listesi takvimin yüklü
+ * penceresiyle sınırlı olduğu için kendi sayımı eksik çıkıyordu. Bu yüzden paketi döndüren
+ * her yanıt (liste, oluşturma, güncelleme) bu alanı içermelidir.
+ * mp = member_packages, p = packages olarak takma adlandırılmış sorgularda kullanılır.
+ */
+const REMAINING_SESSIONS_SQL = `GREATEST(0, p.lesson_count - (
+               SELECT COUNT(*) FROM sessions s
+               WHERE s.member_package_id = mp.id
+                 AND s.deleted_at IS NULL
+                 AND (
+                   s.checked_in_at IS NOT NULL
+                   OR s.attendance_outcome = 'no_show'
+                   OR (s.end_ts < EXTRACT(EPOCH FROM NOW()) * 1000
+                       AND EXTRACT(EPOCH FROM NOW()) * 1000 >= s.start_ts - 7200000)
+                 )
+             )) AS remaining_sessions`;
+
 router.use((req, res, next) => {
   if (req.user.role === 'member') {
     return res.status(403).json({ error: 'Bu işlem için yetkiniz yok' });
@@ -488,17 +508,7 @@ router.get('/', [
     let sql = `
       SELECT mp.*, p.name as package_name, p.lesson_count, p.month_overrun,
              COALESCE(TRIM(m.first_name || ' ' || m.last_name), m.name, '') as member_name, m.member_no,
-             GREATEST(0, p.lesson_count - (
-               SELECT COUNT(*) FROM sessions s
-               WHERE s.member_package_id = mp.id
-                 AND s.deleted_at IS NULL
-                 AND (
-                   s.checked_in_at IS NOT NULL
-                   OR s.attendance_outcome = 'no_show'
-                   OR (s.end_ts < EXTRACT(EPOCH FROM NOW()) * 1000
-                       AND EXTRACT(EPOCH FROM NOW()) * 1000 >= s.start_ts - 7200000)
-                 )
-             )) AS remaining_sessions,
+             ${REMAINING_SESSIONS_SQL},
              COALESCE((
                SELECT JSON_AGG(sl ORDER BY sl.day_of_week)
                FROM member_package_slots sl
@@ -846,7 +856,7 @@ router.post('/', [
     }
 
     const full = await db.query(
-      `SELECT mp.*, p.name as package_name, p.lesson_count
+      `SELECT mp.*, p.name as package_name, p.lesson_count, ${REMAINING_SESSIONS_SQL}
        FROM member_packages mp JOIN packages p ON p.id = mp.package_id WHERE mp.id = $1`,
       [mp.id]
     );
@@ -1280,7 +1290,7 @@ router.put('/:id', [
     }
 
     const full = await db.query(
-      `SELECT mp.*, p.name as package_name, p.lesson_count
+      `SELECT mp.*, p.name as package_name, p.lesson_count, ${REMAINING_SESSIONS_SQL}
        FROM member_packages mp JOIN packages p ON p.id = mp.package_id WHERE mp.id = $1`,
       [id]
     );
