@@ -415,6 +415,75 @@ router.get('/notifications', [
   }
 });
 
+/**
+ * Rapor ekranı: yıllık ay × personel seans sayısı.
+ * Panel eskiden bir yıllık ham seans listesini indirip istemcide sayıyordu; bu hem
+ * MB'larca yük getiriyor hem de takvimin seans state'ini (ve yüklü tarih aralığını)
+ * kirletiyordu. Sayım artık burada yapılır, panele yalnızca sayaçlar iner.
+ */
+router.get('/report-counts', [
+  query('year').optional().isInt({ min: 2000, max: 2100 }).toInt(),
+], async (req, res) => {
+  try {
+    if (req.user.role !== 'admin' && req.user.role !== 'manager') {
+      return res.status(403).json({ error: 'Bu işlem için yetkiniz yok' });
+    }
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const year = Number(req.query.year) || new Date().getFullYear();
+    // Türkiye sabit UTC+3 (DST yok) — ay kırılımı panelin yerel saat hesabıyla birebir aynı olsun
+    const TZ_OFFSET_MS = 3 * 60 * 60 * 1000;
+    const startMs = Date.UTC(year, 0, 1) - TZ_OFFSET_MS;
+    const endMs = Date.UTC(year + 1, 0, 1) - TZ_OFFSET_MS;
+
+    // Filtreler GET / ile aynı: silinmiş seans yok, kalıcı silinen (purged) üyenin seansı yok.
+    const purgedFilter = 'AND (s.member_id IS NULL OR (m.id IS NOT NULL AND m.purged_at IS NULL))';
+    const countsSql = `
+      SELECT s.staff_id,
+             EXTRACT(MONTH FROM to_timestamp(s.start_ts / 1000.0) AT TIME ZONE 'Europe/Istanbul')::int - 1 AS month,
+             COUNT(*)::int AS count
+      FROM sessions s
+      LEFT JOIN members m ON m.id = s.member_id
+      WHERE s.deleted_at IS NULL
+        ${purgedFilter}
+        AND s.start_ts >= $1 AND s.start_ts < $2
+      GROUP BY 1, 2`;
+
+    let countRows;
+    try {
+      countRows = (await db.query(countsSql, [startMs, endMs])).rows;
+    } catch (colErr) {
+      // purged_at migration'ı henüz uygulanmamışsa koşulsuz çalış (GET / ile aynı geri düşüş)
+      if (colErr.code !== '42703') throw colErr;
+      countRows = (await db.query(countsSql.replace(purgedFilter, ''), [startMs, endMs])).rows;
+    }
+
+    // Silinmiş personelin adı da lazım: raporda "Eski Personeller" sütununda görünüyor.
+    const staffIds = [...new Set(countRows.map((r) => r.staff_id).filter((id) => id != null))];
+    let staff = [];
+    if (staffIds.length > 0) {
+      const nameRes = await db.query(
+        `SELECT id, NULLIF(TRIM(COALESCE(first_name, '') || ' ' || COALESCE(last_name, '')), '') AS name
+         FROM staff WHERE id = ANY($1)`,
+        [staffIds]
+      );
+      staff = nameRes.rows.map((r) => ({ id: r.id, name: r.name }));
+    }
+
+    res.json({
+      year,
+      staff,
+      counts: countRows.map((r) => ({ staffId: r.staff_id, month: r.month, count: r.count })),
+    });
+  } catch (error) {
+    console.error('Seans sayısı raporu hatası:', error);
+    res.status(500).json({ error: 'Rapor alınırken bir hata oluştu' });
+  }
+});
+
 // Yeni seans oluştur (toInt ile string sayılar kabul edilir)
 router.post('/', [
   body('staffId').toInt().isInt().withMessage('Personel ID gerekli'),

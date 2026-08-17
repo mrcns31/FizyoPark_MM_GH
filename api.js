@@ -678,6 +678,14 @@
     invalidateRareCache();
     return staffFromApi(row);
   }
+  /**
+   * Yıllık ay × personel seans sayısı (admin/manager). Sayım sunucuda yapılır;
+   * rapor için ham seans listesi indirilmez, takvimin seans state'i etkilenmez.
+   */
+  async function getSessionCountsReport(year) {
+    return apiFetch('/sessions/report-counts?year=' + encodeURIComponent(year));
+  }
+
   /** Yıllık ay × personel puan matrisi (admin/manager) */
   async function getStaffRatingSummary(year) {
     return apiFetch('/ratings/staff-summary?year=' + encodeURIComponent(year));
@@ -1202,6 +1210,7 @@
     sendBroadcast,
     getBroadcasts,
     getBroadcastRecipients,
+    getSessionCountsReport,
     getStaffRatingSummary,
     getRatingList,
   };

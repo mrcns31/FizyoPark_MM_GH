@@ -6677,6 +6677,9 @@ var reportsAllStaffMap = new Map(); // normId → { id, name } — aktif + silin
 
 var reportsTab = "counts"; // counts | ratings — yıl navigasyonu iki sekmede ortak
 var reportsRatingsData = null;
+// Sunucudan gelen ay × personel sayaçları. Rapor verisi bilerek state.sessions'tan
+// ayrı tutulur: takvimin yüklü tarih aralığı raporlar yüzünden büyümesin.
+var reportsCountsData = null;
 
 function openReportsView() {
   showAdminMainView("reports");
@@ -6723,13 +6726,15 @@ async function loadAndRenderReports() {
     return;
   }
 
-  var startDate = reportsYear + "-01-01";
-  var endDate = reportsYear + "-12-31";
+  if (!window.API || !window.API.getSessionCountsReport) {
+    els.reportsContent.innerHTML = '<p class="hint">Seans sayısı raporu için sunucu bağlantısı gerekli.</p>';
+    return;
+  }
   try {
-    await Promise.all([
-      fetchAndMergeSessions(startDate, endDate),
+    var results = await Promise.all([
+      window.API.getSessionCountsReport(reportsYear),
       (async function () {
-        if (!window.API || !window.API.getAllStaffIncludingDeleted) return;
+        if (!window.API.getAllStaffIncludingDeleted) return;
         var all = await window.API.getAllStaffIncludingDeleted();
         reportsAllStaffMap = new Map();
         (all || []).forEach(function (s) {
@@ -6737,17 +6742,22 @@ async function loadAndRenderReports() {
         });
       })(),
     ]);
-  } catch (e) { /* mevcut veriyle devam et */ }
+    reportsCountsData = results[0];
+  } catch (e) {
+    reportsCountsData = null;
+    els.reportsContent.innerHTML = '<p class="hint">Seans sayısı raporu alınamadı.</p>';
+    return;
+  }
   renderReportsTable();
 }
 
 function renderReportsTable() {
   if (!els.reportsContent) return;
-  var yearStart = new Date(reportsYear, 0, 1).getTime();
-  var yearEnd = new Date(reportsYear + 1, 0, 1).getTime();
-
-  var yearSessions = state.sessions.filter(function (s) {
-    return s.startTs >= yearStart && s.startTs < yearEnd;
+  var countRows = (reportsCountsData && reportsCountsData.counts) || [];
+  // Sunucunun personel tablosundan okuduğu adlar — silinmiş personel için yedek isim kaynağı
+  var reportStaffNames = new Map();
+  ((reportsCountsData && reportsCountsData.staff) || []).forEach(function (s) {
+    if (s && s.id != null && s.name) reportStaffNames.set(normId(s.id), String(s.name).trim());
   });
 
   // Aktif personel (state.staff'ta olanlar)
@@ -6758,18 +6768,18 @@ function renderReportsTable() {
 
   // Eski personel: seansları olan ama state.staff'ta olmayan staffId'ler
   var formerMap = new Map(); // normId → { name, id }
-  yearSessions.forEach(function (s) {
-    if (s.staffId == null) return;
-    var sid = normId(s.staffId);
+  countRows.forEach(function (r) {
+    if (r.staffId == null) return;
+    var sid = normId(r.staffId);
     if (activeIds.has(sid)) return;
-    if (!formerMap.has(sid)) formerMap.set(sid, { id: s.staffId, name: "" });
+    if (!formerMap.has(sid)) formerMap.set(sid, { id: r.staffId, name: "" });
   });
-  // İsim kaynağı önceliği: 1) tüm personel listesi (silinmişler dahil), 2) session verisi, 3) fallback
+  // İsim kaynağı önceliği: 1) tüm personel listesi (silinmişler dahil), 2) rapor yanıtı, 3) fallback
   formerMap.forEach(function (f, sid) {
     var fromAllStaff = reportsAllStaffMap.get(sid);
     if (fromAllStaff && fromAllStaff.name) { f.name = fromAllStaff.name; return; }
-    var fromSession = yearSessions.find(function (s) { return normId(s.staffId) === sid && s.staffName && s.staffName !== "–"; });
-    if (fromSession) { f.name = fromSession.staffName.trim(); return; }
+    var fromReport = reportStaffNames.get(sid);
+    if (fromReport) { f.name = fromReport; return; }
     f.name = "Eski Personel #" + sid;
   });
   var formerList = Array.from(formerMap.values()).sort(function (a, b) {
@@ -6781,13 +6791,15 @@ function renderReportsTable() {
   var monthTotals = new Array(12).fill(0);
   var staffTotals = {};
 
-  yearSessions.forEach(function (s) {
-    var month = new Date(s.startTs).getMonth();
-    var sid = s.staffId != null ? normId(s.staffId) : "__none__";
+  countRows.forEach(function (r) {
+    var month = Number(r.month);
+    if (!(month >= 0 && month <= 11)) return;
+    var sid = r.staffId != null ? normId(r.staffId) : "__none__";
+    var n = Number(r.count) || 0;
     if (!counts[month]) counts[month] = {};
-    counts[month][sid] = (counts[month][sid] || 0) + 1;
-    monthTotals[month]++;
-    staffTotals[sid] = (staffTotals[sid] || 0) + 1;
+    counts[month][sid] = (counts[month][sid] || 0) + n;
+    monthTotals[month] += n;
+    staffTotals[sid] = (staffTotals[sid] || 0) + n;
   });
 
   var monthNames = ["Ocak","Şubat","Mart","Nisan","Mayıs","Haziran","Temmuz","Ağustos","Eylül","Ekim","Kasım","Aralık"];
