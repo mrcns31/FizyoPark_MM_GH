@@ -1,11 +1,12 @@
 import { useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 
 import { ScreenHeader } from '../../../components/screen-header';
 import { useResponsive } from '../../../lib/responsive';
+import { useAuth } from '../../auth';
 import { useTheme } from '../../theme';
 import { type AppColors } from '../../../theme/colors';
 
@@ -17,18 +18,26 @@ const ALL_ITEMS: { label: string; icon: IoniconName; path: string; tabletOnly?: 
   { label: 'Personel',           icon: 'people-circle',    path: '/(admin)/more/staff' },
   { label: 'Odalar / Alet',      icon: 'business',         path: '/(admin)/more/rooms',             tabletOnly: true },
   { label: 'Çalışma Saatleri',   icon: 'time',             path: '/(admin)/more/working-hours',     tabletOnly: true },
-  { label: 'Kapalı Günler',      icon: 'calendar-clear',   path: '/(admin)/more/closure-days',      tabletOnly: true },
-  { label: 'İşlem Logları',      icon: 'list-outline',     path: '/(admin)/more/activity-logs',     tabletOnly: true },
+  { label: 'Kapalı Günler',      icon: 'calendar-clear',   path: '/(admin)/more/closure-days' },
+  { label: 'İşlem Logları',      icon: 'list-outline',     path: '/(admin)/more/activity-logs' },
   { label: 'Hesabım',            icon: 'person-circle',    path: '/(admin)/more/account' },
 ];
 
-/** Ayarlar hub — web admin "Ayarlar" modalıyla birebir; yönetim ekranlarına giriş. */
+/** Ayarlar hub — web admin "Ayarlar" modalıyla birebir; yönetim ekranlarına giriş + çıkış. */
 export function SettingsHubScreen() {
   const router = useRouter();
+  const { signOut } = useAuth();
   const { colors } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const { contentMaxWidth, gutter, isTablet } = useResponsive();
   const items = ALL_ITEMS.filter((it) => !it.tabletOnly || isTablet);
+
+  function onLogout() {
+    Alert.alert('Çıkış', 'Çıkış yapmak istediğinize emin misiniz?', [
+      { text: 'Vazgeç', style: 'cancel' },
+      { text: 'Çıkış', style: 'destructive', onPress: () => signOut() },
+    ]);
+  }
 
   const wide = {
     maxWidth: contentMaxWidth,
@@ -50,6 +59,14 @@ export function SettingsHubScreen() {
             <Ionicons name="chevron-forward" size={18} color={colors.muted} />
           </Pressable>
         ))}
+
+        {/* Çıkış — drawer'dan buraya taşındı */}
+        <Pressable style={[styles.row, styles.dangerRow]} onPress={onLogout}>
+          <View style={[styles.icon, styles.dangerIcon]}>
+            <Ionicons name="log-out" size={20} color={colors.danger} />
+          </View>
+          <Text style={[styles.label, styles.dangerLabel]}>Çıkış</Text>
+        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );
@@ -78,5 +95,8 @@ function makeStyles(colors: AppColors) {
       justifyContent: 'center',
     },
     label: { flex: 1, color: colors.text, fontSize: 15, fontWeight: '600' },
+    dangerRow: { marginTop: 6 },
+    dangerIcon: { backgroundColor: 'rgba(239,68,68,0.16)' },
+    dangerLabel: { color: colors.danger },
   });
 }

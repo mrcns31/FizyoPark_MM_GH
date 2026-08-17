@@ -1,11 +1,8 @@
-import { Alert } from 'react-native';
 import { Stack, usePathname, useRouter } from 'expo-router';
 
 import { RoleShell, type NavSection } from '../../src/components/drawer/role-shell';
-import { useAuth } from '../../src/features/auth';
 import {
   useDeletionRequests,
-  useOpenDoor,
   usePackageRequests,
   usePasswordResetRequests,
 } from '../../src/features/admin/api/hooks';
@@ -14,13 +11,11 @@ import { NotificationToaster } from '../../src/features/notifications/components
 
 /**
  * Admin kabuğu — drawer (yan menü). Header'da hamburger ile açılır.
- * Ekle eylemleri sayfalarda FAB ile. Kapıyı Aç drawer içinde.
+ * Ekle eylemleri sayfalarda FAB ile. Çıkış drawer'da değil, Ayarlar hub'ında.
  */
 export default function AdminLayout() {
   const router = useRouter();
   const pathname = usePathname();
-  const { signOut } = useAuth();
-  const door = useOpenDoor();
   const { count: unread } = useUnreadCount();
   const pkgReqs = usePackageRequests();
   const delReqs = useDeletionRequests();
@@ -30,20 +25,6 @@ export default function AdminLayout() {
 
   const go = (path: string) => router.navigate(path as never);
   const active = (seg: string) => pathname.startsWith(seg);
-
-  function onOpenDoor() {
-    Alert.alert('Kapıyı aç', 'Tesis kapısı açılsın mı?', [
-      { text: 'Vazgeç', style: 'cancel' },
-      {
-        text: 'Aç',
-        onPress: () =>
-          door.mutate(undefined, {
-            onSuccess: () => Alert.alert('Kapı', 'Kapı açma komutu gönderildi.'),
-            onError: (e) => Alert.alert('Hata', (e as Error).message),
-          }),
-      },
-    ]);
-  }
 
   // Ayarlar hub'a giren yönetim alt-route'ları (Ayarlar öğesi bunlarda da aktif görünür)
   const inSettings =
@@ -78,8 +59,6 @@ export default function AdminLayout() {
     title: 'Yönetim',
     items: [
       { key: 'settings', label: 'Ayarlar', icon: 'settings-outline', active: inSettings, onPress: () => router.push('/(admin)/more/settings') },
-      { key: 'door', label: 'Kapıyı Aç', icon: 'log-in', onPress: onOpenDoor },
-      { key: 'logout', label: 'Çıkış', icon: 'log-out', danger: true, onPress: signOut },
     ],
   };
 

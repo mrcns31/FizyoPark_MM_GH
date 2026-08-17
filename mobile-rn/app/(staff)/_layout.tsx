@@ -1,7 +1,6 @@
 import { Stack, usePathname, useRouter } from 'expo-router';
 
 import { RoleShell, type NavSection } from '../../src/components/drawer/role-shell';
-import { useAuth } from '../../src/features/auth';
 import { useUnreadCount } from '../../src/features/notifications/api/hooks';
 import { NotificationToaster } from '../../src/features/notifications/components/notification-toaster';
 import { useStaffShiftReminderPoll } from '../../src/features/staff/api/hooks';
@@ -11,7 +10,6 @@ import { StaffDateProvider } from '../../src/features/staff/context/staff-date-c
 export default function StaffLayout() {
   const router = useRouter();
   const pathname = usePathname();
-  const { signOut } = useAuth();
   const { count: unread } = useUnreadCount();
   useStaffShiftReminderPoll();
 
@@ -29,13 +27,10 @@ export default function StaffLayout() {
       ],
     },
   ];
-  const footer: NavSection = {
-    title: 'Hesap',
-    items: [{ key: 'logout', label: 'Çıkış', icon: 'log-out', danger: true, onPress: signOut }],
-  };
+  // Çıkış drawer'da değil — Profil ekranındaki "Çıkış Yap" butonunda.
   return (
     <StaffDateProvider>
-      <RoleShell brandText="Seans Planlayıcı" sections={sections} footer={footer}>
+      <RoleShell brandText="Seans Planlayıcı" sections={sections}>
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: 'transparent' } }} />
         <NotificationToaster />
       </RoleShell>
