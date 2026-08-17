@@ -27,12 +27,18 @@ export function useSessions(q: SessionQuery = {}) {
   });
 }
 
-/** Seans değişince hem sessions hem member-package-sessions cache'ini temizle. */
-function invalidateAll(qc: ReturnType<typeof useQueryClient>) {
-  return Promise.all([
-    qc.invalidateQueries({ queryKey: sessionKeys.all }),
-    qc.invalidateQueries({ queryKey: ['member-package-sessions'] }),
-  ]);
+/**
+ * Seans değişince hem sessions hem member-package-sessions cache'ini temizle.
+ *
+ * Bilerek Promise DÖNDÜRMEZ. onSuccess'ten promise dönerse react-query mutation'ı
+ * o promise bitene kadar "pending" tutar; invalidateQueries ise aktif sorguların
+ * yeniden çekilmesini bekler. Sonuç: kayıt sunucuda bitmiş olsa bile ekran, açık
+ * olan tüm seans sorguları yeniden inene kadar bekliyordu (üye başına bir tur).
+ * Tazeleme arka planda olsun; kaydetme onu beklemesin.
+ */
+function invalidateAll(qc: ReturnType<typeof useQueryClient>): void {
+  void qc.invalidateQueries({ queryKey: sessionKeys.all });
+  void qc.invalidateQueries({ queryKey: ['member-package-sessions'] });
 }
 
 export function useConfirmAttendance() {

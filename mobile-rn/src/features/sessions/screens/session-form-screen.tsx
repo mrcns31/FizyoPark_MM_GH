@@ -58,9 +58,18 @@ export function SessionFormScreen() {
   const del = useDeleteSession();
   const swap = useSwapSessions();
 
-  const { data: daySessions } = useSessions(
-    params.date ? { startDate: params.date, endDate: params.date } : {}
-  );
+  // Sorgu HER ZAMAN tek bir güne bağlı olmalı. Aralık verilmezse sunucu tüm tabloyu
+  // (37 bin seans / ~21 MB) döndürür ve refetchInterval yüzünden bunu 10 sn'de bir tekrarlar.
+  // Yeni seans yollarında (FAB, boş saate dokunma, paket ekranı) `date` gelmiyordu.
+  // params'tan türetilir ve sabit kalır: formdaki tarih değiştirilince kayarsa düzenlenen
+  // seans listeden düşer, grup/takas mantığı bozulur.
+  const queryDate = useMemo(() => {
+    if (params.date) return String(params.date);
+    const ts = params.defaultTs ? Number(params.defaultTs) : NaN;
+    return dateToStr(new Date(Number.isFinite(ts) ? ts : Date.now()));
+  }, [params.date, params.defaultTs]);
+
+  const { data: daySessions } = useSessions({ startDate: queryDate, endDate: queryDate });
   const editing = params.id ? daySessions?.find((s) => s.id === Number(params.id)) : undefined;
 
   // singleEdit=1 → sadece bu seans (paket listesinden açılış); aksi halde aynı slottaki grup.
@@ -238,11 +247,11 @@ export function SessionFormScreen() {
           });
         }
       }
-      // Her iki cache'i bekle, sonra geri dön
-      await Promise.all([
-        qc.invalidateQueries({ queryKey: sessionKeys.all }),
-        qc.invalidateQueries({ queryKey: ['member-package-sessions'] }),
-      ]);
+      // Tazelemeyi başlat ama BEKLEME: kayıt bitti, ekran hemen kapanmalı. Beklemek
+      // hem 10-15 sn sürüyordu hem de ağ takılırsa ekran hiç kapanmıyordu (randevu
+      // oluşmuş olmasına rağmen). Takvim arka planda kendi kendine güncellenir.
+      void qc.invalidateQueries({ queryKey: sessionKeys.all });
+      void qc.invalidateQueries({ queryKey: ['member-package-sessions'] });
       router.back();
     } catch (e) {
       Alert.alert('Hata', e instanceof ApiError ? e.message : 'Kayıt başarısız');
@@ -306,7 +315,13 @@ export function SessionFormScreen() {
       // ekranda eski grup kalırsa "Güncelle" yanlış tabanla çalışır. Yığında geri
       // dönülecek ekran varsa kapat, yoksa (derin bağlantı/ilk ekran) formu tazele.
       if (router.canGoBack()) router.back();
-      else setInited(false);
+      else {
+        // Formu yeniden dolduracağız; bu yüzden burada taze veriyi BEKLİYORUZ. Mutation
+        // artık tazelemeyi beklemiyor, beklemesek eski gruplamayla dolardı. Sorgu tek
+        // günlük olduğu için (~1 kB) maliyeti yok — takas da nadir bir işlem.
+        await qc.invalidateQueries({ queryKey: sessionKeys.all });
+        setInited(false);
+      }
     } catch (e) {
       Alert.alert('Takas başarısız', e instanceof ApiError ? e.message : 'Takas yapılamadı.');
     }

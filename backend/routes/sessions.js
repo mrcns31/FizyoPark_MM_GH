@@ -8,7 +8,7 @@ import { cancelPackageSessionsAtSlot, resolveMemberPackageId } from '../utils/pa
 import { log as activityLog } from '../utils/activityLogger.js';
 import { isSessionAttendanceConfirmed } from '../utils/sessionAttendance.js';
 import { matchWalkInToSession } from '../utils/facilityAccess.js';
-import { resolveLocalDateRangeMs } from '../utils/staffWorkingHours.js';
+import { resolveLocalDateRangeMs, localDateStrFromTs } from '../utils/staffWorkingHours.js';
 import { localTodayDateStr } from '../utils/memberPackageStatus.js';
 import { sendExpoPush } from '../utils/pushNotifications.js';
 
@@ -150,8 +150,28 @@ router.get('/', [
   query('roomId').optional().isInt()
 ], async (req, res) => {
   try {
-    const { startDate, endDate, staffId, roomId } = req.query;
-    
+    const { staffId, roomId } = req.query;
+
+    // Emniyet freni: aralık verilmezse tüm tablo dönüyordu (37 bin satır / ~21 MB).
+    // Mobil uygulamanın yeni seans formu tam olarak bunu yapıyordu ve refetchInterval
+    // yüzünden 10 sn'de bir tekrarlıyordu. Eksik uçları varsayılan pencereyle doldur;
+    // böylece OTA almamış eski istemciler de hata almadan makul bir yanıt alır.
+    // Bilerek LIMIT konmadı: açıkça geniş aralık isteyen çağrılar (yıllık rapor gibi)
+    // sessizce kırpılmasın — sessizce eksik veri, yavaş yanıttan kötüdür.
+    const DAY_MS = 24 * 60 * 60 * 1000;
+    let startDate = req.query.startDate;
+    let endDate = req.query.endDate;
+    if (!startDate || !endDate) {
+      const nowMs = Date.now();
+      if (!startDate) startDate = localDateStrFromTs(nowMs - 30 * DAY_MS);
+      if (!endDate) endDate = localDateStrFromTs(nowMs + 90 * DAY_MS);
+      console.warn('[sessions] tarih aralığı eksik geldi, varsayılan pencere uygulandı', {
+        role: req.user.role,
+        gelen: { startDate: req.query.startDate ?? null, endDate: req.query.endDate ?? null },
+        uygulanan: { startDate, endDate },
+      });
+    }
+
     let query = `
       SELECT s.*,
              st.first_name || ' ' || st.last_name as staff_name,
