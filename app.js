@@ -15588,6 +15588,14 @@ function bindEvents() {
       if (newH < bounds.minH) newH = bounds.minH;
       if (newH > bounds.maxH) newH = bounds.maxH;
       input.value = String(newH).padStart(2, "0") + ":00";
+    } else if (type === "select") {
+      // Seçilebilir (disabled olmayan) seçenekler arasında sırayla dolaş
+      var opts = Array.prototype.filter.call(input.options, function (o) { return !o.disabled; });
+      if (!opts.length) return;
+      var curIdx = opts.indexOf(input.selectedOptions[0]);
+      if (curIdx < 0) curIdx = 0;
+      var nextIdx = (curIdx + step + opts.length) % opts.length;
+      input.value = opts[nextIdx].value;
     }
     input.dispatchEvent(new Event("change", { bubbles: true }));
     input.dispatchEvent(new Event("input", { bubbles: true }));

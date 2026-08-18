@@ -1830,7 +1830,11 @@
             <div id="sessionPackageHint" class="hint" style="margin-top:4px; margin-bottom:8px; font-size:12px;"></div>
             <div class="formRow">
               <label class="label" for="sessionStaff">Personel</label>
-              <select id="sessionStaff" class="input"></select>
+              <div class="input-stepper">
+                <button type="button" class="input-stepper__btn" data-step="-1" data-target="sessionStaff" data-type="select" aria-label="Önceki personel">&#8249;</button>
+                <select id="sessionStaff" class="input input-stepper__input"></select>
+                <button type="button" class="input-stepper__btn" data-step="1" data-target="sessionStaff" data-type="select" aria-label="Sonraki personel">&#8250;</button>
+              </div>
             </div>
             <div class="formRow formRow--full">
               <label class="label" for="sessionNote">Not</label>

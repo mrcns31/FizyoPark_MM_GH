@@ -7087,3 +7087,67 @@ body.splash-screen-open{
   white-space:normal;
   overflow-wrap:anywhere;
 }
+
+
+/* ===== Seans Ekle/Düzenle modalı: alanlar tek sütun, hizalı ve aynı yükseklikte ===== */
+#sessionModal .formGrid{
+  grid-template-columns:1fr;
+  gap:12px;
+}
+#sessionModal .formRow{ margin-bottom:0; }
+
+/* Tüm kontroller aynı yükseklikte olsun */
+#sessionModal .input-stepper__btn{
+  height:40px;
+  border-radius:12px;
+}
+#sessionModal .input-stepper{ gap:8px; }
+#sessionModal select.input,
+#sessionModal input.input{
+  height:40px;
+}
+
+/* Tarih: rakamlar ve gün adı tek bir kutu içinde, dikeyde ortalanmış */
+#sessionModal .input-stepper__wrap{
+  height:40px;
+  padding:0 10px;
+  gap:8px;
+  border:1px solid var(--border);
+  border-radius:12px;
+  background:rgba(255,255,255,.03);
+}
+#sessionModal .input-stepper__wrap:focus-within{
+  border-color:rgba(124,92,255,.65);
+  box-shadow:0 0 0 3px rgba(124,92,255,.16);
+}
+#sessionModal .input-stepper__wrap .input{
+  border:none;
+  background:transparent;
+  padding:0;
+  height:100%;
+  box-shadow:none;
+}
+#sessionModal .input-stepper__wrap .input:focus,
+#sessionModal .input-stepper__wrap .input:focus-visible{
+  border:none;
+  box-shadow:none;
+}
+#sessionModal .input-stepper__day{
+  padding:0;
+  font-size:13px;
+  line-height:40px;
+  color:rgba(232,236,255,.6);
+}
+
+/* Boş paket ipucu satırı yer kaplamasın */
+#sessionModal #sessionPackageHint:empty{ display:none; }
+
+/* Üye düzenlemede değiştirilemez: açılır liste okları görünmesin */
+#sessionModal select.input:disabled{
+  -webkit-appearance:none;
+  -moz-appearance:none;
+  appearance:none;
+  cursor:default;
+  opacity:1;
+  color:var(--text);
+}
