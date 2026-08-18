@@ -147,7 +147,8 @@ export function TimeField({
               is24Hour
               minuteInterval={minuteInterval}
               display="spinner"
-              themeVariant="dark"
+              locale="tr-TR"
+              themeVariant={resolvedTheme === 'dark' ? 'dark' : 'light'}
               textColor={colors.text}
               onChange={(_, d) => d && setIosTemp(d)}
               style={styles.spinner}

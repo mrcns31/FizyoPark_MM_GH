@@ -103,15 +103,20 @@ export function DateField({
                 <Text style={styles.done}>Tamam</Text>
               </Pressable>
             </View>
+            {/* iOS 14+ takvim ızgarası (çark yerine). locale verilmezse cihaz diline
+                düşüp ay adları İngilizce çıkıyordu; themeVariant sabit 'dark' olduğu
+                için açık temada da koyu geliyordu. */}
             <DateTimePicker
               value={iosTemp}
               mode="date"
-              display="spinner"
-              themeVariant="dark"
+              display="inline"
+              locale="tr-TR"
+              themeVariant={resolvedTheme === 'dark' ? 'dark' : 'light'}
+              accentColor={colors.accent}
               textColor={colors.text}
               minimumDate={minimumDate}
               onChange={(_, d) => d && setIosTemp(d)}
-              style={styles.spinner}
+              style={styles.picker}
             />
           </View>
         </SheetModal>
@@ -154,6 +159,6 @@ function makeStyles(colors: AppColors, theme: ResolvedTheme) {
     },
     cancel: { color: colors.muted, fontSize: 16 },
     done: { color: colors.accent, fontSize: 16, fontWeight: '700' },
-    spinner: { alignSelf: 'center' },
+    picker: { alignSelf: 'stretch', marginHorizontal: 8 },
   });
 }
