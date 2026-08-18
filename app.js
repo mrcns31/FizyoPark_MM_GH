@@ -8501,6 +8501,15 @@ function _createReplenishModalIfNeeded() {
   document.body.appendChild(el);
 }
 
+/** Saat listesinde olmayan bir değeri seçenek olarak ekleyip seçer. */
+function _appendAndSelectHour(selectEl, value) {
+  var opt = document.createElement("option");
+  opt.value = value;
+  opt.textContent = value;
+  opt.selected = true;
+  selectEl.appendChild(opt);
+}
+
 function _renderReplenishForm() {
   var dateEl = document.getElementById("replenishDate");
   var timeEl = document.getElementById("replenishTime");
@@ -8508,16 +8517,24 @@ function _renderReplenishForm() {
   if (!dateEl || !timeEl || !staffEl || !_replenishState) return;
 
   var first = (_replenishState.candidates || [])[0] || {};
-  // Varsayılan: ilk denenen adayın gün/saat/personeli — admin genelde onu düzeltmek ister
+  // Varsayılan: ilk denenen adayın gün/saat/personeli — admin genelde onu düzeltmek ister.
+  // Hiç aday denenmemişse (paket bitişi dolmuş: candidates boş) silinen seansın saati/personeli
+  // kullanılır; aksi hâlde saat alanı boş kalıp "seçilmeli" uyarısı veriyordu.
+  var deletedAt = _replenishState.deletedStartTs ? new Date(Number(_replenishState.deletedStartTs)) : null;
+  var fallbackTime = deletedAt ? pad2(deletedAt.getHours()) + ":" + pad2(deletedAt.getMinutes()) : null;
   var defaultDate = first.date || dateToInputValue(new Date());
+  var defaultTime = first.start_time || fallbackTime;
+  var defaultStaffId = first.staff_id != null ? first.staff_id : _replenishState.deletedStaffId;
   dateEl.value = defaultDate;
   dateEl.min = dateToInputValue(new Date());
   if (_replenishState.packageEndDate) dateEl.max = String(_replenishState.packageEndDate).slice(0, 10);
 
   var dayNum = new Date(defaultDate + "T12:00:00").getDay();
-  timeEl.innerHTML = buildHourOptions(first.start_time || null, dayNum);
+  timeEl.innerHTML = buildHourOptions(defaultTime, dayNum);
+  // Varsayılan saat o günün listesinde yoksa (çalışma saati dışı) yine de seçili gelsin
+  if (defaultTime && timeEl.value !== defaultTime) _appendAndSelectHour(timeEl, defaultTime);
   staffEl.innerHTML = (state.staff || []).map(function (s) {
-    var sel = normId(s.id) === normId(first.staff_id) ? " selected" : "";
+    var sel = normId(s.id) === normId(defaultStaffId) ? " selected" : "";
     return '<option value="' + s.id + '"' + sel + ">" + escapeHtml(getStaffFullName(s)) + "</option>";
   }).join("");
 
@@ -8525,6 +8542,8 @@ function _renderReplenishForm() {
   dateEl.onchange = function () {
     var cur = timeEl.value;
     timeEl.innerHTML = buildHourOptions(cur, new Date(dateEl.value + "T12:00:00").getDay());
+    // Seçili saat yeni günün aralığında yoksa sessizce kaybolmasın
+    if (cur && timeEl.value !== cur) _appendAndSelectHour(timeEl, cur);
   };
 }
 
@@ -8543,6 +8562,7 @@ function openReplenishModal(result, options) {
       packageEndDate: result.packageEndDate || null,
       reason: result.replenishedReason,
       deletedStartTs: result.deletedSession ? result.deletedSession.startTs : null,
+      deletedStaffId: result.deletedSession ? result.deletedSession.staffId : null,
       resolve: resolve,
     };
     var title = document.getElementById("replenishTitle");
@@ -8594,8 +8614,12 @@ window._submitReplenish = async function () {
     errEl.textContent = msg;
     errEl.classList.remove("hidden");
   };
-  if (!dateEl.value || !timeEl.value || !staffEl.value) {
-    showErr("Tarih, saat ve personel seçilmeli.");
+  var missing = [];
+  if (!dateEl.value) missing.push("tarih");
+  if (!timeEl.value) missing.push("saat");
+  if (!staffEl.value) missing.push("personel");
+  if (missing.length) {
+    showErr(missing.join(", ").replace(/^./, function (c) { return c.toUpperCase(); }) + " seçilmeli.");
     return;
   }
   try {

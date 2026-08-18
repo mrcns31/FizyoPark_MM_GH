@@ -19,18 +19,6 @@ const pad2 = (n: number) => String(n).padStart(2, '0');
 const toDateStr = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 
 /**
- * A1–A3 mobil karşılığı: seans silindikten sonra telafi sonucunu bildirir, yerleştirilemeyenler
- * için elle yerleştirme sheet'ini açar. Web'deki reportSessionReplenishResult /
- * reportBulkReplenishResults / openReplenishModal üçlüsünün paritesi.
- *
- * Kullanım:
- *   const flow = useReplenishFlow();
- *   await flow.report(result);            // tekil silme
- *   await flow.reportBulk(results);       // grup silme
- *   ...
- *   {flow.modal}
- */
-/**
  * Ekranın hemen kapanacağı yerlerde (seans formunda üye çıkarma) kullanılır: modal/kuyruk
  * açmak yerine yalnız bilgilendirir ve elle yerleştirme için nereye bakılacağını söyler.
  */
@@ -50,6 +38,18 @@ export async function alertReplenishOutcome(results: (DeleteSessionResult | null
   });
 }
 
+/**
+ * A1–A3 mobil karşılığı: seans silindikten sonra telafi sonucunu bildirir, yerleştirilemeyenler
+ * için elle yerleştirme sheet'ini açar. Web'deki reportSessionReplenishResult /
+ * reportBulkReplenishResults / openReplenishModal üçlüsünün paritesi.
+ *
+ * Kullanım:
+ *   const flow = useReplenishFlow();
+ *   await flow.report(result);            // tekil silme
+ *   await flow.reportBulk(results);       // grup silme
+ *   ...
+ *   {flow.modal}
+ */
 export function useReplenishFlow(onPlaced?: () => void) {
   const { colors, resolvedTheme } = useTheme();
   const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
@@ -96,11 +96,16 @@ export function useReplenishFlow(onPlaced?: () => void) {
       new Promise<void>((resolve) => {
         resolveRef.current = resolve;
         const first = (result.replenishCandidates || [])[0];
+        // Hiç aday denenmemişse (paket bitişi dolmuş → candidates boş) silinen seansın
+        // saati/personeli varsayılan olur; aksi hâlde saat boş kalıp alan dolu görünüyordu.
+        const deletedTs = result.deletedSession?.startTs;
+        const deletedAt = deletedTs ? new Date(Number(deletedTs)) : null;
+        const fallbackTime = deletedAt ? `${pad2(deletedAt.getHours())}:${pad2(deletedAt.getMinutes())}` : '';
         setCurrent(result);
         setQueueLabel(label);
         setDate(first?.date || toDateStr(new Date()));
-        setTime(first?.start_time || '');
-        setStaffId(first?.staff_id ?? null);
+        setTime(first?.start_time || fallbackTime);
+        setStaffId(first?.staff_id ?? result.deletedSession?.staffId ?? null);
         setError(null);
       }),
     [],
@@ -158,17 +163,24 @@ export function useReplenishFlow(onPlaced?: () => void) {
 
   async function submit() {
     if (!current?.memberPackageId) return;
-    if (!date || !time || staffId == null) {
-      setError('Tarih, saat ve personel seçilmeli.');
+    const missing = [
+      !date ? 'tarih' : null,
+      !time ? 'saat' : null,
+      staffId == null ? 'personel' : null,
+    ].filter(Boolean) as string[];
+    if (missing.length) {
+      const text = missing.join(', ');
+      setError(`${text.charAt(0).toLocaleUpperCase('tr-TR')}${text.slice(1)} seçilmeli.`);
       return;
     }
+    const staffIdNum = staffId as number;
     setBusy(true);
     setError(null);
     try {
       const res = await replenishMemberPackage(current.memberPackageId, {
         date,
         start_time: time,
-        staff_id: staffId,
+        staff_id: staffIdNum,
       });
       closeModal();
       onPlaced?.();
