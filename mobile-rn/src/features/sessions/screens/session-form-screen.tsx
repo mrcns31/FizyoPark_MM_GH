@@ -17,6 +17,7 @@ import { getStaff } from '../../staff/api/staff';
 import { useTheme } from '../../theme';
 import { surfaceTint, type AppColors, type ResolvedTheme } from '../../../theme/colors';
 import { sessionKeys, useCreateSession, useDeleteSession, useSessions, useSwapSessions, useUpdateSession } from '../api/hooks';
+import { alertReplenishOutcome } from '../replenish/use-replenish-flow';
 import { useWorkingHours } from '../../settings/api/hooks';
 import { useMemberPackages } from '../../member-packages/api/hooks';
 import { isAttendanceConfirmed, type PlannerSession } from '../api/sessions';
@@ -233,10 +234,13 @@ export function SessionFormScreen() {
             await create.mutateAsync({ memberId: mid, staffId, roomId: roomId ?? null, startTs, endTs, note: '', skipStaffHoursCheck });
           }
         }
-        // Çıkarılan üyeler → sil
+        // Çıkarılan üyeler → sil. Silinen seans bir pakete bağlıysa telafi tetiklenir;
+        // eklenemezse ekran kapanmadan önce bilgilendirilir (A1).
+        const removedResults = [];
         for (const s of removed) {
-          await del.mutateAsync({ id: s.id, adminPassword });
+          removedResults.push(await del.mutateAsync({ id: s.id, adminPassword }));
         }
+        await alertReplenishOutcome(removedResults);
       } else {
         for (const mid of memberIds) {
           const isForcedMember = forceMemberId != null && mid === forceMemberId;

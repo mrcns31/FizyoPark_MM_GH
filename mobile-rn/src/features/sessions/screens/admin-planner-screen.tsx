@@ -29,6 +29,7 @@ import { useStaff } from '../../staff/api/hooks';
 import { useRooms } from '../../rooms/api/hooks';
 import { staffColor } from '../../../lib/staff-color';
 import { sessionKeys, useConfirmAttendance, useDeleteSession, useSessions } from '../api/hooks';
+import { useReplenishFlow } from '../replenish/use-replenish-flow';
 import { isAttendanceConfirmed, type PlannerSession } from '../api/sessions';
 import { promptAdminPassword } from '../../../lib/admin-password';
 import { AdminCalendarGrid, type MemberPkgInfo } from './admin-calendar-grid';
@@ -68,6 +69,7 @@ export function AdminPlannerScreen() {
     endDate: toDateStr(range.end),
   });
   const del = useDeleteSession();
+  const replenishFlow = useReplenishFlow();
   const confirm = useConfirmAttendance();
   const { data: staff } = useStaff();
   const { data: rooms } = useRooms();
@@ -154,8 +156,11 @@ export function AdminPlannerScreen() {
               if (pwd == null) return;
               adminPassword = pwd;
             }
-            for (const s of grp) await del.mutateAsync({ id: s.id, adminPassword });
+            // Telafi sonuçları toplanır; tekil silmede tek uyarı, grupta özet + kuyruk (A1/A3)
+            const delResults = [];
+            for (const s of grp) delResults.push(await del.mutateAsync({ id: s.id, adminPassword }));
             setSelectedKey(null);
+            await replenishFlow.reportBulk(delResults);
           } catch (e) {
             Alert.alert('Hata', (e as Error).message);
           }
@@ -512,6 +517,7 @@ export function AdminPlannerScreen() {
         onAttendance={onAttendance}
         busy={confirm.isPending || del.isPending}
       />
+      {replenishFlow.modal}
     </SafeAreaView>
   );
 }

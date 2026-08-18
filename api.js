@@ -844,6 +844,20 @@
     const rows = await apiFetch('/member-packages/' + id + '/sessions');
     return (rows || []).map(packageSessionFromApi);
   }
+  // Telafi seansını elle yerleştir. Yer bulunamazsa 409 + conflicts döner (çağıran gösterir).
+  async function replenishMemberPackage(id, body) {
+    return apiFetch('/member-packages/' + id + '/replenish', {
+      method: 'POST',
+      body: JSON.stringify(body || {}),
+    });
+  }
+  // "Telafisiz bırak" kararını activity log'a yazar (veri değiştirmez).
+  async function skipReplenish(id, body) {
+    return apiFetch('/member-packages/' + id + '/replenish-skip', {
+      method: 'POST',
+      body: JSON.stringify(body || {}),
+    });
+  }
   function packageSessionFromApi(row) {
     return {
       id: row.id,
@@ -967,9 +981,10 @@
     const rows = (res && res.sessions) || [];
     return rows.map(sessionFromApi);
   }
+  // Yanıt döndürülür: çağıran taraf telafi sonucunu (replenished / replenishCandidates) gösterir.
   async function deleteSession(id, options) {
     var opts = options || {};
-    await apiFetch('/sessions/' + id, {
+    return apiFetch('/sessions/' + id, {
       method: 'DELETE',
       body: opts.adminPassword ? JSON.stringify({ adminPassword: opts.adminPassword }) : undefined,
     });
@@ -1178,6 +1193,8 @@
     updateMemberPackage,
     endMemberPackage,
     getMemberPackageSessions,
+    replenishMemberPackage,
+    skipReplenish,
     getSessions,
     getNotifications,
     createSession,

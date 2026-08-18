@@ -4,7 +4,7 @@ import bcrypt from 'bcrypt';
 import db from '../config/database.js';
 import { verifyToken } from './auth.js';
 import { placeSessionWithRebalance, rebalanceSlotRooms } from '../utils/sessionSlot.js';
-import { cancelPackageSessionsAtSlot, resolveMemberPackageId } from '../utils/packageSessions.js';
+import { cancelPackageSessionsAtSlot, resolveMemberPackageId, formatPlacedAtLabel } from '../utils/packageSessions.js';
 import { log as activityLog } from '../utils/activityLogger.js';
 import { isSessionAttendanceConfirmed } from '../utils/sessionAttendance.js';
 import { matchWalkInToSession } from '../utils/facilityAccess.js';
@@ -936,7 +936,7 @@ router.delete('/:id', [
     }
 
     const row = existing.rows[0];
-    const { cancelledIds, replenished } = await cancelPackageSessionsAtSlot(db, {
+    const { cancelledIds, replenished, memberPackageId } = await cancelPackageSessionsAtSlot(db, {
       memberId: row.member_id,
       startTs: row.start_ts,
       memberPackageId: row.member_package_id,
@@ -958,12 +958,23 @@ router.delete('/:id', [
         cancelledIds,
         replenished: replenished.added,
         replenishedReason: replenished.added ? null : (replenished.reason || null),
+        replenishPlacedAt: replenished.added ? formatPlacedAtLabel(replenished.placedAt) : null,
       },
     }).catch(() => {});
+    // Admin arayüzü telafinin nereye konduğunu (ya da neden konamadığını) gösterebilsin diye
+    // yerleşen slot ve denenip elenen adaylar yanıta eklenir.
     res.json({
-      message: replenished.added ? 'Seans silindi, paket sonuna yeni seans eklendi' : 'Seans silindi',
+      message: replenished.added
+        ? `Seans silindi. Telafi ${formatPlacedAtLabel(replenished.placedAt)} olarak paketin sonuna eklendi.`
+        : 'Seans silindi',
       replenished: replenished.added,
       replenishedReason: replenished.added ? null : (replenished.reason || null),
+      replenishPlaced: replenished.added ? (replenished.placedAt || null) : null,
+      replenishCandidates: replenished.added ? null : (replenished.candidates || []),
+      packageEndDate: replenished.packageEndDate || null,
+      // Admin telafiyi elle yerleştirebilsin diye (POST /member-packages/:id/replenish)
+      memberPackageId: memberPackageId ?? null,
+      deletedSession: { startTs: Number(row.start_ts), memberId: row.member_id, staffId: row.staff_id },
     });
   } catch (error) {
     console.error('Session delete error:', error);

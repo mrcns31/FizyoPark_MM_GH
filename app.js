@@ -1215,6 +1215,7 @@ function cacheEls() {
     "packageSessionsExportMenu",
     "packageSessionsShareBtn",
     "packageSessionsSubtitle",
+    "packageSessionsShortfall",
     "packageSessionsPackagePicker",
     "packageSessionsPackagePickerList",
     "packageSessionsCards",
@@ -4227,8 +4228,9 @@ function renderEvents({ startMin, slotMin, slotsCount }) {
               "Girişi onaylanmış seansı silmek için admin şifrenizi girin."
             );
             if (delPwd.cancelled) return;
-            await window.API.deleteSession(id, delPwd.adminPassword ? { adminPassword: delPwd.adminPassword } : undefined);
+            var delResult = await window.API.deleteSession(id, delPwd.adminPassword ? { adminPassword: delPwd.adminPassword } : undefined);
             removeSessionFromState(id);
+            await reportSessionReplenishResult(delResult);
           } catch (err) {
             console.error("Seans silinemedi:", err);
             await showAppAlert("Seans silinemedi: " + (err?.data?.error || err?.message || "Bilinmeyen hata"));
@@ -4950,13 +4952,17 @@ async function confirmAndDeleteStaffSessionGroup(group) {
         "Girişi onaylanmış seans(lar)ı silmek için admin şifrenizi girin."
       );
       if (bulkPwd.cancelled) return false;
+      // Telafi sonuçları toplanır; her seans için ayrı diyalog açmak yerine sonda tek özet verilir (A3)
+      var bulkResults = [];
       for (const sess of toRemove) {
-        await window.API.deleteSession(
+        var bulkRes = await window.API.deleteSession(
           sess.id,
           bulkPwd.adminPassword ? { adminPassword: bulkPwd.adminPassword } : undefined
         );
+        bulkResults.push({ session: sess, result: bulkRes });
       }
       removeSessionsFromState(toRemove.map(function (s) { return s.id; }));
+      pendingBulkReplenishResults = bulkResults;
     } catch (err) {
       console.error("Seanslar silinemedi:", err);
       await showAppAlert("Seanslar silinemedi: " + (err?.data?.error || err?.message || "Bilinmeyen hata"));
@@ -4973,6 +4979,11 @@ async function confirmAndDeleteStaffSessionGroup(group) {
     state.sessions = state.sessions.filter(function (x) { return !idsToRemove.has(normId(x.id)); });
   }
   render();
+  if (pendingBulkReplenishResults) {
+    var bulkReport = pendingBulkReplenishResults;
+    pendingBulkReplenishResults = null;
+    await reportBulkReplenishResults(bulkReport);
+  }
   return true;
 }
 
@@ -8360,6 +8371,274 @@ async function refreshMemberPortal() {
   }
 }
 
+// Telafi eklenemediğinde sunucunun döndürdüğü sebep kodları — admin metinleri.
+var REPLENISH_FAIL_LABELS = {
+  no_available_slot: "paket bitiş tarihine kadar uygun gün bulunamadı",
+  package_full: "pakette boş ders hakkı kalmamış",
+  no_slots: "pakette gün/saat tanımı yok",
+  invalid_end_date: "paketin bitiş tarihi geçersiz",
+  invalid_start: "telafi başlangıç tarihi hesaplanamadı",
+  package_not_found: "paket bulunamadı",
+  error: "beklenmeyen bir hata oluştu",
+};
+
+function formatIsoDateTr(isoDate) {
+  return isoDate ? String(isoDate).slice(0, 10).split("-").reverse().join(".") : "";
+}
+
+/**
+ * Seans silindikten sonra telafi sonucunu admin'e bildirir.
+ * Pakete bağlı olmayan seanslarda (replenishedReason boş) sessiz kalır — telafi zaten beklenmez.
+ * Telafi eklenemediyse ve paket biliniyorsa elle yerleştirme modalı açılır (A2).
+ */
+async function reportSessionReplenishResult(result) {
+  if (!result) return;
+  if (result.replenished) {
+    await showAppAlert(result.message || "Seans silindi, paket sonuna telafi seansı eklendi.", {
+      title: "Telafi eklendi",
+    });
+    return;
+  }
+  if (!result.replenishedReason) return;
+
+  if (result.memberPackageId) {
+    await openReplenishModal(result);
+    return;
+  }
+  // Paket çözülemediyse elle yerleştirme yapılamaz — yalnız bilgilendir
+  await showAppAlert(replenishFailSummary(result), { title: "Telafi eklenemedi", okClass: "btn--danger" });
+}
+
+/** Silinen seansın "12.08.2026 Salı 11:00" etiketi (yanıttaki deletedSession'dan). */
+function deletedSessionLabel(result) {
+  var ts = result && result.deletedSession && result.deletedSession.startTs;
+  if (!ts) return "";
+  var d = new Date(Number(ts));
+  var days = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
+  return pad2(d.getDate()) + "." + pad2(d.getMonth() + 1) + "." + d.getFullYear() +
+    " " + days[d.getDay()] + " " + pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+}
+
+/** Modal ve alert'in ortak açıklama metni. */
+function replenishFailSummary(result) {
+  var reason = REPLENISH_FAIL_LABELS[result.replenishedReason] || result.replenishedReason;
+  var label = deletedSessionLabel(result);
+  var msg = (label ? label + " seansı silindi" : "Seans silindi") +
+    " ancak telafi seansı eklenemedi: " + reason + ".\nPaket bir seans eksik kalacak.";
+  var candidates = Array.isArray(result.replenishCandidates) ? result.replenishCandidates.slice(0, 4) : [];
+  if (candidates.length) {
+    msg += "\n\nDenenen tarihler:\n" + candidates.map(function (c) {
+      return "• " + formatIsoDateTr(c.date) + " " + (c.day_name || "") + " " + (c.start_time || "") +
+        " — " + (c.reason_label || "yerleştirilemedi");
+    }).join("\n");
+  }
+  if (result.packageEndDate) {
+    msg += "\n\nPaket bitiş tarihi: " + formatIsoDateTr(result.packageEndDate);
+  }
+  return msg;
+}
+
+/**
+ * A3 — Toplu/grup silme sonrası tek özet, ardından yerleştirilemeyenler için sırayla A2 modalı.
+ * Her seans için ayrı diyalog açmak yerine önce sayılar verilir.
+ */
+async function reportBulkReplenishResults(entries) {
+  var list = (entries || []).filter(function (e) { return e && e.result; });
+  if (!list.length) return;
+  var placed = list.filter(function (e) { return e.result.replenished; });
+  var failed = list.filter(function (e) { return !e.result.replenished && e.result.replenishedReason; });
+
+  // Paketi çözülemeyen seanslar elle de yerleştirilemez — özet metni buna göre ayrışır
+  var fixable = failed.filter(function (e) { return e.result.memberPackageId; });
+  var unfixable = failed.length - fixable.length;
+
+  var msg = list.length + " seans silindi.";
+  if (placed.length) msg += "\n" + placed.length + " telafi seansı paket sonuna eklendi.";
+  if (fixable.length) msg += "\n" + fixable.length + " telafi yerleştirilemedi — sırayla düzeltebilirsiniz.";
+  if (unfixable) msg += "\n" + unfixable + " seans için telafi eklenemedi (paket bulunamadı).";
+  await showAppAlert(msg, {
+    title: failed.length ? "Telafi eksik kaldı" : "Seanslar silindi",
+    okClass: failed.length ? "btn--danger" : "btn--primary",
+  });
+
+  for (var i = 0; i < fixable.length; i++) {
+    await openReplenishModal(fixable[i].result, { queueIndex: i + 1, queueTotal: fixable.length });
+  }
+}
+
+// ── A2: Telafi Yerleştirme modalı (Düzenle / Telafisiz bırak) ────────────────
+var _replenishState = null;
+var pendingBulkReplenishResults = null;
+
+function _createReplenishModalIfNeeded() {
+  if (document.getElementById("replenishModal")) return;
+  var el = document.createElement("div");
+  el.id = "replenishModal";
+  el.className = "modal-overlay hidden";
+  el.innerHTML =
+    '<div class="modal" style="max-width:560px;width:96%;max-height:90vh;overflow-y:auto">' +
+      '<div class="modal-header"><h2 id="replenishTitle" class="modal-title" style="font-size:16px">⚠️ Telafi seansı yerleştirilemedi</h2></div>' +
+      '<div class="modal-body">' +
+        '<p id="replenishInfo" style="margin:0 0 12px;font-size:13px;line-height:1.5;white-space:pre-wrap;color:var(--text)"></p>' +
+        '<div style="border-top:1px solid #374151;padding-top:12px">' +
+          '<div style="font-size:13px;font-weight:600;margin-bottom:8px">Telafiyi elle yerleştir</div>' +
+          '<div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;font-size:13px">' +
+            '<label style="display:flex;flex-direction:column;gap:4px">Tarih' +
+              '<input type="date" id="replenishDate" class="input" style="font-size:13px;padding:4px 8px"></label>' +
+            '<label style="display:flex;flex-direction:column;gap:4px">Saat' +
+              '<select id="replenishTime" class="input" style="font-size:13px;padding:4px 8px"></select></label>' +
+            '<label style="display:flex;flex-direction:column;gap:4px">Personel' +
+              '<select id="replenishStaff" class="input" style="font-size:13px;padding:4px 8px"></select></label>' +
+          '</div>' +
+          '<p id="replenishError" class="hidden" style="margin:10px 0 0;font-size:13px;color:#ef4444;white-space:pre-wrap"></p>' +
+        '</div>' +
+      '</div>' +
+      '<div class="modal-footer">' +
+        '<button class="btn btn--secondary" onclick="window._skipReplenish()">Telafisiz bırak</button>' +
+        '<button id="replenishSaveBtn" class="btn btn--primary" onclick="window._submitReplenish()">Yerleştir</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(el);
+}
+
+function _renderReplenishForm() {
+  var dateEl = document.getElementById("replenishDate");
+  var timeEl = document.getElementById("replenishTime");
+  var staffEl = document.getElementById("replenishStaff");
+  if (!dateEl || !timeEl || !staffEl || !_replenishState) return;
+
+  var first = (_replenishState.candidates || [])[0] || {};
+  // Varsayılan: ilk denenen adayın gün/saat/personeli — admin genelde onu düzeltmek ister
+  var defaultDate = first.date || dateToInputValue(new Date());
+  dateEl.value = defaultDate;
+  dateEl.min = dateToInputValue(new Date());
+  if (_replenishState.packageEndDate) dateEl.max = String(_replenishState.packageEndDate).slice(0, 10);
+
+  var dayNum = new Date(defaultDate + "T12:00:00").getDay();
+  timeEl.innerHTML = buildHourOptions(first.start_time || null, dayNum);
+  staffEl.innerHTML = (state.staff || []).map(function (s) {
+    var sel = normId(s.id) === normId(first.staff_id) ? " selected" : "";
+    return '<option value="' + s.id + '"' + sel + ">" + escapeHtml(getStaffFullName(s)) + "</option>";
+  }).join("");
+
+  // Tarih değişince o günün çalışma saatlerine göre saat listesi yenilenir
+  dateEl.onchange = function () {
+    var cur = timeEl.value;
+    timeEl.innerHTML = buildHourOptions(cur, new Date(dateEl.value + "T12:00:00").getDay());
+  };
+}
+
+/**
+ * Modal kapanana kadar bekleyen Promise döndürür — toplu silmede kuyruk hâlinde açılabilsin diye.
+ * @param {object} [options] queueIndex/queueTotal verilirse başlıkta "(2/3)" gösterilir
+ */
+function openReplenishModal(result, options) {
+  options = options || {};
+  _createReplenishModalIfNeeded();
+  var el = document.getElementById("replenishModal");
+  return new Promise(function (resolve) {
+    _replenishState = {
+      memberPackageId: result.memberPackageId,
+      candidates: result.replenishCandidates || [],
+      packageEndDate: result.packageEndDate || null,
+      reason: result.replenishedReason,
+      deletedStartTs: result.deletedSession ? result.deletedSession.startTs : null,
+      resolve: resolve,
+    };
+    var title = document.getElementById("replenishTitle");
+    if (title) {
+      title.textContent = "⚠️ Telafi seansı yerleştirilemedi" +
+        (options.queueTotal > 1 ? " (" + options.queueIndex + "/" + options.queueTotal + ")" : "");
+    }
+    var info = document.getElementById("replenishInfo");
+    if (info) info.textContent = replenishFailSummary(result);
+    var err = document.getElementById("replenishError");
+    if (err) err.classList.add("hidden");
+    _renderReplenishForm();
+    if (el) el.classList.remove("hidden");
+  });
+}
+
+window._closeReplenishModal = function () {
+  var el = document.getElementById("replenishModal");
+  if (el) el.classList.add("hidden");
+  var resolve = _replenishState && _replenishState.resolve;
+  _replenishState = null;
+  if (resolve) resolve();
+};
+
+/**
+ * B4 — "Telafisiz bırak": paket bir seans eksik kalıyor, bu karar activity log'a yazılır.
+ * Log yazılamazsa akış durmaz; kapatma her hâlükârda gerçekleşir.
+ */
+window._skipReplenish = function () {
+  var st = _replenishState;
+  if (st && st.memberPackageId && window.API && window.API.skipReplenish) {
+    window.API.skipReplenish(st.memberPackageId, {
+      session_start_ts: st.deletedStartTs || null,
+      reason: st.reason || null,
+    }).catch(function () {});
+  }
+  window._closeReplenishModal();
+};
+
+window._submitReplenish = async function () {
+  if (!_replenishState || !window.API || !window.API.replenishMemberPackage) return;
+  var dateEl = document.getElementById("replenishDate");
+  var timeEl = document.getElementById("replenishTime");
+  var staffEl = document.getElementById("replenishStaff");
+  var errEl = document.getElementById("replenishError");
+  var btn = document.getElementById("replenishSaveBtn");
+  var showErr = function (msg) {
+    if (!errEl) return;
+    errEl.textContent = msg;
+    errEl.classList.remove("hidden");
+  };
+  if (!dateEl.value || !timeEl.value || !staffEl.value) {
+    showErr("Tarih, saat ve personel seçilmeli.");
+    return;
+  }
+  try {
+    if (btn) { btn.disabled = true; btn.textContent = "Yerleştiriliyor..."; }
+    var res = await window.API.replenishMemberPackage(_replenishState.memberPackageId, {
+      date: dateEl.value,
+      start_time: timeEl.value,
+      staff_id: parseInt(staffEl.value, 10),
+    });
+    window._closeReplenishModal();
+    if (window.API.getSessions) {
+      try { await refreshSessionsInLoadedRange(); } catch (_) {}
+    }
+    render();
+    await showAppAlert((res && res.message) || "Telafi seansı eklendi.", { title: "Telafi eklendi" });
+  } catch (e) {
+    var detail = (e && e.data && Array.isArray(e.data.conflicts) && e.data.conflicts[0])
+      ? e.data.conflicts[0].reason_label
+      : null;
+    showErr((e?.data?.error || e?.message || "Yerleştirilemedi") + (detail && detail !== e?.data?.error ? "\n(" + detail + ")" : ""));
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = "Yerleştir"; }
+  }
+};
+
+/**
+ * Üyeye gösterilecek "telafi eklenemedi" metni. `no_slots` / `error` gibi sebepler bir arıza
+ * göstergesi olduğu için üyeye teknik sebep değil, merkezin devreye gireceği bilgisi verilir.
+ * Aynı metinler mobil uygulamada da var (member-home-screen.tsx).
+ */
+function memberReplenishFailMessage(reason) {
+  if (reason === "no_available_slot") {
+    return "Seansınız iptal edildi ancak paket bitiş tarihine kadar uygun yeni seans bulunamadı. " +
+      "Telafi randevunuz için lütfen merkezimizle iletişime geçin.";
+  }
+  if (reason === "package_full") {
+    // Normal durum (hak zaten tam planlı) — üyeyi aksiyona çağırmaya gerek yok.
+    return "Seansınız iptal edildi. Paketinizdeki tüm seanslar planlanmış durumda, telafi eklenmedi.";
+  }
+  return "Seansınız iptal edildi ancak telafi randevunuz otomatik oluşturulamadı. " +
+    "Telafi randevunuz için lütfen merkezimizle iletişime geçin.";
+}
+
 async function cancelMemberSessionById(sessionId, options) {
   if (!sessionId || !window.API || !window.API.cancelMemberSession) return false;
   options = options || {};
@@ -8377,9 +8656,11 @@ async function cancelMemberSessionById(sessionId, options) {
   }
   render();
   if (result && result.replenished) {
-    // sessiz başarı
-  } else if (result && result.replenished === false && result.replenishedReason === "no_available_slot") {
-    await showAppAlert("Seans iptal edildi ancak paket bitiş tarihine kadar uygun yeni seans bulunamadı.");
+    // Telafinin hangi tarihe eklendiğini üye görsün — metin sunucudan hazır gelir.
+    await showAppAlert(result.message || "Telafi randevunuz otomatik olarak paketinizin sonuna eklendi.");
+  } else if (result && result.replenished === false && result.replenishedReason) {
+    // Sebep ne olursa olsun üye bilgilendirilir; eskiden yalnız no_available_slot uyarı üretiyordu.
+    await showAppAlert(memberReplenishFailMessage(result.replenishedReason));
   }
   return true;
 }
@@ -10566,6 +10847,7 @@ function loadPackageSessionsForModal(mp) {
   if (!els.packageSessionsModal || !mp) return;
   els.packageSessionsTableBody.innerHTML = "";
   els.packageSessionsEmpty.classList.add("hidden");
+  if (els.packageSessionsShortfall) els.packageSessionsShortfall.classList.add("hidden");
   if (els.packageSessionsCards) els.packageSessionsCards.classList.add("hidden");
   if (els.packageSessionsTableWrap) els.packageSessionsTableWrap.classList.remove("hidden");
   if (els.packageSessionsTable) els.packageSessionsTable.classList.remove("hidden");
@@ -10694,10 +10976,37 @@ async function moveSessionToPackage(sessionId, targetMpId) {
   }
 }
 
+/**
+ * A4 — Planlanan seans sayısı ders sayısından azsa uyarı gösterir.
+ * "Kalan seans" ders sayısı üzerinden hesaplandığı için eksik paket başka hiçbir yerde
+ * görünmüyor; telafi eklenemeyen paketler burada fark edilir.
+ * Yalnız aktif paketlerde anlamlıdır — tamamlanan/iptal edilen pakette seansların silinmiş
+ * olması normaldir.
+ */
+function renderPackageSessionsShortfall(plannedCount) {
+  var el = els.packageSessionsShortfall;
+  if (!el) return;
+  var mp = packageSessionsCurrent && packageSessionsCurrent.mp;
+  var total = mp ? Number(mp.lessonCount != null ? mp.lessonCount : mp.lesson_count || 0) : 0;
+  var missing = total - plannedCount;
+  // plannedCount === 0: "gün dağılımı yapmak istemiyorum" ile kurulmuş paket olabilir — yanlış
+  // alarm vermemek için sessiz kalınır; modal zaten "Seans kaydı yok" diyor.
+  if (!mp || !total || !plannedCount || missing <= 0 || !isMemberPackageActive(mp)) {
+    el.classList.add("hidden");
+    el.textContent = "";
+    return;
+  }
+  el.textContent = "⚠ " + plannedCount + "/" + total + " ders planlanmış — " + missing +
+    " seans eksik. Telafi eklenememiş olabilir.";
+  el.classList.remove("hidden");
+}
+
 function renderPackageSessionsTable(sessions) {
   var list = sessions || [];
   var active = list.filter(function (s) { return !(s.isCancelled || s.is_cancelled); });
   var cancelled = list.filter(function (s) { return !!(s.isCancelled || s.is_cancelled); });
+
+  renderPackageSessionsShortfall(active.length);
 
   renderPackageSessionsList(active, {
     role: "admin",
@@ -12791,6 +13100,7 @@ async function deleteSessionFromModal() {
   const existingSession = state.sessions.find(function (x) {
     return normId(x.id) === normId(sessionId);
   });
+  var replenishReport = null; // telafi sonucu modal kapandıktan sonra bildirilir
   if (window.API && window.API.getToken()) {
     try {
       var delModalPwd = await resolveAdminPasswordForSessions(
@@ -12798,11 +13108,12 @@ async function deleteSessionFromModal() {
         "Girişi onaylanmış seansı silmek için admin şifrenizi girin."
       );
       if (delModalPwd.cancelled) return;
-      await window.API.deleteSession(
+      var delModalResult = await window.API.deleteSession(
         sessionId,
         delModalPwd.adminPassword ? { adminPassword: delModalPwd.adminPassword } : undefined
       );
       removeSessionFromState(sessionId);
+      replenishReport = delModalResult;
     } catch (e) {
       console.error("Seans silinemedi:", e);
       if (e.status === 404) {
@@ -12826,6 +13137,7 @@ async function deleteSessionFromModal() {
   }
   closeSessionModal();
   render();
+  await reportSessionReplenishResult(replenishReport);
 }
 
 function exportJson() {

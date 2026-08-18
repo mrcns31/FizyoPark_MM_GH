@@ -1,5 +1,6 @@
 import { apiClient } from '../../../lib/api-client';
 import { memberPackageFromApi, type MemberPackage, type PackageSlot } from '../../../types/api';
+import type { ReplenishPlaced } from '../../sessions/api/sessions';
 
 /** Üye paketleri (admin) — /member-packages. Paket atama + haftalık slot planlama. */
 
@@ -98,6 +99,26 @@ export async function updateMemberPackage(
 
 export async function endMemberPackage(id: number, endDate?: string): Promise<void> {
   await apiClient.post(`/member-packages/${id}/end`, endDate ? { end_date: endDate } : {});
+}
+
+/**
+ * Telafi seansını elle yerleştir (otomatik telafi yer bulamadığında).
+ * Yerleştirilemezse ApiError fırlatır; 409 gövdesinde `conflicts[]` bulunur.
+ */
+export async function replenishMemberPackage(
+  id: number,
+  body: { date: string; start_time: string; staff_id: number },
+): Promise<{ sessionId: number; placedAt: ReplenishPlaced; message: string }> {
+  const { data } = await apiClient.post(`/member-packages/${id}/replenish`, body);
+  return data;
+}
+
+/** "Telafisiz bırak" kararını activity log'a yazar (veri değiştirmez). */
+export async function skipReplenish(
+  id: number,
+  body: { session_start_ts?: number | null; reason?: string | null },
+): Promise<void> {
+  await apiClient.post(`/member-packages/${id}/replenish-skip`, body);
 }
 
 /** Pakete ait seans (web packageSessionFromApi paritesi). */

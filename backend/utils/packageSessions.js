@@ -68,6 +68,42 @@ export async function cancelPackageSessionsAtSlot(db, {
   return { cancelledIds, replenished, memberPackageId: mpId };
 }
 
+const DAY_NAMES_TR = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
+
+// Türkçe yönelme eki saatin okunuşuna göre değişir: 11:00'e, 12:00'ye, 16:00'ya, 19:00'a.
+// Index = saat (0-23). Dakika 00 değilse ek dakikaya göre belirlenir.
+const HOUR_SUFFIX_TR = ['a', 'e', 'ye', 'e', 'e', 'e', 'ya', 'ye', 'e', 'a', 'a', 'e',
+  'ye', 'e', 'e', 'e', 'ya', 'ye', 'e', 'a', 'ye', 'e', 'ye', 'e'];
+const MINUTE_SUFFIX_TR = { 15: 'e', 30: 'a', 45: 'e' };
+
+/** "11:00'e" / "12:30'a" — üyeye gösterilen metinlerde kullanılır. */
+export function formatTimeWithSuffix(hh, mm) {
+  const time = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+  const suffix = mm ? (MINUTE_SUFFIX_TR[mm] || 'e') : (HOUR_SUFFIX_TR[hh] || 'e');
+  return `${time}'${suffix}`;
+}
+
+/** "29.09.2026 Salı 11:00" — ek almadan düz etiket (admin metinleri ve listeler için). */
+export function formatPlacedAtLabel(placedAt) {
+  if (!placedAt || !placedAt.date) return '';
+  const [yyyy, mm, dd] = String(placedAt.date).split('-');
+  return `${dd}.${mm}.${yyyy} ${placedAt.day_name || ''} ${placedAt.start_time || ''}`.replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Telafi seansı eklendiğinde üyeye gösterilecek metin.
+ * Web ve mobil aynı metni kullansın diye sunucuda kuruluyor.
+ * @param {{date: string, day_name: string, start_time: string}|null} placedAt
+ */
+export function buildReplenishedMessage(placedAt) {
+  if (!placedAt || !placedAt.date) {
+    return 'Telafi randevunuz otomatik olarak paketinizin sonuna eklendi.';
+  }
+  const [yyyy, mm, dd] = String(placedAt.date).split('-');
+  const [h, m] = String(placedAt.start_time || '00:00').split(':').map((x) => parseInt(x, 10) || 0);
+  return `Telafi randevunuz ${dd}.${mm}.${yyyy} ${placedAt.day_name || ''} ${formatTimeWithSuffix(h, m)} otomatik olarak paketinizin sonuna eklendi.`.replace(/\s+/g, ' ');
+}
+
 /** DB date / ISO → yerel gün başlangıcı */
 function toLocalDay(val) {
   if (val == null || val === '') return new Date(NaN);
@@ -141,6 +177,17 @@ export async function addNextSessionAfterLastForPackage(db, memberPackageId, opt
       return { added: false, reason: 'no_slots' };
     }
 
+    // Slot personellerinin adları tek sorguda — aday listesi ve yerleşen seans için gerekiyor
+    const staffNames = {};
+    const slotStaffIds = [...new Set(slots.map((s) => s.staff_id).filter((x) => x != null))];
+    if (slotStaffIds.length > 0) {
+      const namesRes = await db.query(
+        "SELECT id, first_name || ' ' || last_name AS name FROM staff WHERE id = ANY($1::int[])",
+        [slotStaffIds]
+      ).catch(() => ({ rows: [] }));
+      for (const row of namesRes.rows) staffNames[row.id] = row.name;
+    }
+
     // Yalnızca ÜYENİN iptal ettiği tarihler telafiye kapalıdır — üye "o gün gelemem" demiştir.
     // Sistemin kendi sildikleri (deleted_by NULL: paket yeniden planlama, hak taşması trim'i) ve
     // admin iptalleri atlanmaz; atlanırsa o tarih pakette kalıcı olarak kullanılamaz hale gelir ve
@@ -171,7 +218,21 @@ export async function addNextSessionAfterLastForPackage(db, memberPackageId, opt
       closureRanges.some((r) => dateStr >= r.start && dateStr <= r.end);
 
     // Atlanan adaylar: telafinin neden ileri bir tarihe kaydığı loglardan görülebilsin.
+    // Yapı, check-availability çakışma şemasıyla aynı — admin arayüzü ikisini tek bileşenle gösterir.
     const skipped = [];
+    const pushSkip = (dateStr, dayOfWeek, timeStr, staffId, reasonCode, reasonLabel) => {
+      skipped.push({
+        date: dateStr,
+        day_name: DAY_NAMES_TR[dayOfWeek],
+        day_of_week: dayOfWeek,
+        start_time: timeStr,
+        staff_id: staffId ?? null,
+        staff_name: staffNames[staffId] || '',
+        reason_code: reasonCode,
+        reason_label: reasonLabel,
+      });
+    };
+    const skippedForLog = () => skipped.map((s) => `${s.date} ${s.start_time}: ${s.reason_label}`);
 
     for (let d = new Date(startDay.getTime()); d.getTime() <= end.getTime(); d.setDate(d.getDate() + 1)) {
       const dayOfWeek = d.getDay();
@@ -186,8 +247,10 @@ export async function addNextSessionAfterLastForPackage(db, memberPackageId, opt
         const startTs = slotStart.getTime();
         const endTs = startTs + SLOT_DURATION_MS;
 
+        const slotTime = `${String(h || 0).padStart(2, '0')}:${String(m || 0).padStart(2, '0')}`;
+
         if (cancelledStartTs.has(startTs)) {
-          skipped.push(`${dateStr} ${timeStr}: üye daha önce iptal etmiş`);
+          pushSkip(dateStr, dayOfWeek, slotTime, slot.staff_id, 'member_cancelled', 'üye daha önce iptal etmiş');
           continue;
         }
 
@@ -198,7 +261,7 @@ export async function addNextSessionAfterLastForPackage(db, memberPackageId, opt
           [memberPackageId, member_id, startTs]
         );
         if (dup.rows.length > 0) {
-          skipped.push(`${dateStr} ${timeStr}: zaten seans var`);
+          pushSkip(dateStr, dayOfWeek, slotTime, slot.staff_id, 'already_exists', 'zaten seans var');
           continue;
         }
 
@@ -210,18 +273,33 @@ export async function addNextSessionAfterLastForPackage(db, memberPackageId, opt
           memberPackageId,
         });
         if (!placed.ok) {
-          skipped.push(`${dateStr} ${timeStr}: ${placed.error || 'yerleştirilemedi'}`);
+          const err = placed.error || 'yerleştirilemedi';
+          const code = /çalışma saati/i.test(err) ? 'outside_working_hours'
+            : /kapasite/i.test(err) ? 'capacity_full'
+            : 'placement_failed';
+          pushSkip(dateStr, dayOfWeek, slotTime, slot.staff_id, code, err);
           continue;
         }
 
         if (skipped.length > 0) {
           console.warn('addNextSessionAfterLastForPackage: aday tarihler atlandı', {
             memberPackageId,
-            yerlesen: `${dateStr} ${timeStr}`,
-            atlananlar: skipped,
+            yerlesen: `${dateStr} ${slotTime}`,
+            atlananlar: skippedForLog(),
           });
         }
-        return { added: true, sessionId: placed.sessionId, skipped };
+        // Telafinin nereye konduğu — üyeye/admin'e gösterilen metinler bunu kullanır.
+        // Alan adları check-availability çakışma şemasıyla aynı tutuldu.
+        const placedAt = {
+          start_ts: startTs,
+          date: dateStr,
+          day_name: DAY_NAMES_TR[dayOfWeek],
+          day_of_week: dayOfWeek,
+          start_time: slotTime,
+          staff_id: slot.staff_id,
+          staff_name: staffNames[slot.staff_id] || '',
+        };
+        return { added: true, sessionId: placed.sessionId, skipped, placedAt };
       }
     }
 
@@ -231,9 +309,10 @@ export async function addNextSessionAfterLastForPackage(db, memberPackageId, opt
       end: end.toISOString(),
       count,
       lesson_count,
-      atlananlar: skipped,
+      atlananlar: skippedForLog(),
     });
-    return { added: false, reason: 'no_available_slot' };
+    // candidates: adminin "neden yerleşmedi" sorusunu ekranda cevaplayabilmesi için
+    return { added: false, reason: 'no_available_slot', candidates: skipped, packageEndDate: String(end_date).slice(0, 10) };
   } catch (err) {
     console.error('addNextSessionAfterLastForPackage error:', err);
     return { added: false, reason: 'error' };

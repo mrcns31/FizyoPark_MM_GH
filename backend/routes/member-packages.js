@@ -9,6 +9,7 @@ import { loadMemberRatings, loadStaffMap, sessionToDto, toDateOnlyString } from 
 import { fulfillPendingPackageRequestsForMember } from './package-requests.js';
 import { localDateStrFromTs } from '../utils/staffWorkingHours.js';
 import { autoCompletePackageIfExhausted } from '../utils/packageSessionCounts.js';
+import { formatPlacedAtLabel } from '../utils/packageSessions.js';
 
 const router = express.Router();
 router.use(verifyToken);
@@ -1348,6 +1349,173 @@ router.post('/:id/end', async (req, res) => {
     res.status(500).json({ error: 'Üyelik sonlandırılırken hata oluştu' });
   }
 });
+
+/**
+ * Telafi seansını elle yerleştir (B3).
+ * Otomatik telafi (addNextSessionAfterLastForPackage) yer bulamadığında admin bu uçla
+ * tarih/saat/personel seçerek seansı ekler. Yerleştirme kuralları otomatik akışla aynıdır:
+ * placeSessionWithRebalance hem çalışma saatlerini hem oda kapasitesini doğrular, sığmazsa
+ * hiçbir şey yazmadan hata döner.
+ * Not: "üye daha önce iptal etti" kısıtı burada UYGULANMAZ — admin tarihi bilerek seçiyor.
+ */
+router.post('/:id/replenish', [
+  body('date').matches(/^\d{4}-\d{2}-\d{2}$/).withMessage('Geçerli bir tarih gerekli'),
+  body('start_time').matches(/^\d{1,2}:\d{2}$/).withMessage('Geçerli bir saat gerekli'),
+  body('staff_id').isInt(),
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ error: errors.array()[0]?.msg || 'Geçersiz istek' });
+    }
+    const { id } = req.params;
+    const { date, start_time, staff_id } = req.body;
+
+    const mpRes = await db.query(
+      `SELECT mp.id, mp.member_id, mp.status, mp.start_date, mp.end_date, p.lesson_count
+       FROM member_packages mp JOIN packages p ON p.id = mp.package_id WHERE mp.id = $1`,
+      [id]
+    );
+    if (mpRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Üye paketi bulunamadı' });
+    }
+    const mp = mpRes.rows[0];
+    if (mp.status !== 'active') {
+      return res.status(400).json({ error: 'Yalnızca aktif pakete telafi seansı eklenebilir' });
+    }
+
+    const startDateStr = toDateOnlyString(mp.start_date);
+    const endDateStr = toDateOnlyString(mp.end_date);
+    if (date < startDateStr || date > endDateStr) {
+      return res.status(400).json({
+        error: `Tarih paket aralığında olmalı (${startDateStr} – ${endDateStr})`,
+      });
+    }
+
+    const countRes = await db.query(
+      'SELECT COUNT(*)::int AS cnt FROM sessions WHERE member_package_id = $1 AND deleted_at IS NULL',
+      [id]
+    );
+    if ((countRes.rows[0]?.cnt ?? 0) >= mp.lesson_count) {
+      return res.status(400).json({ error: 'Pakette boş ders hakkı kalmamış' });
+    }
+
+    const [hh, mm] = String(start_time).split(':').map((x) => parseInt(x, 10) || 0);
+    const timeStr = `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}`;
+    const startTs = new Date(`${date}T${timeStr}:00+03:00`).getTime();
+    if (!Number.isFinite(startTs)) {
+      return res.status(400).json({ error: 'Tarih/saat çözümlenemedi' });
+    }
+    const endTs = startTs + SLOT_DURATION_MS;
+
+    const dup = await db.query(
+      'SELECT id FROM sessions WHERE member_id = $1 AND start_ts = $2 AND deleted_at IS NULL LIMIT 1',
+      [mp.member_id, startTs]
+    );
+    if (dup.rows.length > 0) {
+      return res.status(409).json({
+        error: 'Üyenin bu saatte zaten bir seansı var',
+        conflicts: [await buildReplenishConflict(date, timeStr, staff_id, 'already_exists', 'üyenin bu saatte seansı var')],
+      });
+    }
+
+    const placed = await placeSessionWithRebalance(db, {
+      staffId: staff_id,
+      startTs,
+      endTs,
+      memberId: mp.member_id,
+      memberPackageId: Number(id),
+    });
+    if (!placed.ok) {
+      const err = placed.error || 'yerleştirilemedi';
+      const code = /çalışma saati/i.test(err) ? 'outside_working_hours'
+        : /kapasite/i.test(err) ? 'capacity_full'
+        : 'placement_failed';
+      return res.status(409).json({
+        error: err,
+        conflicts: [await buildReplenishConflict(date, timeStr, staff_id, code, err)],
+      });
+    }
+
+    const placedAt = {
+      start_ts: startTs,
+      date,
+      day_name: DAY_NAMES_TR_FULL[new Date(startTs).getDay()],
+      day_of_week: new Date(startTs).getDay(),
+      start_time: timeStr,
+      staff_id: Number(staff_id),
+      staff_name: await staffNameById(staff_id),
+    };
+    await activityLog(req, {
+      action: 'session.replenish_manual',
+      entityType: 'session',
+      entityId: placed.sessionId,
+      details: { memberPackageId: Number(id), memberId: mp.member_id, placedAt: formatPlacedAtLabel(placedAt) },
+    }).catch(() => {});
+
+    res.json({
+      sessionId: placed.sessionId,
+      placedAt,
+      message: `Telafi seansı ${formatPlacedAtLabel(placedAt)} olarak eklendi.`,
+    });
+  } catch (error) {
+    console.error('Manual replenish error:', error);
+    res.status(500).json({ error: 'Telafi seansı eklenirken hata oluştu' });
+  }
+});
+
+/**
+ * Telafi eklenmeden bırakıldı (B4) — admin "Telafisiz bırak" dediğinde çağrılır.
+ * Veri değiştirmez, yalnızca activity log kaydı düşer: paketin neden eksik kaldığı sonradan
+ * açıklanabilsin diye. Log kaydı dışında hiçbir yan etkisi yoktur.
+ */
+router.post('/:id/replenish-skip', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const mpRes = await db.query('SELECT id, member_id FROM member_packages WHERE id = $1', [id]);
+    if (mpRes.rows.length === 0) {
+      return res.status(404).json({ error: 'Üye paketi bulunamadı' });
+    }
+    const startTs = Number(req.body?.session_start_ts);
+    await activityLog(req, {
+      action: 'session.replenish_skipped',
+      entityType: 'member_package',
+      entityId: id,
+      details: {
+        memberId: mpRes.rows[0].member_id,
+        sessionStartTs: Number.isFinite(startTs) ? startTs : null,
+        reason: typeof req.body?.reason === 'string' ? req.body.reason.slice(0, 100) : null,
+      },
+    }).catch(() => {});
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('Replenish skip log error:', error);
+    res.status(500).json({ error: 'Kayıt yazılamadı' });
+  }
+});
+
+const DAY_NAMES_TR_FULL = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
+
+async function staffNameById(staffId) {
+  const r = await db.query("SELECT first_name || ' ' || last_name AS name FROM staff WHERE id = $1", [staffId])
+    .catch(() => ({ rows: [] }));
+  return r.rows[0]?.name || '';
+}
+
+/** Otomatik telafi adaylarıyla aynı şema — arayüz ikisini tek bileşenle gösterir. */
+async function buildReplenishConflict(date, startTime, staffId, reasonCode, reasonLabel) {
+  const dow = new Date(`${date}T12:00:00+03:00`).getDay();
+  return {
+    date,
+    day_name: DAY_NAMES_TR_FULL[dow],
+    day_of_week: dow,
+    start_time: startTime,
+    staff_id: Number(staffId),
+    staff_name: await staffNameById(staffId),
+    reason_code: reasonCode,
+    reason_label: reasonLabel,
+  };
+}
 
 // Bu paket atamasına bağlı seansları listele (MP-01: ortak sessionToDto)
 router.get('/:id/sessions', async (req, res) => {

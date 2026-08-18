@@ -49,6 +49,24 @@ function statusLabel(s: MemberSession): string {
   return 'Yapıldı';
 }
 
+/**
+ * Telafi eklenemediğinde üyeye gösterilecek metin. `no_slots` / `error` gibi sebepler arıza
+ * göstergesi olduğu için teknik sebep değil, merkezin devreye gireceği bilgisi verilir.
+ * Web tarafındaki memberReplenishFailMessage ile aynı metinler (app.js).
+ */
+function memberReplenishFailMessage(reason: string): string {
+  if (reason === 'no_available_slot') {
+    return 'Seansınız iptal edildi ancak paket bitiş tarihine kadar uygun yeni seans bulunamadı. '
+      + 'Telafi randevunuz için lütfen merkezimizle iletişime geçin.';
+  }
+  if (reason === 'package_full') {
+    // Normal durum (hak zaten tam planlı) — üyeyi aksiyona çağırmaya gerek yok.
+    return 'Seansınız iptal edildi. Paketinizdeki tüm seanslar planlanmış durumda, telafi eklenmedi.';
+  }
+  return 'Seansınız iptal edildi ancak telafi randevunuz otomatik oluşturulamadı. '
+    + 'Telafi randevunuz için lütfen merkezimizle iletişime geçin.';
+}
+
 /** Üye ana ekranı — web renderMemberHome paritesi. */
 export function MemberHomeScreen() {
   const { colors, resolvedTheme } = useTheme();
@@ -206,7 +224,7 @@ export function MemberHomeScreen() {
       const result = await cancelMutation.mutateAsync({
         sessionId: s.id,
         body: { reason: cancelReason.trim(), requestNewAppointment: wantReschedule },
-      }) as { replenished?: boolean; replenishedReason?: string } | null;
+      }) as { replenished?: boolean; replenishedReason?: string; message?: string } | null;
       setCancelTarget(null);
       await refetch();
       const wa = (data?.contactWhatsApp || '').replace(/\D/g, '');
@@ -214,8 +232,15 @@ export function MemberHomeScreen() {
         const msg = `Merhaba, ${formatDayLabel(s.startTs)} ${formatTime(s.startTs)} seansımı iptal ettim, yeni randevu talep ediyorum.${cancelReason.trim() ? ` Sebep: ${cancelReason.trim()}` : ''}`;
         Linking.openURL(`https://wa.me/${wa}?text=${encodeURIComponent(msg)}`).catch(() => {});
       }
-      if (result?.replenished === false && result?.replenishedReason === 'no_available_slot') {
-        Alert.alert('Bilgi', 'Seans iptal edildi ancak paket bitiş tarihine kadar uygun yeni seans bulunamadı.');
+      if (result?.replenished) {
+        // Telafinin hangi tarihe eklendiğini üye görsün — metin sunucudan hazır gelir.
+        Alert.alert(
+          'Telafi randevunuz oluşturuldu',
+          result.message || 'Telafi randevunuz otomatik olarak paketinizin sonuna eklendi.',
+        );
+      } else if (result?.replenished === false && result?.replenishedReason) {
+        // Sebep ne olursa olsun bilgilendir; eskiden yalnız no_available_slot uyarı üretiyordu.
+        Alert.alert('Bilgi', memberReplenishFailMessage(result.replenishedReason));
       }
     } catch (e) {
       setCancelError((e as Error).message || 'İptal başarısız');

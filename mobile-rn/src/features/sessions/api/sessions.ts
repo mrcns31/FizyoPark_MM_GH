@@ -85,8 +85,47 @@ export async function updateSession(
   return data;
 }
 
-export async function deleteSession(id: number, adminPassword?: string): Promise<void> {
-  await apiClient.delete(`/sessions/${id}`, { data: adminPassword ? { adminPassword } : {} });
+/** Telafi adayı / çakışma — otomatik telafi ve elle yerleştirme aynı şemayı döner. */
+export interface ReplenishCandidate {
+  date: string;
+  day_name: string;
+  day_of_week: number;
+  start_time: string;
+  staff_id: number | null;
+  staff_name: string;
+  reason_code: string;
+  reason_label: string;
+}
+
+export interface ReplenishPlaced {
+  start_ts: number;
+  date: string;
+  day_name: string;
+  start_time: string;
+  staff_id: number;
+  staff_name: string;
+}
+
+/**
+ * Seans silme yanıtı. Telafi seansı otomatik eklenemediğinde admin bunu görüp elle
+ * yerleştirebilsin diye paket ve aday bilgileri de döner (bkz. md/TELAFI_SEANSI_YERLESTIRME_PLANI.md).
+ */
+export interface DeleteSessionResult {
+  message?: string;
+  replenished?: boolean;
+  replenishedReason?: string | null;
+  replenishPlaced?: ReplenishPlaced | null;
+  replenishCandidates?: ReplenishCandidate[] | null;
+  packageEndDate?: string | null;
+  memberPackageId?: number | null;
+  deletedSession?: { startTs: number; memberId: number | null; staffId: number | null };
+}
+
+export async function deleteSession(id: number, adminPassword?: string): Promise<DeleteSessionResult> {
+  const { data } = await apiClient.delete(`/sessions/${id}`, {
+    data: adminPassword ? { adminPassword } : {},
+  });
+  return (data || {}) as DeleteSessionResult;
 }
 
 /**

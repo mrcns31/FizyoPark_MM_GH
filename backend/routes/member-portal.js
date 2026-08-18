@@ -3,7 +3,7 @@ import { body, validationResult } from 'express-validator';
 import db from '../config/database.js';
 import { verifyToken } from './auth.js';
 import { log as activityLog } from '../utils/activityLogger.js';
-import { cancelPackageSessionsAtSlot } from '../utils/packageSessions.js';
+import { cancelPackageSessionsAtSlot, buildReplenishedMessage } from '../utils/packageSessions.js';
 import { checkInSessionForMember } from '../utils/packageSessionCounts.js';
 import {
   buildPackageWithSessions,
@@ -183,7 +183,12 @@ async function sendRatingPush(memberName, staffName, rating, startTs, sessionId,
   }
 }
 
-async function sendCancellationPush(memberName, startTs, staffName, staffId, cancelReason) {
+/**
+ * @param {{added: boolean, reason?: string}} [replenishInfo] — telafi sonucu. Eklenemediyse
+ *   bildirim gövdesine uyarı satırı girer (U3): üye ekranı kapattığında iş kaybolmasın diye
+ *   asıl garanti burasıdır. Telafi eklendiyse gövde değişmez.
+ */
+async function sendCancellationPush(memberName, startTs, staffName, staffId, cancelReason, replenishInfo) {
   try {
     const TZ = 3 * 60 * 60 * 1000;
     const d = new Date(Number(startTs) + TZ);
@@ -201,7 +206,11 @@ async function sendCancellationPush(memberName, startTs, staffName, staffId, can
     const title = 'Üye Randevu İptali';
     const reasonText = typeof cancelReason === 'string' ? cancelReason.trim() : '';
     const reasonPart = reasonText ? ` Notu: "${reasonText}"` : '';
-    const bodyText = `${memberName} - ${dateStr} ${dayName} ${timeStr}${staffPart} randevusunu iptal etmiştir.${reasonPart}`;
+    // Telafi eklenemediyse paket bir seans eksik kalıyor — admin bunu görmeden fark edemez
+    const replenishPart = replenishInfo && replenishInfo.added === false
+      ? ' ⚠ Telafi randevusu oluşturulamadı, paket bir seans eksik kaldı.'
+      : '';
+    const bodyText = `${memberName} - ${dateStr} ${dayName} ${timeStr}${staffPart} randevusunu iptal etmiştir.${reasonPart}${replenishPart}`;
 
     // Admin/Manager: push token olmayan kullanıcılar da bildirim listesinde görsün (LEFT JOIN)
     const { rows: adminRows } = await db.query(
@@ -229,7 +238,13 @@ async function sendCancellationPush(memberName, startTs, staffName, staffId, can
     }
 
     // staff_notifications tablosuna kaydet → tablet sidebar'ında "İptaller" filtresinde görünür
-    const payload = JSON.stringify({ startTs: Number(startTs), memberName, cancelReason: reasonText || null });
+    const payload = JSON.stringify({
+      startTs: Number(startTs),
+      memberName,
+      cancelReason: reasonText || null,
+      replenished: replenishInfo ? !!replenishInfo.added : null,
+      replenishedReason: replenishInfo && !replenishInfo.added ? (replenishInfo.reason || null) : null,
+    });
     const seenUsers = new Set();
     for (const r of [...adminRows, ...staffRows]) {
       if (!r.user_id || seenUsers.has(r.user_id)) continue;
@@ -1122,16 +1137,22 @@ router.post('/sessions/:id/cancel', requireMember, async (req, res) => {
       .then(({ rows }) => {
         const r = rows[0];
         const memberName = r ? (r.name || `${r.first_name || ''} ${r.last_name || ''}`.trim() || 'Üye') : 'Üye';
-        sendCancellationPush(memberName, session.start_ts, staffName, session.staff_id, cancelReasonText).catch(() => {});
+        sendCancellationPush(memberName, session.start_ts, staffName, session.staff_id, cancelReasonText, {
+          added: !!replenished.added,
+          reason: replenished.reason || null,
+        }).catch(() => {});
       })
       .catch(() => {});
 
     res.json({
+      // Telafi eklendiyse metin sunucuda kurulur (tarih formatı + Türkçe saat eki tek yerde);
+      // web ve mobil bu alanı olduğu gibi gösterir. Push gönderilmez.
       message: replenished.added
-        ? 'Seans iptal edildi, paket sonuna yeni seans eklendi'
+        ? buildReplenishedMessage(replenished.placedAt)
         : 'Seans iptal edildi',
       replenished: replenished.added,
       replenishedReason: replenished.added ? null : (replenished.reason || null),
+      replenishPlaced: replenished.added ? (replenished.placedAt || null) : null,
     });
   } catch (error) {
     console.error('Member session cancel error:', error);

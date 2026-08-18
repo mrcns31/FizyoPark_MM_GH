@@ -17,6 +17,7 @@ import { type AppColors, type ResolvedTheme } from '../../../theme/colors';
 import { useMemberPackageSessions, useMemberPackages } from '../api/hooks';
 import type { MemberPackageSession } from '../api/member-packages';
 import { useDeleteSession, useMoveSession } from '../../sessions/api/hooks';
+import { useReplenishFlow } from '../../sessions/replenish/use-replenish-flow';
 import { promptAdminPassword } from '../../../lib/admin-password';
 import type { MemberPackage } from '../../../types/api';
 
@@ -216,6 +217,9 @@ export function PackageSessionsScreen() {
   const del = useDeleteSession();
   const move = useMoveSession();
   const qc = useQueryClient();
+  const replenishFlow = useReplenishFlow(() => {
+    if (id != null) qc.invalidateQueries({ queryKey: ['member-package-sessions', id] });
+  });
 
   const [cancelledOpen, setCancelledOpen] = useState(false);
   const [cancelFilter, setCancelFilter] = useState<CancelFilter>('main');
@@ -231,6 +235,21 @@ export function PackageSessionsScreen() {
 
   const sessions = useMemo(() => (data ?? []).slice().sort((a, b) => a.startTs - b.startTs), [data]);
   const active = sessions.filter((s) => !s.isCancelled);
+
+  /**
+   * A4 — planlanan seans sayısı ders sayısından azsa uyarı. "Kalan seans" ders sayısı üzerinden
+   * hesaplandığı için eksik paket başka hiçbir yerde görünmüyor.
+   * Yalnız aktif pakette ve en az bir seans varken gösterilir: hiç seansı olmayan paket
+   * "gün dağılımı yapmak istemiyorum" ile kurulmuş olabilir, yanlış alarm vermesin.
+   */
+  const shortfall = useMemo(() => {
+    const pkg = (allPackages ?? []).find((p) => p.id === id);
+    const total = Number(pkg?.lessonCount ?? 0);
+    const missing = total - active.length;
+    const isActive = (pkg?.status || packageStatus || '').toLowerCase() === 'active';
+    if (!isActive || !total || !active.length || missing <= 0) return null;
+    return { planned: active.length, total, missing };
+  }, [allPackages, id, active.length, packageStatus]);
   const cancelled = useMemo(() => sessions.filter((s) => s.isCancelled), [sessions]);
 
   const cancelCounts = useMemo(() => {
@@ -324,9 +343,9 @@ export function PackageSessionsScreen() {
               if (pwd == null) return;
               adminPassword = pwd;
             }
-            del.mutate({ id: s.id, adminPassword }, {
-              onError: (e) => Alert.alert('Hata', (e as Error).message),
-            });
+            const delResult = await del.mutateAsync({ id: s.id, adminPassword });
+            // Telafi eklendiyse bilgi, eklenemediyse elle yerleştirme sheet'i (A1/A2)
+            await replenishFlow.report(delResult);
           } catch (e) {
             Alert.alert('Hata', (e as Error).message);
           }
@@ -417,7 +436,7 @@ export function PackageSessionsScreen() {
           showsVerticalScrollIndicator={false}
           renderItem={({ item }) => {
             if (item.type === 'header') {
-              return (startDate || endDate || statusStr) ? (
+              const meta = (startDate || endDate || statusStr) ? (
                 <View style={styles.subtitle}>
                   {startDate && endDate ? (
                     <Text style={styles.subtitleText}>{fmtDate(startDate)} – {fmtDate(endDate)}</Text>
@@ -426,6 +445,18 @@ export function PackageSessionsScreen() {
                   <Text style={styles.subtitleText}>{active.length} randevu</Text>
                 </View>
               ) : null;
+              if (!meta && !shortfall) return null;
+              return (
+                <View>
+                  {meta}
+                  {shortfall ? (
+                    <Text style={styles.shortfall}>
+                      ⚠ {shortfall.planned}/{shortfall.total} ders planlanmış — {shortfall.missing} seans eksik.
+                      Telafi eklenememiş olabilir.
+                    </Text>
+                  ) : null}
+                </View>
+              );
             }
             if (item.type === 'active') {
               return (
@@ -529,6 +560,8 @@ export function PackageSessionsScreen() {
           </View>
         ) : null}
       </BottomSheet>
+
+      {replenishFlow.modal}
     </SafeAreaView>
   );
 }
@@ -539,6 +572,8 @@ function makeStyles(colors: AppColors, theme: ResolvedTheme) {
     listContent: { padding: 12, gap: 8, paddingBottom: 40 },
     subtitle: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8, marginBottom: 4 },
     subtitleText: { color: colors.muted, fontSize: 13 },
+    /** A4 — planlanan/ders sayısı uyuşmazlığı (web .package-sessions-modal__shortfall) */
+    shortfall: { color: colors.fpOrange, fontSize: 12, fontWeight: '600', marginTop: 2, marginBottom: 6 },
 
     card: {
       padding: 12,
