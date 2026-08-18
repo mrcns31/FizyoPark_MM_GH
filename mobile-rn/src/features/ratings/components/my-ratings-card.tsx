@@ -2,12 +2,10 @@ import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Card, Muted, SectionTitle } from '../../../components/ui';
-import { BottomSheet } from '../../../components/bottom-sheet';
 import { StarRating } from '../../../components/star-rating';
 import { useTheme } from '../../theme';
 import { surfaceTint, type AppColors, type ResolvedTheme } from '../../../theme/colors';
 import { useMyRatingSummary } from '../api/hooks';
-import type { RatingBucket } from '../api/ratings';
 
 const MONTH_SHORT = ['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
 const MONTH_LONG = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
@@ -53,7 +51,8 @@ export function MyRatingsCard() {
   const { colors, resolvedTheme } = useTheme();
   const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const { data, isLoading, isError } = useMyRatingSummary();
-  const [detailMonth, setDetailMonth] = useState<number | null>(null);
+  // Seçili ay — dağılım kart içinde her zaman açık, ay şeridinden değiştirilir
+  const [selectedMonth, setSelectedMonth] = useState<number | null>(null);
 
   if (isError) return null;
 
@@ -68,8 +67,8 @@ export function MyRatingsCard() {
 
   const currentMonth = new Date().getMonth();
   const lastSix = Array.from({ length: 6 }, (_, i) => currentMonth - 5 + i).filter((m) => m >= 0);
-  // Başlık, içinde bulunduğumuz ayı gösterir; yıllık toplam alttaki trend şeridinde zaten var
-  const month = data.months[currentMonth];
+  const shownMonth = selectedMonth ?? currentMonth;
+  const month = data.months[shownMonth];
   const monthScore = month.avg ?? month.rawAvg;
 
   return (
@@ -77,7 +76,7 @@ export function MyRatingsCard() {
       <SectionTitle>Seans Puanlarım</SectionTitle>
 
       {month.count === 0 ? (
-        <Muted>{MONTH_LONG[currentMonth]} ayında henüz puan almadınız.</Muted>
+        <Muted>{MONTH_LONG[shownMonth]} ayında henüz puan almadınız.</Muted>
       ) : (
         <>
           <View style={styles.headRow}>
@@ -87,7 +86,7 @@ export function MyRatingsCard() {
             <View style={{ gap: 2 }}>
               <StarRating value={monthScore != null ? Math.round(monthScore) : null} size={16} />
               <Muted>
-                {MONTH_LONG[currentMonth]} · {month.count} / {month.eligible} Seans
+                {MONTH_LONG[shownMonth]} · {month.count} / {month.eligible} Seans
               </Muted>
               <Muted>
                 {month.raters} üye
@@ -96,18 +95,35 @@ export function MyRatingsCard() {
             </View>
           </View>
 
+          {/* Yıldız dağılımı — sürekli açık, yıldızlarla ay şeridi arasında */}
+          <View style={styles.distBox}>
+            {[5, 4, 3, 2, 1].map((n) => {
+              const c = Number(month.distribution?.[String(n)] ?? 0);
+              const pct = month.count > 0 ? (c / month.count) * 100 : 0;
+              return (
+                <View key={n} style={styles.distRow}>
+                  <Text style={styles.distLabel}>{n} ★</Text>
+                  <View style={styles.distTrack}>
+                    <View style={[styles.distFill, { width: `${pct}%` }]} />
+                  </View>
+                  <Text style={styles.distCount}>{c}</Text>
+                </View>
+              );
+            })}
+          </View>
+
           <View style={styles.trendRow}>
             {lastSix.map((m) => {
               const b = data.months[m];
               const score = b.avg ?? b.rawAvg;
+              const on = m === shownMonth;
               return (
                 <Pressable
                   key={m}
-                  style={styles.trendItem}
-                  onPress={() => b.count > 0 && setDetailMonth(m)}
-                  disabled={b.count === 0}
+                  style={[styles.trendItem, on && styles.trendItemOn]}
+                  onPress={() => setSelectedMonth(m)}
                 >
-                  <Text style={styles.trendValue}>
+                  <Text style={[styles.trendValue, on && styles.trendValueOn]}>
                     {score != null ? score.toFixed(1) : '–'}
                   </Text>
                   <Text style={styles.trendMonth}>{MONTH_SHORT[m]}</Text>
@@ -118,70 +134,7 @@ export function MyRatingsCard() {
         </>
       )}
 
-      {/* Ay detayı — yorum ve üye adı YOK, personel yalnızca kendi dağılımını görür */}
-      <MonthDetailSheet
-        month={detailMonth}
-        bucket={detailMonth != null ? data.months[detailMonth] : null}
-        year={data.year}
-        onClose={() => setDetailMonth(null)}
-        styles={styles}
-        colors={colors}
-      />
     </Card>
-  );
-}
-
-/** Personelin kendi ay detayı: ortalama, puan/seans ve yıldız dağılımı. */
-function MonthDetailSheet({
-  month,
-  bucket,
-  year,
-  onClose,
-  styles,
-  colors,
-}: {
-  month: number | null;
-  bucket: RatingBucket | null;
-  year: number;
-  onClose: () => void;
-  styles: any;
-  colors: AppColors;
-}) {
-  const score = bucket ? (bucket.avg ?? bucket.rawAvg) : null;
-  return (
-    <BottomSheet
-      visible={month != null && !!bucket}
-      onClose={onClose}
-      title={month != null ? `${MONTH_LONG[month]} ${year}` : ''}
-    >
-      {bucket ? (
-        <View style={{ gap: 12 }}>
-          <View style={{ gap: 2 }}>
-            <Text style={styles.detailScore}>
-              {score != null ? `${score.toFixed(2)} ★` : '–'}
-            </Text>
-            <Muted>
-              {bucket.count} / {bucket.eligible} seans
-              {bucket.raters > 0 ? `  ·  ${bucket.raters} üye` : ''}
-            </Muted>
-          </View>
-
-          {[5, 4, 3, 2, 1].map((n) => {
-            const c = Number(bucket.distribution?.[String(n)] ?? 0);
-            const pct = bucket.count > 0 ? (c / bucket.count) * 100 : 0;
-            return (
-              <View key={n} style={styles.distRow}>
-                <Text style={styles.distLabel}>{n} ★</Text>
-                <View style={styles.distTrack}>
-                  <View style={[styles.distFill, { width: `${pct}%` }]} />
-                </View>
-                <Text style={styles.distCount}>{c}</Text>
-              </View>
-            );
-          })}
-        </View>
-      ) : null}
-    </BottomSheet>
   );
 }
 
@@ -204,8 +157,13 @@ function makeStyles(colors: AppColors, theme: ResolvedTheme) {
       paddingVertical: 6, borderRadius: 8,
       backgroundColor: surfaceTint(theme, 0.04),
     },
+    trendItemOn: { backgroundColor: 'rgba(124,92,255,0.18)', borderWidth: 1, borderColor: 'rgba(124,92,255,0.5)' },
     trendValue: { color: colors.text, fontSize: 13, fontWeight: '700' },
-    detailScore: { fontSize: 28, fontWeight: '800', color: colors.text },
+    trendValueOn: { color: colors.text },
+    distBox: {
+      gap: 6, marginTop: 12, paddingTop: 10,
+      borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: surfaceTint(theme, 0.08),
+    },
     distRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     distLabel: { color: colors.muted, fontSize: 12, width: 28, fontWeight: '600' },
     distTrack: {
