@@ -11358,6 +11358,9 @@ function openMemberPackageModal(memberId, memberPackageId, options) {
     renderMemberPackageDaySlots([]);
     if (preselectPackageId != null && els.mpPackage) {
       els.mpPackage.value = String(preselectPackageId);
+      // Paket talepten otomatik seçildiğinde "change" tetiklenmez; başlangıç/bitiş
+      // tarihlerini dolduran dinleyiciyi elle çalıştır (aksi halde tarihler boş kalır).
+      els.mpPackage.dispatchEvent(new Event("change"));
     }
   }
 
