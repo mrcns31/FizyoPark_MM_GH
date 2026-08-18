@@ -39,7 +39,7 @@ export function MyRatingsBadge() {
         <StarRating value={Math.round(score)} size={13} />
       </View>
       <Text style={styles.badgeMeta} numberOfLines={1}>
-        {MONTH_LONG[monthIdx]} · {m.count}/{m.eligible}
+        {MONTH_LONG[monthIdx]} · {m.count} / {m.eligible} Seans
       </Text>
     </View>
   );
@@ -87,7 +87,7 @@ export function MyRatingsCard() {
             <View style={{ gap: 2 }}>
               <StarRating value={monthScore != null ? Math.round(monthScore) : null} size={16} />
               <Muted>
-                {MONTH_LONG[currentMonth]} · {month.count}/{month.eligible}
+                {MONTH_LONG[currentMonth]} · {month.count} / {month.eligible} Seans
               </Muted>
               <Muted>
                 {month.raters} üye
