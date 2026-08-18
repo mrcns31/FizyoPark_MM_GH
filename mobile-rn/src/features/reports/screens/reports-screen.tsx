@@ -388,8 +388,7 @@ function RatingDetailSheet({
               {(bucket.avg ?? bucket.rawAvg) != null ? `${(bucket.avg ?? bucket.rawAvg)!.toFixed(2)} ★` : '–'}
             </Text>
             <Muted>
-              {bucket.count} puan
-              {bucket.eligible > 0 ? ` / ${bucket.eligible} seans` : ''}
+              {bucket.count} / {bucket.eligible} seans
               {bucket.bayesAvg != null ? `  ·  düzeltilmiş ${bucket.bayesAvg.toFixed(2)}` : ''}
             </Muted>
           </View>

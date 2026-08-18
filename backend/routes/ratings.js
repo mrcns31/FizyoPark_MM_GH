@@ -43,7 +43,7 @@ function yearBoundsMs(year) {
 function emptyBucket() {
   // members: farklı üye sayısı — aynı üye ayda 8-12 seans puanlayabildiği için
   // "kaç değerlendirme" ile "kaç kişi" birbirinden ayrı tutulur
-  return { count: 0, sum: 0, lowCount: 0, eligible: 0, members: new Set() };
+  return { count: 0, sum: 0, lowCount: 0, eligible: 0, members: new Set(), dist: [0, 0, 0, 0, 0] };
 }
 
 function finalizeBucket(bucket, globalMean) {
@@ -51,6 +51,8 @@ function finalizeBucket(bucket, globalMean) {
   return {
     count: bucket.count,
     raters: bucket.members.size,
+    // 1-5 yıldız dağılımı — personelin kendi ay detayında çubuk grafik için
+    distribution: { 1: bucket.dist[0], 2: bucket.dist[1], 3: bucket.dist[2], 4: bucket.dist[3], 5: bucket.dist[4] },
     eligible: bucket.eligible,
     lowCount: bucket.lowCount,
     // n < 5 iken ortalama gösterilmez — 3 seanslık 5.0, 20 seanslık 4.6'nın üstünde durmasın
@@ -168,6 +170,7 @@ router.get('/staff-summary', checkAdminOrManager, [
         b.count++;
         b.sum += rating;
         b.members.add(r.member_id);
+        b.dist[rating - 1]++;
         if (rating <= LOW_SHARE_THRESHOLD) b.lowCount++;
       }
     }
@@ -304,9 +307,9 @@ router.get('/my-summary', async (req, res) => {
       if (r.staff_id !== staffRow.id) continue;
       const rating = Number(r.rating);
       const b = months[istanbulMonth(r.session_start_ts)];
-      b.count++; b.sum += rating; b.members.add(r.member_id);
+      b.count++; b.sum += rating; b.members.add(r.member_id); b.dist[rating - 1]++;
       if (rating <= LOW_SHARE_THRESHOLD) b.lowCount++;
-      total.count++; total.sum += rating; total.members.add(r.member_id);
+      total.count++; total.sum += rating; total.members.add(r.member_id); total.dist[rating - 1]++;
       if (rating <= LOW_SHARE_THRESHOLD) total.lowCount++;
     }
     for (const r of eligibleRows) {

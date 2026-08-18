@@ -7,6 +7,8 @@ export interface RatingBucket {
   count: number;
   /** Puan veren farklı üye sayısı; aynı üye birden çok seansını puanlayabilir */
   raters: number;
+  /** 1-5 yıldız dağılımı */
+  distribution: Record<string, number>;
   eligible: number;
   lowCount: number;
   /** n < minSample ise null — az örneklemli ortalama gösterilmez */

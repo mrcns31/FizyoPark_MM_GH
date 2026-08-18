@@ -1,11 +1,13 @@
-import { useMemo } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { useMemo, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Card, Muted, SectionTitle } from '../../../components/ui';
+import { BottomSheet } from '../../../components/bottom-sheet';
 import { StarRating } from '../../../components/star-rating';
 import { useTheme } from '../../theme';
 import { surfaceTint, type AppColors, type ResolvedTheme } from '../../../theme/colors';
 import { useMyRatingSummary } from '../api/hooks';
+import type { RatingBucket } from '../api/ratings';
 
 const MONTH_SHORT = ['Oca','Şub','Mar','Nis','May','Haz','Tem','Ağu','Eyl','Eki','Kas','Ara'];
 const MONTH_LONG = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
@@ -51,6 +53,7 @@ export function MyRatingsCard() {
   const { colors, resolvedTheme } = useTheme();
   const styles = useMemo(() => makeStyles(colors, resolvedTheme), [colors, resolvedTheme]);
   const { data, isLoading, isError } = useMyRatingSummary();
+  const [detailMonth, setDetailMonth] = useState<number | null>(null);
 
   if (isError) return null;
 
@@ -96,19 +99,89 @@ export function MyRatingsCard() {
           <View style={styles.trendRow}>
             {lastSix.map((m) => {
               const b = data.months[m];
+              const score = b.avg ?? b.rawAvg;
               return (
-                <View key={m} style={styles.trendItem}>
+                <Pressable
+                  key={m}
+                  style={styles.trendItem}
+                  onPress={() => b.count > 0 && setDetailMonth(m)}
+                  disabled={b.count === 0}
+                >
                   <Text style={styles.trendValue}>
-                    {b.avg != null ? b.avg.toFixed(1) : b.count > 0 ? '·' : '–'}
+                    {score != null ? score.toFixed(1) : '–'}
                   </Text>
                   <Text style={styles.trendMonth}>{MONTH_SHORT[m]}</Text>
-                </View>
+                </Pressable>
               );
             })}
           </View>
         </>
       )}
+
+      {/* Ay detayı — yorum ve üye adı YOK, personel yalnızca kendi dağılımını görür */}
+      <MonthDetailSheet
+        month={detailMonth}
+        bucket={detailMonth != null ? data.months[detailMonth] : null}
+        year={data.year}
+        onClose={() => setDetailMonth(null)}
+        styles={styles}
+        colors={colors}
+      />
     </Card>
+  );
+}
+
+/** Personelin kendi ay detayı: ortalama, puan/seans ve yıldız dağılımı. */
+function MonthDetailSheet({
+  month,
+  bucket,
+  year,
+  onClose,
+  styles,
+  colors,
+}: {
+  month: number | null;
+  bucket: RatingBucket | null;
+  year: number;
+  onClose: () => void;
+  styles: any;
+  colors: AppColors;
+}) {
+  const score = bucket ? (bucket.avg ?? bucket.rawAvg) : null;
+  return (
+    <BottomSheet
+      visible={month != null && !!bucket}
+      onClose={onClose}
+      title={month != null ? `${MONTH_LONG[month]} ${year}` : ''}
+    >
+      {bucket ? (
+        <View style={{ gap: 12 }}>
+          <View style={{ gap: 2 }}>
+            <Text style={styles.detailScore}>
+              {score != null ? `${score.toFixed(2)} ★` : '–'}
+            </Text>
+            <Muted>
+              {bucket.count} / {bucket.eligible} seans
+              {bucket.raters > 0 ? `  ·  ${bucket.raters} üye` : ''}
+            </Muted>
+          </View>
+
+          {[5, 4, 3, 2, 1].map((n) => {
+            const c = Number(bucket.distribution?.[String(n)] ?? 0);
+            const pct = bucket.count > 0 ? (c / bucket.count) * 100 : 0;
+            return (
+              <View key={n} style={styles.distRow}>
+                <Text style={styles.distLabel}>{n} ★</Text>
+                <View style={styles.distTrack}>
+                  <View style={[styles.distFill, { width: `${pct}%` }]} />
+                </View>
+                <Text style={styles.distCount}>{c}</Text>
+              </View>
+            );
+          })}
+        </View>
+      ) : null}
+    </BottomSheet>
   );
 }
 
@@ -132,6 +205,15 @@ function makeStyles(colors: AppColors, theme: ResolvedTheme) {
       backgroundColor: surfaceTint(theme, 0.04),
     },
     trendValue: { color: colors.text, fontSize: 13, fontWeight: '700' },
+    detailScore: { fontSize: 28, fontWeight: '800', color: colors.text },
+    distRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+    distLabel: { color: colors.muted, fontSize: 12, width: 28, fontWeight: '600' },
+    distTrack: {
+      flex: 1, height: 8, borderRadius: 4,
+      backgroundColor: surfaceTint(theme, 0.08), overflow: 'hidden',
+    },
+    distFill: { height: '100%', backgroundColor: colors.accent, borderRadius: 4 },
+    distCount: { color: colors.muted, fontSize: 12, width: 24, textAlign: 'right' },
     trendMonth: { color: colors.muted, fontSize: 10, fontWeight: '600' },
   });
 }
