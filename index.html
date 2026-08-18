@@ -56,8 +56,8 @@
       .login-overlay.hidden { display: none; }
     </style>
     <script>window.__splashStartedAt = performance.now();</script>
-    <link rel="preload" href="./styles.css?v=20260615a" as="style" onload="this.onload=null;this.rel='stylesheet'" />
-    <noscript><link rel="stylesheet" href="./styles.css?v=20260615a" /></noscript>
+    <link rel="preload" href="./styles.css?v=20260818a" as="style" onload="this.onload=null;this.rel='stylesheet'" />
+    <noscript><link rel="stylesheet" href="./styles.css?v=20260818a" /></noscript>
     <script>
       (function () {
         var l = document.querySelector('link[rel="preload"][as="style"]');
@@ -65,7 +65,7 @@
           l.addEventListener('error', function () {
             var f = document.createElement('link');
             f.rel = 'stylesheet';
-            f.href = './styles.css?v=20260615a';
+            f.href = './styles.css?v=20260818a';
             document.head.appendChild(f);
           });
         }
@@ -1805,6 +1805,11 @@
         <div class="modal__body">
           <div class="formGrid">
             <div class="formRow">
+              <label class="label" for="sessionMember">Üye</label>
+              <select id="sessionMember" class="input"></select>
+            </div>
+            <div id="sessionPackageHint" class="hint" style="margin-top:4px; margin-bottom:8px; font-size:12px;"></div>
+            <div class="formRow">
               <label class="label" for="sessionDate">Tarih</label>
               <div class="input-stepper">
                 <button type="button" class="input-stepper__btn" data-step="-1" data-target="sessionDate" data-type="date" aria-label="Önceki gün">&#8249;</button>
@@ -1823,11 +1828,6 @@
                 <button type="button" class="input-stepper__btn" data-step="1" data-target="sessionTime" data-type="time" aria-label="1 saat ileri">&#8250;</button>
               </div>
             </div>
-            <div class="formRow">
-              <label class="label" for="sessionMember">Üye</label>
-              <select id="sessionMember" class="input"></select>
-            </div>
-            <div id="sessionPackageHint" class="hint" style="margin-top:4px; margin-bottom:8px; font-size:12px;"></div>
             <div class="formRow">
               <label class="label" for="sessionStaff">Personel</label>
               <div class="input-stepper">

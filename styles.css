@@ -7142,11 +7142,19 @@ body.splash-screen-open{
 /* Boş paket ipucu satırı yer kaplamasın */
 #sessionModal #sessionPackageHint:empty{ display:none; }
 
-/* Üye düzenlemede değiştirilemez: açılır liste okları görünmesin */
+/* Üye ve Personel: sağdaki açılır liste okları görünmesin */
+#sessionModal #sessionMember,
+#sessionModal #sessionStaff{
+  -webkit-appearance:none !important;
+  -moz-appearance:none !important;
+  appearance:none !important;
+  background-image:none;
+  padding-right:10px;
+  text-overflow:ellipsis;
+}
+#sessionModal #sessionMember::-ms-expand,
+#sessionModal #sessionStaff::-ms-expand{ display:none; }
 #sessionModal select.input:disabled{
-  -webkit-appearance:none;
-  -moz-appearance:none;
-  appearance:none;
   cursor:default;
   opacity:1;
   color:var(--text);
