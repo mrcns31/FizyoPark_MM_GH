@@ -936,6 +936,17 @@ router.delete('/:id', [
     }
 
     const row = existing.rows[0];
+    // Grup seansında birden çok üye olabildiği için telafi uyarısı hangi üye olduğunu söylemeli.
+    let deletedMemberName = '';
+    if (row.member_id != null) {
+      const nameRes = await db.query(
+        `SELECT COALESCE(NULLIF(TRIM(name), ''),
+                         NULLIF(TRIM(COALESCE(first_name, '') || ' ' || COALESCE(last_name, '')), '')) AS name
+         FROM members WHERE id = $1`,
+        [row.member_id]
+      ).catch(() => ({ rows: [] }));
+      deletedMemberName = nameRes.rows[0]?.name || '';
+    }
     const { cancelledIds, replenished, memberPackageId } = await cancelPackageSessionsAtSlot(db, {
       memberId: row.member_id,
       startTs: row.start_ts,
@@ -974,7 +985,12 @@ router.delete('/:id', [
       packageEndDate: replenished.packageEndDate || null,
       // Admin telafiyi elle yerleştirebilsin diye (POST /member-packages/:id/replenish)
       memberPackageId: memberPackageId ?? null,
-      deletedSession: { startTs: Number(row.start_ts), memberId: row.member_id, staffId: row.staff_id },
+      deletedSession: {
+        startTs: Number(row.start_ts),
+        memberId: row.member_id,
+        memberName: deletedMemberName,
+        staffId: row.staff_id,
+      },
     });
   } catch (error) {
     console.error('Session delete error:', error);

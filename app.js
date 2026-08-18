@@ -8373,7 +8373,9 @@ async function refreshMemberPortal() {
 
 // Telafi eklenemediğinde sunucunun döndürdüğü sebep kodları — admin metinleri.
 var REPLENISH_FAIL_LABELS = {
-  no_available_slot: "paket bitiş tarihine kadar uygun gün bulunamadı",
+  no_available_slot: "denenen tarihlerin hiçbirine yerleştirilemedi",
+  no_matching_day: "paketin gün/saat deseni kalan tarihlere denk gelmiyor",
+  package_ended: "paket bitiş tarihi dolmuş",
   package_full: "pakette boş ders hakkı kalmamış",
   no_slots: "pakette gün/saat tanımı yok",
   invalid_end_date: "paketin bitiş tarihi geçersiz",
@@ -8401,7 +8403,8 @@ async function reportSessionReplenishResult(result) {
   }
   if (!result.replenishedReason) return;
 
-  if (result.memberPackageId) {
+  // package_ended: paket aralığında tek bir gün bile kalmamış — modal açılsa boş forma bakılır.
+  if (result.memberPackageId && !isPackageEnded(result)) {
     await openReplenishModal(result);
     return;
   }
@@ -8409,22 +8412,38 @@ async function reportSessionReplenishResult(result) {
   await showAppAlert(replenishFailSummary(result), { title: "Telafi eklenemedi", okClass: "btn--danger" });
 }
 
-/** Silinen seansın "12.08.2026 Salı 11:00" etiketi (yanıttaki deletedSession'dan). */
+/** Silinen seansın "Seda Erenoğlu — 12.08.2026 Salı 11:00" etiketi (yanıttaki deletedSession'dan). */
 function deletedSessionLabel(result) {
   var ts = result && result.deletedSession && result.deletedSession.startTs;
   if (!ts) return "";
   var d = new Date(Number(ts));
   var days = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
-  return pad2(d.getDate()) + "." + pad2(d.getMonth() + 1) + "." + d.getFullYear() +
+  var when = pad2(d.getDate()) + "." + pad2(d.getMonth() + 1) + "." + d.getFullYear() +
     " " + days[d.getDay()] + " " + pad2(d.getHours()) + ":" + pad2(d.getMinutes());
+  // Grup seansında birden çok üye olur; hangisinin seansı olduğu yazmazsa mesaj belirsiz kalır.
+  var who = (result.deletedSession.memberName || "").trim();
+  return who ? who + " — " + when : when;
+}
+
+/** Telafi için taranacak gün hiç kalmadığı durum — elle yerleştirme de yapılamaz. */
+function isPackageEnded(result) {
+  return !!result && result.replenishedReason === "package_ended";
 }
 
 /** Modal ve alert'in ortak açıklama metni. */
 function replenishFailSummary(result) {
   var reason = REPLENISH_FAIL_LABELS[result.replenishedReason] || result.replenishedReason;
   var label = deletedSessionLabel(result);
-  var msg = (label ? label + " seansı silindi" : "Seans silindi") +
-    " ancak telafi seansı eklenemedi: " + reason + ".\nPaket bir seans eksik kalacak.";
+  var head = label ? label + " seansı silindi" : "Seans silindi";
+
+  // Hiç gün taranmadığı için "denendi" havası veren metin kullanılmaz; durum tek cümlede söylenir.
+  if (isPackageEnded(result)) {
+    var endStr = formatIsoDateTr(result.packageEndDate);
+    return head + ".\nPaket bitiş tarihi" + (endStr ? " (" + endStr + ")" : "") +
+      " dolduğu için telafi eklenemedi. Paket bir seans eksik kalacak.";
+  }
+
+  var msg = head + " ancak telafi seansı eklenemedi: " + reason + ".\nPaket bir seans eksik kalacak.";
   var candidates = Array.isArray(result.replenishCandidates) ? result.replenishCandidates.slice(0, 4) : [];
   if (candidates.length) {
     msg += "\n\nDenenen tarihler:\n" + candidates.map(function (c) {
@@ -8449,12 +8468,14 @@ async function reportBulkReplenishResults(entries) {
   var failed = list.filter(function (e) { return !e.result.replenished && e.result.replenishedReason; });
 
   // Paketi çözülemeyen seanslar elle de yerleştirilemez — özet metni buna göre ayrışır
-  var fixable = failed.filter(function (e) { return e.result.memberPackageId; });
-  var unfixable = failed.length - fixable.length;
+  var fixable = failed.filter(function (e) { return e.result.memberPackageId && !isPackageEnded(e.result); });
+  var ended = failed.filter(function (e) { return isPackageEnded(e.result); }).length;
+  var unfixable = failed.length - fixable.length - ended;
 
   var msg = list.length + " seans silindi.";
   if (placed.length) msg += "\n" + placed.length + " telafi seansı paket sonuna eklendi.";
   if (fixable.length) msg += "\n" + fixable.length + " telafi yerleştirilemedi — sırayla düzeltebilirsiniz.";
+  if (ended) msg += "\n" + ended + " seans için paket bitiş tarihi dolduğu için telafi eklenemedi.";
   if (unfixable) msg += "\n" + unfixable + " seans için telafi eklenemedi (paket bulunamadı).";
   await showAppAlert(msg, {
     title: failed.length ? "Telafi eksik kaldı" : "Seanslar silindi",
@@ -8527,7 +8548,8 @@ function _renderReplenishForm() {
   var defaultStaffId = first.staff_id != null ? first.staff_id : _replenishState.deletedStaffId;
   dateEl.value = defaultDate;
   dateEl.min = dateToInputValue(new Date());
-  if (_replenishState.packageEndDate) dateEl.max = String(_replenishState.packageEndDate).slice(0, 10);
+  // Paket bitişinden sonrası artık kapalı değil: sunucu uyarı döner, admin onaylarsa eklenir.
+  dateEl.removeAttribute("max");
 
   var dayNum = new Date(defaultDate + "T12:00:00").getDay();
   timeEl.innerHTML = buildHourOptions(defaultTime, dayNum);
@@ -8602,7 +8624,7 @@ window._skipReplenish = function () {
   window._closeReplenishModal();
 };
 
-window._submitReplenish = async function () {
+window._submitReplenish = async function (allowOutsideRange) {
   if (!_replenishState || !window.API || !window.API.replenishMemberPackage) return;
   var dateEl = document.getElementById("replenishDate");
   var timeEl = document.getElementById("replenishTime");
@@ -8624,11 +8646,13 @@ window._submitReplenish = async function () {
   }
   try {
     if (btn) { btn.disabled = true; btn.textContent = "Yerleştiriliyor..."; }
-    var res = await window.API.replenishMemberPackage(_replenishState.memberPackageId, {
+    var body = {
       date: dateEl.value,
       start_time: timeEl.value,
       staff_id: parseInt(staffEl.value, 10),
-    });
+    };
+    if (allowOutsideRange) body.allowOutsideRange = true;
+    var res = await window.API.replenishMemberPackage(_replenishState.memberPackageId, body);
     window._closeReplenishModal();
     if (window.API.getSessions) {
       try { await refreshSessionsInLoadedRange(); } catch (_) {}
@@ -8636,6 +8660,16 @@ window._submitReplenish = async function () {
     render();
     await showAppAlert((res && res.message) || "Telafi seansı eklendi.", { title: "Telafi eklendi" });
   } catch (e) {
+    // Paket süresinin dışına çıkma kararı admin'in: reddetmek yerine onay sorulur.
+    if (e && e.data && e.data.outsideRange && !allowOutsideRange) {
+      if (btn) { btn.disabled = false; btn.textContent = "Yerleştir"; }
+      var ok = await showAppConfirm(
+        (e.data.error || "Bu tarih paket süresinin dışında.") + "\n\nYine de eklensin mi?",
+        { title: "Paket süresi dışında", okLabel: "Yine de ekle" }
+      );
+      if (ok) await window._submitReplenish(true);
+      return;
+    }
     var detail = (e && e.data && Array.isArray(e.data.conflicts) && e.data.conflicts[0])
       ? e.data.conflicts[0].reason_label
       : null;
@@ -8646,15 +8680,11 @@ window._submitReplenish = async function () {
 };
 
 /**
- * Üyeye gösterilecek "telafi eklenemedi" metni. `no_slots` / `error` gibi sebepler bir arıza
- * göstergesi olduğu için üyeye teknik sebep değil, merkezin devreye gireceği bilgisi verilir.
+ * Üyeye gösterilecek "telafi eklenemedi" metni. Üyeye teknik sebep ve paket bitiş tarihi
+ * bilgisi verilmez — sebep ne olursa olsun merkezin devreye gireceği söylenir.
  * Aynı metinler mobil uygulamada da var (member-home-screen.tsx).
  */
 function memberReplenishFailMessage(reason) {
-  if (reason === "no_available_slot") {
-    return "Seansınız iptal edildi ancak paket bitiş tarihine kadar uygun yeni seans bulunamadı. " +
-      "Telafi randevunuz için lütfen merkezimizle iletişime geçin.";
-  }
   if (reason === "package_full") {
     // Normal durum (hak zaten tam planlı) — üyeyi aksiyona çağırmaya gerek yok.
     return "Seansınız iptal edildi. Paketinizdeki tüm seanslar planlanmış durumda, telafi eklenmedi.";

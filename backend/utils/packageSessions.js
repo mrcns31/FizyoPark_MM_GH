@@ -34,12 +34,14 @@ export async function resolveMemberPackageId(db, memberId, startTs) {
  * MP-03: Admin seans silme ve üye iptal — aynı mükerrer iptal + telafi parametreleri.
  * Aynı member_id + start_ts aktif kayıtlarının tamamını soft-delete eder;
  * ardından addNextSessionAfterLastForPackage(afterCancelTs, skipStartTs) çağırır.
+ * @param {boolean} [byMember] — iptali üye mi yaptı? Yalnız üye iptalinde o GÜN telafiye kapanır.
  */
 export async function cancelPackageSessionsAtSlot(db, {
   memberId,
   startTs,
   memberPackageId = null,
   deletedBy = null,
+  byMember = false,
 }) {
   const cancelRes = await db.query(
     `UPDATE sessions SET deleted_at = CURRENT_TIMESTAMP, deleted_by = $3
@@ -60,7 +62,9 @@ export async function cancelPackageSessionsAtSlot(db, {
   let replenished = { added: false };
   if (mpId != null) {
     replenished = await addNextSessionAfterLastForPackage(db, mpId, {
-      afterCancelTs: startTs,
+      // Gün kapatma yalnız ÜYE iptalinde: üye "o gün gelemem" demiştir. Admin bir üyeyi
+      // seanstan çıkarırken böyle bir beyan yok, aynı günün başka saatine telafi konabilir.
+      afterCancelTs: byMember ? startTs : null,
       skipStartTs: startTs,
     });
   }
@@ -167,6 +171,17 @@ export async function addNextSessionAfterLastForPackage(db, memberPackageId, opt
       return { added: false, reason: 'invalid_start' };
     }
 
+    // Arama penceresi baştan boşsa (paketin son seansı bitiş tarihine denk geliyor) tek bir gün
+    // bile taranmaz. Bunu 'uygun gün bulunamadı' diye raporlamak yanıltıcı olur — ayrı kod dönülür.
+    if (startDay.getTime() > end.getTime()) {
+      return {
+        added: false,
+        reason: 'package_ended',
+        candidates: [],
+        packageEndDate: String(end_date).slice(0, 10),
+      };
+    }
+
     const slotsRes = await db.query(
       'SELECT day_of_week, start_time, staff_id FROM member_package_slots WHERE member_package_id = $1',
       [memberPackageId]
@@ -201,9 +216,8 @@ export async function addNextSessionAfterLastForPackage(db, memberPackageId, opt
     const cancelledStartTs = new Set(
       cancelledRes.rows.map((r) => Number(r.start_ts)).filter((ts) => Number.isFinite(ts))
     );
-    if (options.skipStartTs != null) {
-      cancelledStartTs.add(Number(options.skipStartTs));
-    }
+    // Az önce silinen slot üye iptali sayılmaz; ayrı tutulur ki aday listesinde doğru sebep yazsın.
+    const justDeletedTs = options.skipStartTs != null ? Number(options.skipStartTs) : null;
 
     // Kapanış (tatil) günlerine telafi seansı yerleştirilmez. Önceden bu koruma yoktu; yukarıdaki
     // filtre daraldığı için burada açıkça kontrol edilmeli.
@@ -249,6 +263,10 @@ export async function addNextSessionAfterLastForPackage(db, memberPackageId, opt
 
         const slotTime = `${String(h || 0).padStart(2, '0')}:${String(m || 0).padStart(2, '0')}`;
 
+        if (justDeletedTs != null && startTs === justDeletedTs) {
+          pushSkip(dateStr, dayOfWeek, slotTime, slot.staff_id, 'just_deleted', 'bu seans az önce silindi');
+          continue;
+        }
         if (cancelledStartTs.has(startTs)) {
           pushSkip(dateStr, dayOfWeek, slotTime, slot.staff_id, 'member_cancelled', 'üye daha önce iptal etmiş');
           continue;
@@ -311,8 +329,14 @@ export async function addNextSessionAfterLastForPackage(db, memberPackageId, opt
       lesson_count,
       atlananlar: skippedForLog(),
     });
-    // candidates: adminin "neden yerleşmedi" sorusunu ekranda cevaplayabilmesi için
-    return { added: false, reason: 'no_available_slot', candidates: skipped, packageEndDate: String(end_date).slice(0, 10) };
+    // candidates: adminin "neden yerleşmedi" sorusunu ekranda cevaplayabilmesi için.
+    // Hiç aday çıkmadıysa günler tarandı ama paketin gün/saat deseni kalan tarihlere denk gelmedi.
+    return {
+      added: false,
+      reason: skipped.length > 0 ? 'no_available_slot' : 'no_matching_day',
+      candidates: skipped,
+      packageEndDate: String(end_date).slice(0, 10),
+    };
   } catch (err) {
     console.error('addNextSessionAfterLastForPackage error:', err);
     return { added: false, reason: 'error' };

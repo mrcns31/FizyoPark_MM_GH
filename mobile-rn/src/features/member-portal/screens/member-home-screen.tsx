@@ -40,6 +40,8 @@ function statusTone(s: MemberSession): 'green' | 'orange' | 'neutral' | 'red' | 
 /** Durum etiketi — "Gelmedi" → üye tarafında "Otomatik Düşen Seans" */
 function statusLabel(s: MemberSession): string {
   const raw = s.statusLabel || '';
+  // "İptaller" sekmesinde yalnız üyenin kendi iptalleri listelenir; etiket bunu net söylesin
+  if (s.isCancelled && s.cancelledByMember) return 'İptal ettiniz';
   if (raw === 'Gelmedi' || raw === 'Gelmedi (Onaylanmadı)') return 'Otomatik Düşen Seans';
   if (raw) return raw;
   if (s.isCancelled) return 'İptal edildi';
@@ -50,15 +52,11 @@ function statusLabel(s: MemberSession): string {
 }
 
 /**
- * Telafi eklenemediğinde üyeye gösterilecek metin. `no_slots` / `error` gibi sebepler arıza
- * göstergesi olduğu için teknik sebep değil, merkezin devreye gireceği bilgisi verilir.
+ * Telafi eklenemediğinde üyeye gösterilecek metin. Üyeye teknik sebep ve paket bitiş tarihi
+ * bilgisi verilmez — sebep ne olursa olsun merkezin devreye gireceği söylenir.
  * Web tarafındaki memberReplenishFailMessage ile aynı metinler (app.js).
  */
 function memberReplenishFailMessage(reason: string): string {
-  if (reason === 'no_available_slot') {
-    return 'Seansınız iptal edildi ancak paket bitiş tarihine kadar uygun yeni seans bulunamadı. '
-      + 'Telafi randevunuz için lütfen merkezimizle iletişime geçin.';
-  }
   if (reason === 'package_full') {
     // Normal durum (hak zaten tam planlı) — üyeyi aksiyona çağırmaya gerek yok.
     return 'Seansınız iptal edildi. Paketinizdeki tüm seanslar planlanmış durumda, telafi eklenmedi.';
@@ -80,6 +78,7 @@ export function MemberHomeScreen() {
   const [cancelReason, setCancelReason] = useState('');
   const [wantReschedule, setWantReschedule] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const [tab, setTab] = useState<'active' | 'cancelled'>('active');
   const allSessions = data?.activePackage?.sessions ?? [];
 
   // Puanlama
@@ -116,6 +115,19 @@ export function MemberHomeScreen() {
     () => allSessions.filter((s) => !s.isCancelled).sort((a, b) => a.startTs - b.startTs),
     [allSessions],
   );
+
+  /**
+   * "İptaller" sekmesi — yalnız üyenin bizzat iptal ettiği randevular.
+   * Admin iptalleri ve paket/sistem iptalleri backend'den cancelledByMember: false gelir,
+   * bu yüzden burada da görünmez. En yeni iptal en üstte.
+   */
+  const cancelledSessions = useMemo(
+    () => allSessions
+      .filter((s) => s.isCancelled && s.cancelledByMember)
+      .sort((a, b) => b.startTs - a.startTs),
+    [allSessions],
+  );
+  const listData = tab === 'active' ? sessions : cancelledSessions;
 
   function openRating(t: RatingTarget) {
     setRatingTarget(t);
@@ -294,7 +306,24 @@ export function MemberHomeScreen() {
         ) : null}
 
         {ap ? (
-          <Text style={styles.sectionLabel}>Randevularım ({sessions.length})</Text>
+          <View style={styles.tabs}>
+            <Pressable
+              style={[styles.tab, tab === 'active' && styles.tabOn]}
+              onPress={() => setTab('active')}
+            >
+              <Text style={[styles.tabText, tab === 'active' && styles.tabTextOn]} numberOfLines={1}>
+                Randevularım ({sessions.length})
+              </Text>
+            </Pressable>
+            <Pressable
+              style={[styles.tab, tab === 'cancelled' && styles.tabOn]}
+              onPress={() => setTab('cancelled')}
+            >
+              <Text style={[styles.tabText, tab === 'cancelled' && styles.tabTextOn]} numberOfLines={1}>
+                İptallerim ({cancelledSessions.length})
+              </Text>
+            </Pressable>
+          </View>
         ) : null}
       </View>
 
@@ -303,14 +332,18 @@ export function MemberHomeScreen() {
         <ActivityIndicator color={colors.accent} style={{ marginTop: 40 }} />
       ) : ap ? (
         <FlatList
-          data={sessions}
+          data={listData}
           keyExtractor={(s) => String(s.id)}
           refreshing={manualRefreshing}
           onRefresh={async () => { setManualRefreshing(true); try { await refetch(); } finally { setManualRefreshing(false); } }}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={[styles.list, wide, { paddingHorizontal: gutter }]}
           ListEmptyComponent={
-            <Card><Muted>Randevu bulunmuyor.</Muted></Card>
+            <Card>
+              <Muted>
+                {tab === 'active' ? 'Randevu bulunmuyor.' : 'İptal ettiğiniz randevu bulunmuyor.'}
+              </Muted>
+            </Card>
           }
           renderItem={({ item: s, index }) => {
             const now = nowIst();
@@ -609,7 +642,6 @@ function makeStyles(colors: AppColors, theme: ResolvedTheme) {
     statValue: { fontSize: 17, fontWeight: '800', color: colors.text },
     statLabel: { fontSize: 10, color: colors.muted, marginTop: 1 },
 
-    sectionLabel: { color: colors.muted, fontSize: 13, fontWeight: '700' },
     tabs: { flexDirection: 'row', gap: 8 },
     tab: {
       flex: 1, paddingVertical: 9, borderRadius: 10,

@@ -118,7 +118,7 @@ export interface DeleteSessionResult {
   replenishCandidates?: ReplenishCandidate[] | null;
   packageEndDate?: string | null;
   memberPackageId?: number | null;
-  deletedSession?: { startTs: number; memberId: number | null; staffId: number | null };
+  deletedSession?: { startTs: number; memberId: number | null; memberName?: string | null; staffId: number | null };
 }
 
 export async function deleteSession(id: number, adminPassword?: string): Promise<DeleteSessionResult> {

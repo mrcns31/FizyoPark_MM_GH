@@ -1362,6 +1362,7 @@ router.post('/:id/replenish', [
   body('date').matches(/^\d{4}-\d{2}-\d{2}$/).withMessage('Geçerli bir tarih gerekli'),
   body('start_time').matches(/^\d{1,2}:\d{2}$/).withMessage('Geçerli bir saat gerekli'),
   body('staff_id').isInt(),
+  body('allowOutsideRange').optional().isBoolean(),
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -1369,7 +1370,7 @@ router.post('/:id/replenish', [
       return res.status(400).json({ error: errors.array()[0]?.msg || 'Geçersiz istek' });
     }
     const { id } = req.params;
-    const { date, start_time, staff_id } = req.body;
+    const { date, start_time, staff_id, allowOutsideRange } = req.body;
 
     const mpRes = await db.query(
       `SELECT mp.id, mp.member_id, mp.status, mp.start_date, mp.end_date, p.lesson_count
@@ -1386,9 +1387,16 @@ router.post('/:id/replenish', [
 
     const startDateStr = toDateOnlyString(mp.start_date);
     const endDateStr = toDateOnlyString(mp.end_date);
-    if (date < startDateStr || date > endDateStr) {
+    // Paket bitişinden sonrası admin'in kararı: uyarı verilir, onaylarsa allowOutsideRange ile gelir.
+    // Paket başlangıcından öncesi her durumda reddedilir — seans paket başlamadan yapılmış olamaz.
+    const afterEnd = date > endDateStr;
+    if (date < startDateStr || (afterEnd && !allowOutsideRange)) {
       return res.status(400).json({
-        error: `Tarih paket aralığında olmalı (${startDateStr} – ${endDateStr})`,
+        error: afterEnd
+          ? `Bu tarih paket süresinin dışında (bitiş: ${toDateOnlyString(mp.end_date).split('-').reverse().join('.')}).`
+          : `Tarih paket aralığında olmalı (${startDateStr} – ${endDateStr})`,
+        outsideRange: afterEnd,
+        packageEndDate: endDateStr,
       });
     }
 
@@ -1450,7 +1458,12 @@ router.post('/:id/replenish', [
       action: 'session.replenish_manual',
       entityType: 'session',
       entityId: placed.sessionId,
-      details: { memberPackageId: Number(id), memberId: mp.member_id, placedAt: formatPlacedAtLabel(placedAt) },
+      details: {
+        memberPackageId: Number(id),
+        memberId: mp.member_id,
+        placedAt: formatPlacedAtLabel(placedAt),
+        outsideRange: afterEnd || undefined,
+      },
     }).catch(() => {});
 
     res.json({

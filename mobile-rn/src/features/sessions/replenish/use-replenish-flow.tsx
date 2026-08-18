@@ -13,7 +13,7 @@ import { useStaff } from '../../staff/api/hooks';
 import { useTheme } from '../../theme';
 import type { AppColors, ResolvedTheme } from '../../../theme/colors';
 import type { DeleteSessionResult } from '../api/sessions';
-import { replenishFailSummary } from './messages';
+import { isPackageEnded, replenishFailSummary } from './messages';
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 const toDateStr = (d: Date) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
@@ -28,11 +28,16 @@ export async function alertReplenishOutcome(results: (DeleteSessionResult | null
   if (!failed.length) return;
   const detail = failed.length === 1
     ? replenishFailSummary(failed[0])
-    : `${failed.length} seans için telafi eklenemedi. Paket bir seans eksik kalacak.`;
+    : `${failed.length} seans için telafi eklenemedi. Paket bir seans eksik kalacak.\n\n`
+      + failed.map((r) => `• ${replenishFailSummary(r).split('\n')[0]}`).join('\n');
+  // Paket süresi dolmuşsa elle de yerleştirilecek gün yok; uygulanamayacak tavsiye verilmez.
+  const canPlaceManually = failed.some((r) => !isPackageEnded(r));
   await new Promise<void>((resolve) => {
     Alert.alert(
       'Telafi eklenemedi',
-      `${detail}\n\nTelafiyi elle yerleştirmek için paketin seans listesini açın.`,
+      canPlaceManually
+        ? `${detail}\n\nTelafiyi elle yerleştirmek için paketin seans listesini açın.`
+        : detail,
       [{ text: 'Tamam', onPress: () => resolve() }],
     );
   });
@@ -120,7 +125,8 @@ export function useReplenishFlow(onPlaced?: () => void) {
         return;
       }
       if (!result.replenishedReason) return;
-      if (result.memberPackageId) {
+      // package_ended: paket aralığında tek bir gün bile kalmamış — sheet açılsa boş forma bakılır.
+      if (result.memberPackageId && !isPackageEnded(result)) {
         await openFor(result);
         return;
       }
@@ -140,13 +146,15 @@ export function useReplenishFlow(onPlaced?: () => void) {
       }
       const placed = list.filter((r) => r.replenished).length;
       const failed = list.filter((r) => !r.replenished && r.replenishedReason);
-      const fixable = failed.filter((r) => r.memberPackageId);
-      const unfixable = failed.length - fixable.length;
+      const fixable = failed.filter((r) => r.memberPackageId && !isPackageEnded(r));
+      const ended = failed.filter((r) => isPackageEnded(r)).length;
+      const noPackage = failed.length - fixable.length - ended;
 
       let msg = `${list.length} seans silindi.`;
       if (placed) msg += `\n${placed} telafi seansı paket sonuna eklendi.`;
       if (fixable.length) msg += `\n${fixable.length} telafi yerleştirilemedi — sırayla düzeltebilirsiniz.`;
-      if (unfixable) msg += `\n${unfixable} seans için telafi eklenemedi (paket bulunamadı).`;
+      if (ended) msg += `\n${ended} seans için paket bitiş tarihi dolduğu için telafi eklenemedi.`;
+      if (noPackage) msg += `\n${noPackage} seans için telafi eklenemedi (paket bulunamadı).`;
 
       await new Promise<void>((resolve) => {
         Alert.alert(failed.length ? 'Telafi eksik kaldı' : 'Seanslar silindi', msg, [
@@ -161,7 +169,8 @@ export function useReplenishFlow(onPlaced?: () => void) {
     [openFor, report],
   );
 
-  async function submit() {
+  /** allowOutsideRange: paket bitişinden sonrasına yerleştirme onayı verildikten sonra tekrar çağrılır. */
+  async function submit(allowOutsideRange = false) {
     if (!current?.memberPackageId) return;
     const missing = [
       !date ? 'tarih' : null,
@@ -181,12 +190,28 @@ export function useReplenishFlow(onPlaced?: () => void) {
         date,
         start_time: time,
         staff_id: staffIdNum,
+        ...(allowOutsideRange ? { allowOutsideRange: true } : {}),
       });
       closeModal();
       onPlaced?.();
       Alert.alert('Telafi eklendi', res?.message || 'Telafi seansı eklendi.');
     } catch (e) {
-      const apiErr = e as ApiError & { data?: { error?: string; conflicts?: { reason_label?: string }[] } };
+      const apiErr = e as ApiError & {
+        data?: { error?: string; outsideRange?: boolean; conflicts?: { reason_label?: string }[] };
+      };
+      // Paket süresinin dışına çıkma kararı admin'in: reddetmek yerine onay sorulur.
+      if (apiErr?.data?.outsideRange && !allowOutsideRange) {
+        setBusy(false);
+        Alert.alert(
+          'Paket süresi dışında',
+          `${apiErr.data.error || 'Bu tarih paket süresinin dışında.'}\n\nYine de eklensin mi?`,
+          [
+            { text: 'Vazgeç', style: 'cancel' },
+            { text: 'Yine de ekle', onPress: () => { void submit(true); } },
+          ],
+        );
+        return;
+      }
       const detail = apiErr?.data?.conflicts?.[0]?.reason_label;
       const base = apiErr?.data?.error || apiErr?.message || 'Yerleştirilemedi';
       setError(detail && detail !== base ? `${base}\n(${detail})` : base);
@@ -235,7 +260,7 @@ export function useReplenishFlow(onPlaced?: () => void) {
 
         <View style={styles.actions}>
           <Button title="Telafisiz bırak" variant="ghost" onPress={skip} style={styles.actionBtn} />
-          <Button title="Yerleştir" variant="primary" onPress={submit} loading={busy} style={styles.actionBtn} />
+          <Button title="Yerleştir" variant="primary" onPress={() => submit()} loading={busy} style={styles.actionBtn} />
         </View>
       </View>
     </SheetModal>

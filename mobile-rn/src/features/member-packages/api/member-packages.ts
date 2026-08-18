@@ -107,7 +107,8 @@ export async function endMemberPackage(id: number, endDate?: string): Promise<vo
  */
 export async function replenishMemberPackage(
   id: number,
-  body: { date: string; start_time: string; staff_id: number },
+  /** allowOutsideRange: paket bitişinden sonrasına yerleştirme — admin onayıyla gönderilir. */
+  body: { date: string; start_time: string; staff_id: number; allowOutsideRange?: boolean },
 ): Promise<{ sessionId: number; placedAt: ReplenishPlaced; message: string }> {
   const { data } = await apiClient.post(`/member-packages/${id}/replenish`, body);
   return data;

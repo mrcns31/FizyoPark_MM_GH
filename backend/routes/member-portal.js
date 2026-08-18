@@ -1107,6 +1107,8 @@ router.post('/sessions/:id/cancel', requireMember, async (req, res) => {
       startTs: session.start_ts,
       memberPackageId: session.member_package_id,
       deletedBy: req.user.userId,
+      // Üye "o gün gelemem" dediği için telafi o güne konmaz; admin silmesinde bu kural yok.
+      byMember: true,
     });
 
     if (cancelledIds.length === 0) {
